@@ -1,0 +1,25 @@
+{if $ShowHeader}
+  {assign var="IndentSize" value="40"}
+  {assign var="print_footer" value="&bPage &p of &P"}
+  {assign var="print_header" value="$Title"}
+{literal}
+<style>
+body{ margin-top: .5in; margin-bottom: .5in; margin-right: .5in ; margin-left: .5in; }
+</style>
+{/literal}
+<title>{$Title}</title><div align=center><span style="FONT-SIZE: 18pt"><span style="FONT-FAMILY: arial">{$Title}</span></span> </div>
+<div align=center>&nbsp;</div>
+<div>&nbsp;&nbsp;</div>
+{elseif $ShowFooter}
+
+{elseif $CurrentItem.Type == "Agenda"}
+<div>
+<table style="WIDTH: 100%; BORDER-COLLAPSE: collapse" cellSpacing=0 cellPadding=0 border=0>
+<tbody>
+<tr>
+<td style="FONT-FAMILY: arial" width=40>
+<div>{$CurrentItem.itemnumber}</div></td>
+<td style="FONT-FAMILY: arial">
+<div>{$CurrentItem.linkedtitle}</div></td></tr></tbody></table></div>
+<div>&nbsp;</div>
+{/if}

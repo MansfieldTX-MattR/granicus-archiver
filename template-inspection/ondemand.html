@@ -1,0 +1,724 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "https://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="https://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>{$ViewName} - Powered by Granicus.com</title>
+<!--<base href="//www.mansfield-tx.gov/.com" />-->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="Content-Language" content="en-us">
+<!-- These no-cache and refresh meta tags automatically
+ refresh the page to display In Progress events if available -->
+<meta http-equiv="pragma" content="no-cache">
+<!--<meta http-equiv="refresh" content="300">-->
+<!-- RSS Feed Links - Allows RSS Feed Compatable browsers to detect the feeds -->
+<link rel=alternate type="application/rss+xml" href="{$AgendasRSSLink}" title="RSS feed for Agenda documents on this page">
+<link rel=alternate type="application/rss+xml" href="{$MinutesRSSLink}" title="RSS feed for Minutes documents on this page">
+<link rel=alternate type="application/rss+xml" href="{$PodcastRSSLink}" title="RSS feed for Download Podcast on this page">
+
+{literal}
+<style type="text/css">
+
+html, body {
+  margin-top:0;
+  padding-top:0;
+}
+
+select{
+  background-color:#f5f5f4;
+}
+
+input[type="search"] {
+    border: 1px solid #a8a89f;
+}
+
+*, *:before, *:after {
+  -moz-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+a:link {
+  color: #000099;
+  text-decoration: underline;
+}
+
+a:visited {
+  color: #666699;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #000033;
+  text-decoration: underline;
+}
+
+a:active {
+  color: #000033;
+  text-decoration: none;
+}
+
+/* Granicus CSS */
+#g1 {
+  font-weight:bold;
+  color: #666666;
+  font-size:13px;
+  padding:10px 10px 0px 0px;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  margin:0px 0px 0px 5px;
+}
+
+#g2{
+  font-weight:bold;
+  font-size:14px;
+  border-top:none;
+  padding:2px;
+  font-family:Verdana, Arial, Helvetica, sans-serif;
+  background: #9a999a;
+  color:white;
+  padding:.5em;
+}
+
+#g3{
+  font-weight:bold;
+  color:#333;
+  background-color:#dadada;
+  font-size:11px;
+  padding:1.5px;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  border-bottom:#000000 medium;
+}
+
+#granicus  {
+  margin-top:0px;
+  padding-right:0px;
+  padding-left: 0px;
+  margin: 0px 0px 10px 0px;
+  width: 99.7%;
+}
+
+#intro {/* Intro Only Styles here*/
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  color:#999;
+}
+
+#intro a {
+  font: Verdana, Arial, Helvetica, sans-serif underline #999;
+  font-size:16x;
+}
+
+#intro a:visited {
+  text-decoration: underline;
+  color: #999;
+}
+
+#intro a:hover {
+}
+
+/* Granicus Archive Styles */
+.archive { /* entire archive */
+  border:1px solid #000;
+  border-top:none;
+  margin:10px 5px 0px 5px;
+  border-color: #C3C0BD;
+}
+
+.archive2 { /* entire archive after performs search*/
+  border:1px solid #000;
+  margin:60px 10px 0px 15px;
+  border-color: #889bb9;
+}
+
+.sortable,
+.listingTable {/* listing table only */
+  width:100%;
+  margin-bottom:10px;
+  border-collapse:collapse;
+  color:#000000;
+  font-size:11px;
+}
+
+.sortable th,
+.listingTable th {
+  font-size:11px;
+  font-weight:bold;
+  text-align:left;
+  padding:3px;
+  border-collapse:inherit;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  color:#000000;
+}
+
+.sortable a,
+.listingTable a{/* listing table only */
+  color:#000000;
+}
+
+.sortable a:visted,
+.listingTable a:visted{/* listing table only */
+  color:#FFFF00;
+}
+
+.listItem {
+  padding:3px;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 12px;
+}
+
+table.dataTable tbody tr.odd {
+  background-color:white;
+}
+
+table.dataTable tbody tr.even {
+  background-color:#E8E7E6;
+}
+
+table.dataTable tbody th, table.dataTable tbody td {
+    padding: 10px 10px;
+}
+
+.hlt td {/* table row highlights */
+  background-color:#F2EFEA;
+}
+
+/* Archive table column widths */
+/*    #Video {width:75px;}
+#Minutes {width:75px;}
+#Agenda {width:75px;}
+#Duration {width:60px;}
+#Date {width:125px;}*/
+
+/* search panel properties */
+#search {
+  margin:0px 0;
+  padding:3px;
+}
+
+/* search result styles */
+.searchSubItem {
+  padding:0px;
+  padding-left:10px;
+}
+
+.searchResultSpacer {
+  border-bottom:1px solid #ccc;
+}
+
+/* RSS Menu Controls */
+#RSS {
+  display:inline;
+  float:right;
+  margin: 0px 10px 10px 10px;
+  text-align:center;
+  border:1px solid #356394;
+  border-color: #C3C0BD;
+}
+
+#RSS a,
+#RSS a:visited {
+  text-align:center;
+  display:block;
+  width:10em;
+  padding:3px;
+  font-size:9px;
+  margin-left: 10px;
+  font: Verdana, Arial, Helvetica, sans-serif underline #0000EE;
+  font-size:13x;
+}
+
+#RSS a:hover {/*makes RSS links blink*/
+}
+
+#RSS b {/* <b> tag is used to denote RSS menu headers */
+  text-decoration:none;
+  text-align:center;
+  background: #9a999a;
+  color:#333333;
+  display:block;
+  width:10em;
+  padding:3px;
+  font-weight:bold;
+  font-size:1em;
+    }
+  #RSS img {
+  border:none;
+    }
+
+.sortable img {border:none;}
+
+a.inprogress{
+color:red;
+text-decoration: underline;
+}
+
+a.eventlink{
+color:#000099;
+text-decoration:underline;
+}
+
+a.agendalink{
+color:#000099;
+text-decoration:underline;
+border:none;
+}
+
+a.agendalink img{
+  border:none;
+}
+
+a.eCommentslink,
+a.minuteslink,
+a.mp3link,
+a.mp4link,
+a.videolink{
+  color:#000099;
+  text-decoration:underline;
+}
+
+
+.audio {
+    background: url("data:image/gif;base64,R0lGODlhEAAQAOZiAImJiYWFhZGRkXZ2dsbGxn9/f11dXVFRUUpKStHR0VlZWYqKijs7O1ZWVry8vHNzc3R0dFBQUJqamklJScjIyISEhE5OTmtra56enqysrIiIiG5ubouLi5CQkC0tLZeXl87OzlVVVd7e3qGhocvLy8XFxbCwsGNjY2ZmZjU1NVNTU4eHh5OTk52dnVtbW8rKyqqqqiYmJqmpqejo6Le3t6+vr3V1dZmZmdXV1a6urnJycrS0tHl5eerq6mVlZZaWll9fX6enp4ODg7m5uc3NzczMzJWVlXFxcUBAQF5eXnp6ejc3N7i4uKurq8nJyZiYmHd3d7a2tmxsbExMTL6+vjIyMjY2NkZGRsHBwb+/v8LCwqWlpU9PT42NjZycnLGxsU1NTVRUVP///wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEAAGIALAAAAAAQABAAAAepgGKCg4SFhl43RgJdGhUFSgMohSwJICQUBFpZDkMIhR1EFQoRYBMNBTtXhQsvSYUuNUiFASUGhQYwDIUFWAqFDVtLhTwOYYURI1WFEEwWhVwSHoVHXxOCOBcHUitWgiIADwAtIWI0FwESH0AQYgQAGCYZNhpRDwJPPwMpBBQCMjlNOCAokkHFhgEWYmAQQ0VHgAUnGAQR5OTAFCgzBiXwYUBID0MgQxYKBAA7");
+}
+.icon_film {
+    background: url("data:image/gif;base64,R0lGODlhEAAQAOZmAEtLS3d3dzo6OmVlZWhoaDg4OG5ubhoaGnx8fD+uy5qamqysrF7HcGC92GJiYiy6S1xcXFzLT3DC/2NjY05OTmlpaWrRQnrXV3272y0tLWxsbKzLrk1NTWK6/2W5/2e//za/f2nF3XR0dEXET1C4tomJifngaFtbW1FRUSUlJWzE/5PdX4WFhaqqqm7G+JXhWnG85pPiVZeXl3LF/4ODg15eXgkJCaDjeEJCQrCwsEhISKampqTjfKSkpEFBQTU1NTIyMuvYhHFxcRUVFWZmZs/NhG1tbS8vL6PgeJHeUa+vr+vkmZPeVm257J3fb46Ojnp6epSUlAUFBZ7gdDk5OT09PXZ2ds/YmHm+7VBQUFZWVpXgY4CAgHNzc7KysnO77F9fX57ickxMTGBgYHfI/1dXV////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEAAGYALAAAAAAQABAAAAeygGaCg4SFgyVWXIYGKESEXTsVZZOUHAoOhBoiBDBYX01FQQAEVYQ0SgggIRIfGyZjCxCEASxQIw8NHR4YNQMAszIBERcWDCQJJwi/gwEtImE8N1svMVpRy4IVQgSUlEAcVIQGPRouZDMqV0sUTz6EAyUDqqyuOgYFhBBGYLe5uzhijhCasKDMsGLHBCgQQEiAgwJOkExZwSTJgQk2CBXI8aPbpANehhCikCGLoQxSUggKBAA7");
+}
+.pdf2 {
+    background: url("data:image/gif;base64,R0lGODlhEAAQAMQfAD8/P+Pj49vb27W1t/BNTvFsbcfHyfsHCuawsfPz8+vr69LS0uSPkf4uMX9/gtoSFevY2qsCBby8v9lRUeft8fj8/NNlafh6fONdXt08O/88P8HBwSUlJYsBA6ysrP///yH5BAEAAB8ALAAAAAAQABAAAAWY4Ccug2eeXiCun2RsklQ6gSeIV0EQWt80D0eldrtoDsjkISIcpgoNJfLRcVitC2pny90GXi7JarMwLAQTQUBQFgzGgXNiElCsF4G3aLNWQDIMCXZ4HnABCRcUDAiCAgqFewp+BAgIOwSBkB8bCQkYCBAJFRQIFo9wGIF2a2wCmhsFBQkBrAsLZJpigqsCbGa5ABzCw8MAAyEAOw==");
+}
+
+.agendalink,
+.minuteslink,
+.videolink,
+.mp3link,
+.mp4link{
+  display: inline-block;
+  vertical-align: middle;
+  background-repeat: no-repeat;
+  background-position: left center;
+  width: 16px;
+  height: 16px;
+}
+
+.responsive{
+  width: 100% !important;
+}
+
+img{
+  max-width: 100%;
+  height: auto;
+}
+
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_processing,
+.dataTables_wrapper .dataTables_paginate {
+  padding: .5em;
+}
+
+</style>
+
+<!--<script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.js"></script>-->
+<!--<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.10.18/r-2.2.2/datatables.min.css"/>-->
+
+
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.1/css/jquery.dataTables.min.css"/>
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/responsive/2.4.0/css/responsive.dataTables.min.css"/>
+
+<script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.js"></script>
+
+
+{/literal}
+
+</head>
+<body>
+<div style="text-align:center"><img src="https://www.mansfieldtexas.gov/ImageRepository/Document?documentId=4495" height="312" width="633" /></div>
+             <!--=================== BEGIN Granicus Content - Please edit with care! - Call customer support at (415) 357 3618 for assistance =================-->
+<!--support@granicus.com-->
+<div id="granicus">
+
+  <div id="intro">
+
+<div id="g1">Welcome to the Live Feed / Archived Media / Podcasts Page</div><br />
+
+    <!-- Introduction Content-->
+    <p style="margin:0px 0px 0px 5px">Click  <strong>Video</strong> to watch an Archived Meeting.  Click <strong>Agenda/Minutes</strong> to only view documents.   A <strong>View Event</strong> link will appear once a live meeting begins.  Click <strong>Download</strong> to listen online or you may save the file to your computer.</p>
+
+
+  </div>
+  <!--end #intro-->
+  <!-- Begin Archives -->
+  {if !$Searching}
+  <!-- "If not Searching" do the following: -->
+  <!-- Upcoming and In Progress Events listing table -->
+  <div class="archive" style="clear:both;">
+    <!-- style="clear:both;" **MUST** be applied to the first element following #intro!!!! -->
+    <div id="g2">Upcoming Events</div>
+    <table class="listingTable" id="upcoming" summary="This table lists the details of, and links to view the Video and Documents related to Upcoming and In Progress Events as published by the City of Mansfield.  There is one item per table row.">
+      <thead>
+        <tr>
+          <th id="EventName" scope="col">Name</th>
+          <th id="EventDate" scope="col">Date</th>
+          <th id="EventAgendaLink" scope="col"></th>
+
+          <th id="EventLink" scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {foreach from=$Events item=Event}
+      {assign var="Upcoming" value="1"}
+      <tr class="{cycle values="odd,even"}">
+      <td class="listItem" headers="EventName" id="{$Event.Name|replace:" ":"-"}" scope="row">{$Event.Name}</td>
+        <td class="listItem" headers="EventDate {$Event.Name|replace:" ":"-"}"> {if $Event.Status == "Running"} <a class="inprogress" href="javascript:void(0);" onClick="{$Event.PlayerPopupJS}" title="Embedded Video link">In Progress</a> <a style="display:none" href="{$Event.DirectLink}" title="Video Only link">Open Video Only in Windows Media Player</a> {else} <span style="display:none;">{$Event.Date}</span>{$Event.Date|date_format:"%B&nbsp;%d,&nbsp;%Y"} - {$Event.Date|date_format:"%#I:%M&nbsp;%p"}
+          {/if} </td>
+        <td class="listItem">{if $Event.AgendaLink}<a class="agendalink pdf2" href="{$Event.AgendaLink}"></a>&nbsp;<a class="agendalink" href="{$Event.AgendaLink}">Agenda</a>{else}&nbsp;{/if}</td>
+
+        <td class="listItem" headers="EventLink {$Event.Name|replace:" ":"-"}">{if $Event.Status == "Running"}<a class="eventlink" href="javascript:void(0);" onClick="{$Event.PlayerPopupJS}">View Event</a>{else}&nbsp;{/if}</td>
+      </tr>
+      {/foreach}
+      {if $Upcoming == ""}
+      <tr>
+        <td class="listItem" colspan="5">Currently there are no upcoming events.</td>
+      </tr>
+      {/if}
+
+    </table>
+  </div>
+  <!--end .archive (upcoming events)-->
+    <!-- Advanced Search and RSS Links -->
+    {AdvancedSearchForm showRSSLinks="true"}
+  <!--City Council Videos listing Table -->
+  <div class="archive">
+    <div id="g2">City Council</div>
+    <table class="responsive nowrap sortable" id="council" summary="This table lists the details of, and links to view the Video and Documents related to Archived Videos for the Mansfield, Texas City Council meetings.  There is one item per table row.">
+      <thead>
+        <tr>
+          <th id="Name" class="all" scope="col">Name</th>
+          <th id="Date" class="all" scope="col">Date</th>
+          <th id="Duration" scope="col">Duration</th>
+          <th id="Agenda" scope="col">Agenda</th>
+          <th id="Minutes" scope="col">Minutes</th>
+          <th id="Video" scope="col">Video</th>
+          <th id="MP3Link" scope="col">Audio</th>
+          <th id="MP4Link" scope="col">Video</th>
+        </tr>
+      </thead>
+      <tbody>
+      {foreach from=$Archives item=Clip}
+      {if $Clip.Location == "City Council"}
+      {assign var="City" value="1"}
+      <tr class="{cycle values="odd,even"}">
+        <td class="listItem Name" headers="Name" id="{$Clip.Name|replace:" ":"-"}" scope="row">{$Clip.Name}</td>
+        <td class="listItem" headers="Date {$Clip.Name|replace:" ":"-"}"><span style="display:none;">{$Clip.Date}</span>{$Clip.Date|date_format:"%D"}</td>
+        <td class="listItem" headers="Duration {$Clip.Name|replace:" ":"-"}">{$Clip.Duration|time_format:"%Hh&nbsp;%Mm"}</td>
+        <td class="listItem" headers="Agenda {$Clip.Name|replace:" ":"-"}">{if $Clip.AgendaLink}<a class="agendalink pdf2" href="{$Clip.AgendaLink}"></a>&nbsp;<a class="agendalink" href="{$Clip.AgendaLink}">Agenda</a>{/if}</td>
+        <td class="listItem" headers="Minutes {$Clip.Name|replace:" ":"-"}">{if $Clip.MinutesLink}<a class="minuteslink pdf2" href="{$Clip.MinutesLink}"></a>&nbsp;<a class="minuteslink" href="{$Clip.MinutesLink}">Minutes</a>{/if}</td>
+        <td class="listItem" headers="VideoLink {$Clip.Name|replace:" ":"-"}"><a class="videolink icon_film" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}"></a>&nbsp;<a class="videolink" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}">Watch</a> <a style="display:none" href="{$Clip.DirectLink}" title="Video Only link">Open Video Only in Windows Media Player</a> </td>
+        <td class="listItem" headers="MP3Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP3Link !=""}<a class="mp3link" href="{$Clip.MP3Link}" >Download</a>{else}&nbsp;{/if}</td>
+        <td class="listItem" headers="MP4Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP4Link !=""}<a class="mp4link" href="{$Clip.MP4Link}" >Download</a>{else}&nbsp;{/if}</td>
+      </tr>
+      {/if}
+      {/foreach}
+      {if $City == ""}
+      <tr>
+        <td class="listItem" colspan="8">Currently there are no archived videos in this section.</td>
+      </tr>
+      {/if}
+      </tbody>
+    </table>
+</div>
+<!--end City Council (archived videos)-->
+
+<!--MPFDC Videos listing Table -->
+<div class="archive">
+  <div id="g2">Mansfield Park Facilities Development Corporation</div>
+  <!--<div id="search">-->
+    <table class="responsive nowrap sortable" id="planning" summary="This table lists the details of, and links to view the Video and Documents related to Archived Videos for the Mansfield Park Facilities Development Corporation.  There is one item per table row.">
+    <thead>
+      <tr>
+        <th id="Name" class="all" scope="col">Name</th>
+        <th id="Date" class="all" scope="col">Date</th>
+        <th id="Duration" scope="col">Duration</th>
+        <th id="Agenda" scope="col">Agenda</th>
+        <th id="Minutes" scope="col">Minutes</th>
+        <th id="Video" scope="col">Video</th>
+        <th id="MP3Link" scope="col">Audio</th>
+        <th id="MP4Link" scope="col">Video</th>
+      </tr>
+    </thead>
+    <tbody>
+    {foreach from=$Archives item=Clip}
+    {if $Clip.Location == "MPFDC"}
+    {assign var="Plan" value="1"}
+    <tr class="{cycle values="odd,even"}">
+      <td class="listItem Name" headers="Name" id="{$Clip.Name|replace:" ":"-"}" scope="row">{$Clip.Name}</td>
+      <td class="listItem" headers="Date {$Clip.Name|replace:" ":"-"}"><span style="display:none;">{$Clip.Date}</span>{$Clip.Date|date_format:"%D"}</td>
+      <td class="listItem" headers="Duration {$Clip.Name|replace:" ":"-"}">{$Clip.Duration|time_format:"%Hh&nbsp;%Mm"}</td>
+      <td class="listItem" headers="Agenda {$Clip.Name|replace:" ":"-"}">{if $Clip.AgendaLink}<a class="agendalink pdf2" href="{$Clip.AgendaLink}"></a>&nbsp;<a class="agendalink" href="{$Clip.AgendaLink}">Agenda</a>{/if}</td>
+      <td class="listItem" headers="Minutes {$Clip.Name|replace:" ":"-"}">{if $Clip.MinutesLink}<a class="minuteslink pdf2" href="{$Clip.MinutesLink}"></a>&nbsp;<a class="minuteslink" href="{$Clip.MinutesLink}">Minutes</a>{/if}</td>
+      <td class="listItem" headers="VideoLink {$Clip.Name|replace:" ":"-"}"><a class="videolink icon_film" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}"></a>&nbsp;<a class="videolink" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}">Watch</a> <a style="display:none" href="{$Clip.DirectLink}" title="Video Only link">Open Video Only in Windows Media Player</a> </td>
+      <td class="listItem" headers="MP3Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP3Link !=""}<a class="mp3link" href="{$Clip.MP3Link}" >Download</a>{else}&nbsp;{/if}</td>
+      <td class="listItem" headers="MP4Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP4Link !=""}<a class="mp4link" href="{$Clip.MP4Link}" >Download</a>{else}&nbsp;{/if}</td>
+    </tr>
+
+    {/if}
+    {/foreach}
+    {if $Plan== ""}
+    <tr>
+      <td class="listItem" colspan="8">Currently there are no archived videos in this section.</td>
+    </tr>
+    {/if}
+    </tbody>
+  </table>
+</div>
+
+<!--end MPFDC (archived videos)-->
+
+
+
+<!--Planning & Zoning Videos listing Table -->
+  <div class="archive">
+    <div id="g2">Planning & Zoning</div>
+    <!--<div id="search">-->
+      <table class="responsive nowrap sortable" id="planning" summary="This table lists the details of, and links to view the Video and Documents related to Archived Videos as published for the Mansfield Park Facilities Development Corporation.  There is one item per table row.">
+      <thead>
+        <tr>
+          <th id="Name" class="all" scope="col">Name</th>
+          <th id="Date" class="all" scope="col">Date</th>
+          <th id="Duration" scope="col">Duration</th>
+          <th id="Agenda" scope="col">Agenda</th>
+          <th id="Minutes" scope="col">Minutes</th>
+          <th id="Video" scope="col">Video</th>
+          <th id="MP3Link" scope="col">Audio</th>
+          <th id="MP4Link" scope="col">Video</th>
+        </tr>
+      </thead>
+      <tbody>
+      {foreach from=$Archives item=Clip}
+      {if $Clip.Location == "Planning & Zoning"}
+      {assign var="Plan" value="1"}
+      <tr class="{cycle values="odd,even"}">
+        <td class="listItem Name" headers="Name" id="{$Clip.Name|replace:" ":"-"}" scope="row">{$Clip.Name}</td>
+        <td class="listItem" headers="Date {$Clip.Name|replace:" ":"-"}"><span style="display:none;">{$Clip.Date}</span>{$Clip.Date|date_format:"%D"}</td>
+        <td class="listItem" headers="Duration {$Clip.Name|replace:" ":"-"}">{$Clip.Duration|time_format:"%Hh&nbsp;%Mm"}</td>
+        <td class="listItem" headers="Agenda {$Clip.Name|replace:" ":"-"}">{if $Clip.AgendaLink}<a class="agendalink pdf2" href="{$Clip.AgendaLink}"></a>&nbsp;<a class="agendalink" href="{$Clip.AgendaLink}">Agenda</a>{/if}</td>
+        <td class="listItem" headers="Minutes {$Clip.Name|replace:" ":"-"}">{if $Clip.MinutesLink}<a class="minuteslink pdf2" href="{$Clip.MinutesLink}"></a>&nbsp;<a class="minuteslink" href="{$Clip.MinutesLink}">Minutes</a>{/if}</td>
+        <td class="listItem" headers="VideoLink {$Clip.Name|replace:" ":"-"}"><a class="videolink icon_film" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}"></a>&nbsp;<a class="videolink" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}">Watch</a> <a style="display:none" href="{$Clip.DirectLink}" title="Video Only link">Open Video Only in Windows Media Player</a> </td>
+        <td class="listItem" headers="MP3Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP3Link !=""}<a class="mp3link" href="{$Clip.MP3Link}" >Download</a>{else}&nbsp;{/if}</td>
+        <td class="listItem" headers="MP4Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP4Link !=""}<a class="mp4link" href="{$Clip.MP4Link}" >Download</a>{else}&nbsp;{/if}</td>
+      </tr>
+
+      {/if}
+      {/foreach}
+      {if $Plan== ""}
+      <tr>
+        <td class="listItem" colspan="8">Currently there are no archived videos in this section.</td>
+      </tr>
+      {/if}
+      </tbody>
+    </table>
+  </div>
+
+<!--end Planning & Zoning (archived videos)-->
+
+
+  {elseif $Searching}<!-- End of "If not Searching", else if searching, display this section -->
+  <!--Search Results listing table -->
+  {InitSearch}
+    <!-- Advanced Search and RSS Links -->
+    {AdvancedSearchForm showRSSLinks="true"}
+  <div class="archive">
+    <div id="g2">Search Results for "{$Keywords}"</div>
+
+    <table class="sortable" id="searchList" summary="This table lists your Search Results.  With details of, and links to view the Video and Documents related to Archived Videos as published by City of Mansfield.  There is one item per table row.">
+      <thead>
+        <tr>
+          <th id="Name" scope="col">Name</th>
+          <th id="Date" scope="col">Date</th>
+          <th id="Duration" scope="col">Duration</th>
+          <th id="Agenda" scope="col">Agenda</th>
+          <th id="Minutes" scope="col">Minutes</th>
+          <th id="Video" scope="col">Video</th>
+          <th id="MP3Link" scope="col">Audio</th>
+          <th id="MP4Link" scope="col">Video</th>
+        </tr>
+      </thead><tbody>
+      {if !$IsValidSearch}
+
+                        <tr>
+
+                            <td colspan="8" class="listItem">Your search did not match any records. Please enter at least one keyword to search for.</td>
+
+                        </tr>
+
+                    {elseif !$SearchResults}
+
+                        <tr>
+
+                            <td colspan="8" class="listItem">No results matched your search.</td>
+
+                        </tr>
+
+                    {else}
+
+      {foreach from=$SearchResults item=Clip}
+
+        <tr onMouseOver="this.className = 'hlt';" onMouseOut="this.className = '';">
+          <td class="listItem" headers="Name" id="{$Clip.Name|replace:" ":"-"}" scope="row">{$Clip.Name}</td>
+          <td class="listItem" headers="Date {$Clip.Name|replace:" ":"-"}"><span style="display:none;">{$Clip.Date}</span>{$Clip.Date|date_format:"%D"}</td>
+          <td class="listItem" headers="Duration {$Clip.Name|replace:" ":"-"}">{$Clip.Duration|time_format:"%Hh&nbsp;%Mm"}</td>
+          <td class="listItem" headers="Agenda {$Clip.Name|replace:" ":"-"}">{if $Clip.AgendaLink}<a class="agendalink" href="{$Clip.AgendaLink}"></a>&nbsp;<a class="agendalink" href="{$Clip.AgendaLink}">Agenda</a>{/if}</td>
+          <td class="listItem" headers="Minutes {$Clip.Name|replace:" ":"-"}">{if $Clip.MinutesLink}<a class="minuteslink pdf2" href="{$Clip.MinutesLink}"></a>&nbsp;<a class="minuteslink" href="{$Clip.MinutesLink}">Minutes</a>{/if}</td>
+          <td class="listItem" headers="VideoLink {$Clip.Name|replace:" ":"-"}"><a class="videolink icon_film" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}"></a>&nbsp;<a class="videolink" href="javascript:void(0);" onClick="{$Clip.PlayerPopupJS}">Watch</a> <a style="display:none" href="{$Clip.DirectLink}" title="Video Only link">Open Video Only in Windows Media Player</a> </td>
+          <td class="listItem" headers="MP3Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP3Link !=""}<a class="mp3link" href="{$Clip.MP3Link}" >Download</a>{else}&nbsp;{/if}</td>
+          <td class="listItem" headers="MP4Link {$Clip.Name|replace:" ":"-"}">{if $Clip.MP4Link !=""}<a class="mp4link icon_film" href="{$Clip.MP4Link}" ></a>&nbsp;<a class="mp4link" href="{$Clip.MP4Link}" >Download</a>{else}&nbsp;{/if}</td>
+        </tr>
+      {foreach from=$Clip.Indices item=Index}
+      <tr>
+        <td colspan="8"><table width="100%" summary="This table contains a link to an item of the above Video">
+            <tr>
+              <td class="searchSubItem" valign="top">Item:&nbsp;</td>
+              <td width="100%" class="searchSubItem"><a href="javascript:void(0);" onClick="{$Index.PlayerPopupJS}">{$Index.Name}</a></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      {foreach from=$Index.Captions item=Indices}
+      <tr>
+        <td colspan="8" id="items"><table width="100%" summary="This table contains a link to an item of the above Video">
+            <tr>
+              <td class="searchSubItem" valign="top">Caption:&nbsp;</td>
+              <td width="100%" class="searchSub_subItem"><a href="javascript:void(0);" onClick="{$Indices.PlayerPopupJS}" style="font-weight:normal;">&ldquo;...{$Indices.Caption}...&rdquo;</a><br>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      {/foreach}
+      {/foreach}
+      {foreach from=$Clip.Documents item=Documents}
+      <tr>
+        <td colspan="8"><table width="100%" summary="This table contains a link to a document related to the above Video">
+            <tr>
+              <td class="searchSubItem" valign="top">Document:&nbsp;</td>
+              <td width="100%" class="searchSubItem"><a href="javascript:void(0);" onClick="{$Documents.PlayerPopupJS}">{$Documents.Name}</a></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      {/foreach}
+      {foreach from=$Clip.Captions item=Captions}
+      <tr>
+        <td colspan="8" id="items"><table width="100%" summary="This table contains a link to an item of the above Video">
+            <tr>
+              <td class="searchSubItem" valign="top">Caption:&nbsp;</td>
+              <td width="100%" class="searchSubItem"><a href="javascript:void(0);" onClick="{$Captions.PlayerPopupJS}" style="font-weight:normal;">&ldquo;...{$Captions.Caption}...&rdquo;</a></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      {/foreach}
+
+      <tr>
+        <td class="searchResultSpacer" colspan="8">&nbsp;</td>
+      </tr>
+      {/foreach}
+      {/if}
+    </table>
+  </div>
+  <!--end .archive (search results)-->
+  <p><a href="https://mansfieldtx.granicus.com/ViewPublisher.php?view_id={$ViewID}" target="_self"><img src="https://webcontent.granicusops.com/content/viewsearchbuttons/backarchivesbtn.png" width="124" height="22" alt="back to archives" border="0"></a></p>
+  {/if}
+</div>
+<!--end #granicus-->
+{literal}
+<style>
+/*Styles for Advanced Search Box*/
+#gas_searchForm {
+  border: 1px solid #C3C0BD;
+  margin:10px 5px 0px 5px;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  min-width: 0 !important;
+  overflow: visible; !important;
+}
+
+/**
+ * For modern browsers
+ * 1. The space content is one way to avoid an Opera bug when the
+ *    contenteditable attribute is included anywhere else in the document.
+ *    Otherwise it causes space to appear at the top and bottom of elements
+ *    that are clearfixed.
+ * 2. The use of `table` rather than `block` is only necessary if using
+ *    `:before` to contain the top-margins of child elements.
+ */
+#gas_searchForm:before,
+#gas_searchForm:after {
+  content: " "; /* 1 */
+  display: table; /* 2 */
+}
+
+#gas_searchForm:after {
+    clear: both;
+}
+
+@media all and (max-width: 600px) {
+  #gas_searchForm.gas_basic .gas_rss{
+    float:none;
+    width: 100%;
+  }
+}
+
+#gas_searchForm .gas_rss {
+  background-color:#dddbda;
+}
+</style>
+
+<!--
+<script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.10.18/r-2.2.2/datatables.min.js"></script>
+-->
+
+<!--from https://datatables.net/blog/2016-02-26 -->
+<!--
+<script type="text/javascript" src="https://cdn.datatables.net/plug-ins/1.10.19/dataRender/ellipsis.js"></script>
+
+<script type="text/javascript">
+$(document).ready(function() {
+  $('.responsive').DataTable( {
+    "responsive": true,
+    "columnDefs": [ {
+        targets: 0,
+        render: $.fn.dataTable.render.ellipsis( 40, true )
+    } ],
+    "order": [ 1, 'desc' ]
+  } );
+} );
+</script>>
+-->
+
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/responsive/2.4.0/js/dataTables.responsive.min.js"></script>
+
+<!--from https://datatables.net/reference/option/columns.render -->
+
+<script type="text/javascript">
+$(document).ready(function() {
+  $('.responsive').DataTable( {
+    "responsive": true,
+    "pagingType": 'full_numbers',
+    "columnDefs": [ {
+        "targets": 0,
+        "render": function ( data, type, row, meta ) {
+          return type === 'display' && data.length > 40 ?
+            '<span title="'+data+'">'+data.substr( 0, 38 )+'...</span>' :
+            data;
+        }
+    } ],
+    "order": [ 1, 'desc' ]
+  } );
+} );
+</script>
+
+{/literal}
+</body>
+</html>
