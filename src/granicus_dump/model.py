@@ -299,6 +299,30 @@ class ClipCollection(Serializable):
             base_dir=self.base_dir.relative_to(base_dir), clips=clips,
         )
 
+    def merge(self, other: ClipCollection) -> ClipCollection:
+        self_keys = set(self.clips.keys())
+        oth_keys = set(other.clips.keys())
+        missing = oth_keys - self_keys
+        overlap = self_keys & oth_keys
+        key_order = list(self.clips.keys())
+        key_order.extend(missing)
+        assert len(key_order) == len(set(key_order))
+        all_clips: dict[CLIP_ID, Clip] = {}
+        for key in key_order:
+            if key in missing:
+                all_clips[key] = other.clips[key]
+                continue
+            assert key in overlap
+            self_clip = self.clips[key]
+            oth_clip = other.clips[key]
+            c = self_clip
+            if self_clip != oth_clip:
+                if oth_clip.parse_data.actual_links is not None:
+                    c = oth_clip
+            all_clips[key] = c
+        assert set(all_clips.keys()) == self_keys | oth_keys
+        return dataclasses.replace(self, clips=all_clips)
+
     def serialize(self) -> dict[str, Any]:
         clips = {k: v.serialize() for k,v in self.clips.items()}
         return dict(base_dir=str(self.base_dir), clips=clips)
