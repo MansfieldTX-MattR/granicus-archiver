@@ -4,7 +4,7 @@ from pathlib import Path
 from yarl import URL
 # from pyquery import PyQuery as pq
 
-from .model import CLIP_ID, ParseClipData, ClipCollection
+from .model import CLIP_ID, ParseClipData, ParseClipLinks, ClipCollection
 
 # if TYPE_CHECKING:
 from pyquery.pyquery import PyQuery
@@ -88,6 +88,7 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
 
     clip_id: CLIP_ID = elem_attr(elem, 'data-clip-id')
     kw = {}
+    link_kw = {}
     for td in elem.find('td').items():
         data_key = elem_attr(td, 'data-key')
         data_type = elem_attr(td, 'data-type')
@@ -99,7 +100,7 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
             if len(anchor):
                 str_val = elem_attr(anchor, 'href')
             else:
-                kw[data_key] = None
+                link_kw[data_key] = None
                 continue
         else:
             str_val = td.text()
@@ -111,5 +112,9 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
         if isinstance(value, URL):
             if not value.scheme:
                 value = value.with_scheme(scheme)
-        kw[data_key] = value
+        if data_key in ParseClipLinks.link_attrs:
+            link_kw[data_key] = value
+        else:
+            kw[data_key] = value
+    kw['original_links'] = ParseClipLinks(**link_kw)
     return ParseClipData(**kw)

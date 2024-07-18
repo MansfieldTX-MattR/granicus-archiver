@@ -11,7 +11,7 @@ import aiojobs
 from yarl import URL
 
 from .parser import parse_page
-from .model import ClipCollection, Clip, ParseClipData, ParseClipUrlKey
+from .model import ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey
 
 MAX_BATCHES = 30
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
@@ -77,19 +77,18 @@ async def replace_pdf_links(
     parse_clip: ParseClipData,
     in_place: bool = True
 ) -> ParseClipData:
-    existing_links = parse_clip.existing_links
-    replace_links: dict[ParseClipUrlKey, URL] = {}
-    for key, url in existing_links.items():
-        if key == 'audio_link' or key == 'video_link':
+    if parse_clip.actual_links is not None:
+        return parse_clip
+    link_kw = {}
+    for key, url in parse_clip.original_links.iter_existing():
+        real_key = key.split('_')[0]
+        if key == 'audio' or key == 'video':
+            link_kw[real_key] = url
             continue
         real_url = await get_real_pdf_link(session, url)
-        replace_links[key] = real_url
-    if len(replace_links):
-        if in_place:
-            for key, val in replace_links.items():
-                setattr(parse_clip, key, val)
-        else:
-            return dataclasses.replace(parse_clip, **replace_links)
+        link_kw[real_key] = real_url
+    links = ParseClipLinks(**link_kw)
+    parse_clip.actual_links = links
     return parse_clip
 
 
