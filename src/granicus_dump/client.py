@@ -20,6 +20,7 @@ DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
 T = TypeVar('T')
 
+class DownloadError(Exception): ...
 
 # class BatchQueue(Generic[T]):
 #     def __init__(self, max_batches: int = MAX_BATCHES) -> None:
@@ -97,24 +98,32 @@ async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -
 
 
 async def download_clip(session: ClientSession, clip: Clip):
-    async def download_file(url: URL, filename: Path, temp_dir: Path):
+    async def download_file(key: ClipFileKey, url: URL, filename: Path, temp_dir: Path):
         temp_filename = temp_dir / filename.name
         logger.debug(f'download {url} to {filename}')
         chunk_size = 64*1024
         async with session.get(url) as response:
+            # logger.debug(f'{response.headers=}')
+            meta = clip.files.set_metadata(key, response.headers)
             with temp_filename.open('wb') as fd:
                 async for chunk in response.content.iter_chunked(chunk_size):
                     fd.write(chunk)
+            if meta.content_length is not None:
+                stat = temp_filename.stat()
+                if stat.st_size != meta.content_length:
+                    raise DownloadError(f'Filesize mismatch: {clip.unique_name=}, {key=}, {url=}, {stat.st_size=}, {response.headers=}')
             temp_filename.rename(filename)
 
     scheduler = get_scheduler()
     logger.info(f'downloading clip "{clip.unique_name}"')
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir).resolve()
-        clip.root_dir.mkdir(exist_ok=False, parents=True)
+        clip.root_dir.mkdir(exist_ok=True, parents=True)
         jobs: set[aiojobs.Job] = set()
-        for url, filename in clip.iter_url_paths():
-            job = await scheduler.spawn(download_file(url, filename, temp_dir))
+        for key, url, filename in clip.iter_url_paths():
+            if filename.exists():
+                continue
+            job = await scheduler.spawn(download_file(key, url, filename, temp_dir))
             jobs.add(job)
         if len(jobs):
             await asyncio.gather(*[job.wait() for job in jobs])
@@ -151,6 +160,7 @@ async def amain(data_file: Path, out_dir: Path):
         if len(jobs):
             await asyncio.gather(*[job.wait() for job in jobs])
         await scheduler.close()
+        clips.save(data_file)
     return clips
 
 def main():

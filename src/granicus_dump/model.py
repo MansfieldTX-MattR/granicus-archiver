@@ -10,12 +10,16 @@ import datetime
 import json
 
 from yarl import URL
+from multidict import MultiMapping
 
 # __all__ = ('CLIP_ID', 'ParseClipData', 'ClipCollection')
+
+UTC = datetime.timezone.utc
 
 CLIP_ID = str
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
 
+Headers = MultiMapping[str]|dict[str, str]
 
 class Serializable(ABC):
 
@@ -114,11 +118,55 @@ class ParseClipData(Serializable):
 
 
 @dataclass
+class FileMeta(Serializable):
+    content_length: int
+    content_type: str
+    last_modified: datetime.datetime|None
+    etag: str|None
+
+    # Tue, 04 Jun 2024 00:22:54 GMT
+    dt_fmt: ClassVar[str] = '%a, %d %b %Y %H:%M:%S GMT'
+
+    @classmethod
+    def from_headers(cls, headers: Headers) -> Self:
+        dt_str = headers.get('Last-Modified')
+        if dt_str is not None:
+            dt = datetime.datetime.strptime(dt_str, cls.dt_fmt).replace(tzinfo=UTC)
+        else:
+            dt = None
+        etag = headers.get('Etag')
+        if etag is not None:
+            etag = etag.strip('"')
+        return cls(
+            content_length=int(headers['Content-Length']),
+            content_type=headers['Content-Type'],
+            last_modified=dt,
+            etag=etag,
+        )
+
+    def serialize(self) -> dict[str, Any]:
+        d = dataclasses.asdict(self)
+        if self.last_modified is not None:
+            dt = self.last_modified.astimezone(UTC)
+            d['last_modified'] = dt.strftime(self.dt_fmt)
+        return d
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        kw = data.copy()
+        if kw['last_modified'] is not None:
+            dt = datetime.datetime.strptime(kw['last_modified'], cls.dt_fmt)
+            kw['last_modified'] = dt.replace(tzinfo=UTC)
+        return cls(**kw)
+
+
+@dataclass
 class ClipFiles(Serializable):
     agenda: Path|None
     minutes: Path|None
     audio: Path|None
     video: Path|None
+    metadata: dict[ClipFileKey, FileMeta] = field(default_factory=dict)
 
     path_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
 
@@ -126,7 +174,7 @@ class ClipFiles(Serializable):
     def from_parse_data(cls, parse_data: ParseClipData, root_dir: Path) -> Self:
         links = parse_data.original_links
         kw = {k: v if not v else cls.build_path(root_dir, k) for k,v in links}
-        return cls(**kw)
+        return cls(metadata={}, **kw)
 
     @classmethod
     def build_path(cls, root_dir: Path, key: ClipFileKey) -> Path:
@@ -151,6 +199,14 @@ class ClipFiles(Serializable):
     def complete(self) -> bool:
         paths = self.existing_paths
         return all([p.exists() for p in paths.values()])
+
+    def get_metadata(self, key: ClipFileKey) -> FileMeta|None:
+        return self.metadata.get(key)
+
+    def set_metadata(self, key: ClipFileKey, headers: Headers) -> FileMeta:
+        meta = FileMeta.from_headers(headers)
+        self.metadata[key] = meta
+        return meta
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {
@@ -181,7 +237,10 @@ class ClipFiles(Serializable):
         for key, val in d.copy().items():
             if val is None:
                 continue
+            if key == 'metadata':
+                continue
             d[key] = str(val)
+        d['metadata'] = {mkey: mval.serialize() for mkey, mval in self.metadata.items()}
         return d
 
     @classmethod
@@ -189,7 +248,10 @@ class ClipFiles(Serializable):
         kw = {}
         for key, val in data.items():
             if val is not None:
-                val = Path(val)
+                if key == 'metadata':
+                    val = {mkey: FileMeta.deserialize(mval) for mkey, mval in val.items()}
+                else:
+                    val = Path(val)
             kw[key] = val
         return cls(**kw)
 
@@ -231,7 +293,7 @@ class Clip(Serializable):
             )
         )
 
-    def iter_url_paths(self, actual: bool = True) -> Iterator[tuple[URL, Path]]:
+    def iter_url_paths(self, actual: bool = True) -> Iterator[tuple[ClipFileKey, URL, Path]]:
         if actual:
             assert self.parse_data.actual_links is not None
             it = self.parse_data.actual_links.iter_existing()
@@ -239,7 +301,7 @@ class Clip(Serializable):
             it = self.parse_data.original_links.iter_existing()
         for urlkey, url in it:
             filename = self.files.build_path(self.root_dir, urlkey)
-            yield url, filename
+            yield urlkey, url, filename
 
     def relative_to(self, base_dir: Path) -> Self:
         new_root_dir = self.parse_data.build_fs_path(base_dir)
