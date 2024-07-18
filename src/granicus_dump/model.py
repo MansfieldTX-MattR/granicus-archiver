@@ -7,6 +7,7 @@ from pathlib import Path
 import dataclasses
 from dataclasses import dataclass, field
 import datetime
+import json
 
 from yarl import URL
 
@@ -265,6 +266,15 @@ class Clip(Serializable):
 class ClipCollection(Serializable):
     base_dir: Path
     clips: dict[CLIP_ID, Clip] = field(default_factory=dict)
+
+    @classmethod
+    def load(cls, filename: Path) -> Self:
+        data = json.loads(filename.read_text())
+        return cls.deserialize(data)
+
+    def save(self, filename: Path, indent: int|None = 2) -> None:
+        data = self.serialize()
+        filename.write_text(json.dumps(data, indent=indent))
 
     def add_clip(self, parse_data: ParseClipData) -> Clip:
         clip = Clip.from_parse_data(parse_data=parse_data, base_dir=self.base_dir)
