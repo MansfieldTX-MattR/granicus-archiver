@@ -4,6 +4,7 @@ from pathlib import Path
 import dataclasses
 import json
 from loguru import logger
+import tempfile
 
 import click
 from aiohttp import ClientSession
@@ -96,20 +97,27 @@ async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -
 
 
 async def download_clip(session: ClientSession, clip: Clip):
-    async def download_file(url: URL, filename: Path):
+    async def download_file(url: URL, filename: Path, temp_dir: Path):
+        temp_filename = temp_dir / filename.name
         logger.debug(f'download {url} to {filename}')
         chunk_size = 64*1024
         async with session.get(url) as response:
-            with filename.open('wb') as fd:
+            with temp_filename.open('wb') as fd:
                 async for chunk in response.content.iter_chunked(chunk_size):
                     fd.write(chunk)
+            temp_filename.rename(filename)
+
+    scheduler = get_scheduler()
     logger.info(f'downloading clip "{clip.unique_name}"')
-    clip.root_dir.mkdir(exist_ok=False, parents=True)
-    coros: set[Coroutine[Any, Any, None]] = set()
-    for url, filename in clip.iter_url_paths():
-        coros.add(download_file(url, filename))
-    if len(coros):
-        await asyncio.gather(*coros)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir = Path(temp_dir).resolve()
+        clip.root_dir.mkdir(exist_ok=False, parents=True)
+        jobs: set[aiojobs.Job] = set()
+        for url, filename in clip.iter_url_paths():
+            job = await scheduler.spawn(download_file(url, filename, temp_dir))
+            jobs.add(job)
+        if len(jobs):
+            await asyncio.gather(*[job.wait() for job in jobs])
     logger.success(f'clip "{clip.unique_name}" complete')
 
 
