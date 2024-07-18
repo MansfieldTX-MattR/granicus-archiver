@@ -13,7 +13,7 @@ from yarl import URL
 from .parser import parse_page
 from .model import ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey
 
-MAX_BATCHES = 30
+MAX_BATCHES = 8
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
 
@@ -29,28 +29,20 @@ T = TypeVar('T')
 
 #     # async def __aenter__(self) -> Self:
 
+SCHEDULER: aiojobs.Scheduler|None = None
+def get_scheduler() -> aiojobs.Scheduler:
+    global SCHEDULER
+    if SCHEDULER is None:
+        SCHEDULER = aiojobs.Scheduler(limit=MAX_BATCHES)
+    return SCHEDULER
 
 
-async def get_main_data(session: ClientSession, base_dir: Path, fix_pdf_links: bool = True) -> ClipCollection:
+async def get_main_data(session: ClientSession, base_dir: Path) -> ClipCollection:
     async with session.get(str(DATA_URL)) as response:
         if not response.ok:
             response.raise_for_status()
         html = await response.text()
         clips = parse_page(html, base_dir=base_dir, scheme=DATA_URL.scheme)
-    if not fix_pdf_links:
-        return clips
-
-
-    # for clip in clips:
-    #     await replace_pdf_links(session, clip.parse_data)
-    #     # print(clip.parse_data)
-    #     break
-
-    # scheduler = aiojobs.Scheduler(limit=MAX_BATCHES)
-
-    # for clip in clips:
-    #     await scheduler.spawn(replace_pdf_links(session, clip.parse_data))
-
     return clips
 
 # @logger.catch
@@ -75,7 +67,6 @@ async def get_real_pdf_link(session: ClientSession, src_url: URL) -> URL:
 async def replace_pdf_links(
     session: ClientSession,
     parse_clip: ParseClipData,
-    in_place: bool = True
 ) -> ParseClipData:
     if parse_clip.actual_links is not None:
         return parse_clip
@@ -92,6 +83,18 @@ async def replace_pdf_links(
     return parse_clip
 
 
+async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -> None:
+    scheduler = get_scheduler()
+    jobs: set[aiojobs.Job[ParseClipData]] = set()
+    for clip in clips:
+        if clip.parse_data.actual_links is not None:
+            continue
+        job = await scheduler.spawn(replace_pdf_links(session, clip.parse_data))
+        jobs.add(job)
+    if len(jobs):
+        await asyncio.gather(*[job.wait() for job in jobs])
+
+
 async def download_clip(session: ClientSession, clip: Clip):
     async def download_file(url: URL, filename: Path):
         logger.debug(f'download {url} to {filename}')
@@ -101,8 +104,6 @@ async def download_clip(session: ClientSession, clip: Clip):
                 async for chunk in response.content.iter_chunked(chunk_size):
                     fd.write(chunk)
     logger.info(f'downloading clip "{clip.unique_name}"')
-    parse_clip = await replace_pdf_links(session, clip.parse_data, in_place=False)
-    clip = dataclasses.replace(clip, parse_data=parse_clip)
     clip.root_dir.mkdir(exist_ok=False, parents=True)
     coros: set[Coroutine[Any, Any, None]] = set()
     for url, filename in clip.iter_url_paths():
@@ -112,30 +113,37 @@ async def download_clip(session: ClientSession, clip: Clip):
     logger.success(f'clip "{clip.unique_name}" complete')
 
 
-async def amain():
+async def amain(data_file: Path, out_dir: Path):
+    scheduler = get_scheduler()
     async with ClientSession() as session:
-        clips = await get_main_data(session, Path('data'), fix_pdf_links=True)
+        clips = await get_main_data(session, out_dir)
+        await replace_all_pdf_links(session, clips)
+        clips.save(data_file)
         i = 0
         coros: set[Coroutine[Any, Any, None]] = set()
+        jobs: set[aiojobs.Job] = set()
         for clip in clips:
             if clip.complete:
                 logger.debug(f'skipping {clip.unique_name}')
                 continue
             # coros.add(download_clip(session, clip))
-            await download_clip(session, clip)
+            job = await scheduler.spawn(download_clip(session, clip))
+            jobs.add(job)
             i += 1
             break
             if i >= 5:
                 break
         # if len(coros):
         #     await asyncio.gather(*coros)
-        return clips
+        if len(jobs):
+            await asyncio.gather(*[job.wait() for job in jobs])
+        await scheduler.close()
+    return clips
 
 def main():
-    clips = asyncio.run(amain())
-    outfile = clips.base_dir / 'data.json'
-    d = clips.serialize()
-    outfile.write_text(json.dumps(d, indent=2))
+    out_dir = Path('data')
+    data_file = out_dir / 'data.json'
+    clips = asyncio.run(amain(data_file, out_dir))
 
 if __name__ == '__main__':
     main()
