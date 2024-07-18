@@ -115,8 +115,13 @@ async def download_clip(session: ClientSession, clip: Clip):
 
 async def amain(data_file: Path, out_dir: Path):
     scheduler = get_scheduler()
+    local_clips: ClipCollection|None = None
+    if data_file.exists():
+        local_clips = ClipCollection.load(data_file)
     async with ClientSession() as session:
         clips = await get_main_data(session, out_dir)
+        if local_clips is not None:
+            clips = clips.merge(local_clips)
         await replace_all_pdf_links(session, clips)
         clips.save(data_file)
         i = 0
