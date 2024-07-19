@@ -97,8 +97,11 @@ class ParseClipData(Serializable):
     def unique_name(self) -> str:
         return f'{self.id}_{self.title_name}'
 
-    def build_fs_path(self, root_dir: Path) -> Path:
-        return root_dir / self.location / self.title_name
+    def build_fs_dir(self, root_dir: Path|None) -> Path:
+        stem = Path(self.location) / self.title_name
+        if root_dir is None:
+            return stem
+        return root_dir / stem
 
     def serialize(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)
@@ -162,6 +165,7 @@ class FileMeta(Serializable):
 
 @dataclass
 class ClipFiles(Serializable):
+    clip: Clip = field(repr=False)
     agenda: Path|None
     minutes: Path|None
     audio: Path|None
@@ -171,10 +175,11 @@ class ClipFiles(Serializable):
     path_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
 
     @classmethod
-    def from_parse_data(cls, parse_data: ParseClipData, root_dir: Path) -> Self:
+    def from_parse_data(cls, clip: Clip, parse_data: ParseClipData) -> Self:
+        root_dir = clip.root_dir
         links = parse_data.original_links
         kw = {k: v if not v else cls.build_path(root_dir, k) for k,v in links}
-        return cls(metadata={}, **kw)
+        return cls(clip=clip, metadata={}, **kw)
 
     @classmethod
     def build_path(cls, root_dir: Path, key: ClipFileKey) -> Path:
@@ -233,13 +238,12 @@ class ClipFiles(Serializable):
                 yield attr, p
 
     def serialize(self) -> dict[str, Any]:
-        d = dataclasses.asdict(self)
-        for key, val in d.copy().items():
-            if val is None:
-                continue
-            if key == 'metadata':
-                continue
-            d[key] = str(val)
+        d = {}
+        for attr in self.path_attrs:
+            val = self[attr]
+            if val is not None:
+                val = str(val)
+            d[attr] = val
         d['metadata'] = {mkey: mval.serialize() for mkey, mval in self.metadata.items()}
         return d
 
@@ -247,7 +251,7 @@ class ClipFiles(Serializable):
     def deserialize(cls, data: dict[str, Any]) -> Self:
         kw = {}
         for key, val in data.items():
-            if val is not None:
+            if val is not None and key != 'clip':
                 if key == 'metadata':
                     val = {mkey: FileMeta.deserialize(mval) for mkey, mval in val.items()}
                 else:
@@ -258,9 +262,10 @@ class ClipFiles(Serializable):
 
 @dataclass
 class Clip(Serializable):
-    parse_data: ParseClipData
+    parse_data: ParseClipData = field(repr=False)
     root_dir: Path
-    files: ClipFiles
+    files: ClipFiles = field(init=False)
+    parent: ClipCollection
 
     @property
     def id(self) -> CLIP_ID: return self.parse_data.id
@@ -282,29 +287,37 @@ class Clip(Serializable):
     @property
     def complete(self) -> bool: return self.files.complete
 
+    @property
+    def root_dir_abs(self) -> Path:
+        return self.parent.base_dir / self.root_dir
+
     @classmethod
-    def from_parse_data(cls, parse_data: ParseClipData, base_dir: Path) -> Self:
-        root_dir = parse_data.build_fs_path(base_dir)
-        return cls(
+    def from_parse_data(cls, parent: ClipCollection, parse_data: ParseClipData) -> Self:
+        root_dir = parse_data.build_fs_dir(None)
+        obj = cls(
             parse_data=parse_data,
             root_dir=root_dir,
-            files=ClipFiles.from_parse_data(
-                parse_data=parse_data, root_dir=root_dir,
-            )
+            parent=parent,
         )
+        obj.files = ClipFiles.from_parse_data(
+            clip=obj,
+            parse_data=parse_data,
+        )
+        return obj
 
-    def iter_url_paths(self, actual: bool = True) -> Iterator[tuple[ClipFileKey, URL, Path]]:
+    def iter_url_paths(self, actual: bool = True, absolute: bool = True) -> Iterator[tuple[ClipFileKey, URL, Path]]:
         if actual:
             assert self.parse_data.actual_links is not None
             it = self.parse_data.actual_links.iter_existing()
         else:
             it = self.parse_data.original_links.iter_existing()
+        root_dir = self.root_dir_abs if absolute else self.root_dir
         for urlkey, url in it:
-            filename = self.files.build_path(self.root_dir, urlkey)
+            filename = self.files.build_path(root_dir, urlkey)
             yield urlkey, url, filename
 
     def relative_to(self, base_dir: Path) -> Self:
-        new_root_dir = self.parse_data.build_fs_path(base_dir)
+        new_root_dir = self.parse_data.build_fs_dir(base_dir)
         new_files = self.files.relative_to(new_root_dir)
         return dataclasses.replace(self, root_dir=new_root_dir, files=new_files)
 
@@ -317,11 +330,15 @@ class Clip(Serializable):
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
-        return cls(
+        obj = cls(
             parse_data=ParseClipData.deserialize(data['parse_data']),
             root_dir=Path(data['root_dir']),
-            files=ClipFiles.deserialize(data['files']),
+            parent=data['parent'],
         )
+        file_data = data['files'].copy()
+        file_data['clip'] = obj
+        obj.files = ClipFiles.deserialize(file_data)
+        return obj
 
 
 @dataclass
@@ -339,7 +356,7 @@ class ClipCollection(Serializable):
         filename.write_text(json.dumps(data, indent=indent))
 
     def add_clip(self, parse_data: ParseClipData) -> Clip:
-        clip = Clip.from_parse_data(parse_data=parse_data, base_dir=self.base_dir)
+        clip = Clip.from_parse_data(parent=self, parse_data=parse_data)
         if clip.id in self.clips:
             raise KeyError(f'Clip with id "{clip.id}" exists')
         self.clips[clip.id] = clip
@@ -391,9 +408,11 @@ class ClipCollection(Serializable):
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
-        clips: dict[CLIP_ID, Clip] = {}
+        obj = cls(base_dir=Path(data['base_dir']))
         for key, val in data['clips'].items():
+            val = val.copy()
+            val['parent'] = obj
             clip = Clip.deserialize(val)
             assert clip.id == key
-            clips[key] = clip
-        return cls(base_dir=Path(data['base_dir']), clips=clips)
+            obj.clips[key] = clip
+        return obj
