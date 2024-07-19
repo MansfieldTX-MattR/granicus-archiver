@@ -15,7 +15,6 @@ from yarl import URL
 from .parser import parse_page
 from .model import ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey
 
-MAX_BATCHES = 8
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
 
@@ -33,10 +32,14 @@ class DownloadError(Exception): ...
 #     # async def __aenter__(self) -> Self:
 
 SCHEDULER: aiojobs.Scheduler|None = None
-def get_scheduler() -> aiojobs.Scheduler:
+def get_scheduler(limit: int|None = None) -> aiojobs.Scheduler:
     global SCHEDULER
     if SCHEDULER is None:
-        SCHEDULER = aiojobs.Scheduler(limit=MAX_BATCHES)
+        if limit is None:
+            raise RuntimeError('scheduler limit must be set')
+        SCHEDULER = aiojobs.Scheduler(limit=limit)
+    elif limit is not None:
+        raise RuntimeError('scheduler already created')
     return SCHEDULER
 
 
@@ -144,8 +147,13 @@ async def download_clip(session: ClientSession, clip: Clip):
 
 
 @logger.catch
-async def amain(data_file: Path, out_dir: Path, max_clips: int|None = None):
-    scheduler = get_scheduler()
+async def amain(
+    data_file: Path,
+    out_dir: Path,
+    scheduler_limit: int,
+    max_clips: int|None = None,
+):
+    scheduler = get_scheduler(limit=scheduler_limit)
     local_clips: ClipCollection|None = None
     if data_file.exists():
         local_clips = ClipCollection.load(data_file)
@@ -189,10 +197,16 @@ async def amain(data_file: Path, out_dir: Path, max_clips: int|None = None):
     required=False,
 )
 @click.option('--max-clips', type=int, required=False)
-def main(out_dir: Path, data_file: Path|None, max_clips: int|None):
+@click.option('--job-limit', type=int, default=16, show_default=True)
+def main(out_dir: Path, data_file: Path|None, max_clips: int|None, job_limit: int):
     if data_file is None:
         data_file = out_dir / 'data.json'
-    clips = asyncio.run(amain(data_file=data_file, out_dir=out_dir, max_clips=max_clips))
+    clips = asyncio.run(amain(
+        data_file=data_file,
+        out_dir=out_dir,
+        scheduler_limit=job_limit,
+        max_clips=max_clips,
+    ))
 
 
 if __name__ == '__main__':
