@@ -7,7 +7,7 @@ from loguru import logger
 import tempfile
 
 import click
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 import aiojobs
 from yarl import URL
 
@@ -102,7 +102,12 @@ async def download_clip(session: ClientSession, clip: Clip):
         temp_filename = temp_dir / filename.name
         logger.debug(f'download {url} to {filename}')
         chunk_size = 64*1024
-        async with session.get(url) as response:
+        if key == 'video':
+            # 1 hour total, 1 minute for connect, 1 minute between reads
+            timeout = ClientTimeout(total=60*60, sock_connect=60, sock_read=60)
+        else:
+            timeout = ClientTimeout(total=300)
+        async with session.get(url, timeout=timeout) as response:
             # logger.debug(f'{response.headers=}')
             meta = clip.files.set_metadata(key, response.headers)
             with temp_filename.open('wb') as fd:
@@ -122,6 +127,7 @@ async def download_clip(session: ClientSession, clip: Clip):
         jobs: set[aiojobs.Job] = set()
         for key, url, filename in clip.iter_url_paths():
             if filename.exists():
+                logger.debug(f'filename exists: {key=}, {filename=}')
                 continue
             job = await scheduler.spawn(download_file(key, url, filename, temp_dir))
             jobs.add(job)
@@ -130,6 +136,7 @@ async def download_clip(session: ClientSession, clip: Clip):
     logger.success(f'clip "{clip.unique_name}" complete')
 
 
+@logger.catch
 async def amain(data_file: Path, out_dir: Path, max_clips: int|None = None):
     scheduler = get_scheduler()
     local_clips: ClipCollection|None = None
@@ -155,8 +162,11 @@ async def amain(data_file: Path, out_dir: Path, max_clips: int|None = None):
             if max_clips is not None and i >= max_clips:
                 break
         if len(jobs):
+            logger.debug(f'awaiting {len(jobs)} jobs')
             await asyncio.gather(*[job.wait() for job in jobs])
+        logger.info('closing scheduler..')
         await scheduler.close()
+        logger.debug('scheduler closed')
         clips.save(data_file)
     return clips
 
