@@ -160,10 +160,23 @@ async def amain(data_file: Path, out_dir: Path, max_clips: int|None = None):
         clips.save(data_file)
     return clips
 
-def main():
-    out_dir = Path('data')
-    data_file = out_dir / 'data.json'
-    clips = asyncio.run(amain(data_file, out_dir, max_clips=0))
+
+@click.command
+@click.argument(
+    'out_dir',
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+)
+@click.option(
+    '--data-file',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    required=False,
+)
+@click.option('--max-clips', type=int, required=False)
+def main(out_dir: Path, data_file: Path|None, max_clips: int|None):
+    if data_file is None:
+        data_file = out_dir / 'data.json'
+    clips = asyncio.run(amain(data_file=data_file, out_dir=out_dir, max_clips=max_clips))
+
 
 if __name__ == '__main__':
     main()
