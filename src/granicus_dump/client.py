@@ -118,7 +118,7 @@ async def download_clip(session: ClientSession, clip: Clip):
     logger.info(f'downloading clip "{clip.unique_name}"')
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir).resolve()
-        clip.root_dir.mkdir(exist_ok=True, parents=True)
+        clip.root_dir_abs.mkdir(exist_ok=True, parents=True)
         jobs: set[aiojobs.Job] = set()
         for key, url, filename in clip.iter_url_paths():
             if filename.exists():
