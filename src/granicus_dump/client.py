@@ -130,7 +130,7 @@ async def download_clip(session: ClientSession, clip: Clip):
     logger.success(f'clip "{clip.unique_name}" complete')
 
 
-async def amain(data_file: Path, out_dir: Path):
+async def amain(data_file: Path, out_dir: Path, max_clips: int|None = None):
     scheduler = get_scheduler()
     local_clips: ClipCollection|None = None
     if data_file.exists():
@@ -142,21 +142,18 @@ async def amain(data_file: Path, out_dir: Path):
         await replace_all_pdf_links(session, clips)
         clips.save(data_file)
         i = 0
-        coros: set[Coroutine[Any, Any, None]] = set()
         jobs: set[aiojobs.Job] = set()
         for clip in clips:
+            if max_clips == 0:
+                break
             if clip.complete:
                 logger.debug(f'skipping {clip.unique_name}')
                 continue
-            # coros.add(download_clip(session, clip))
             job = await scheduler.spawn(download_clip(session, clip))
             jobs.add(job)
             i += 1
-            break
-            if i >= 5:
+            if max_clips is not None and i >= max_clips:
                 break
-        # if len(coros):
-        #     await asyncio.gather(*coros)
         if len(jobs):
             await asyncio.gather(*[job.wait() for job in jobs])
         await scheduler.close()
@@ -166,7 +163,7 @@ async def amain(data_file: Path, out_dir: Path):
 def main():
     out_dir = Path('data')
     data_file = out_dir / 'data.json'
-    clips = asyncio.run(amain(data_file, out_dir))
+    clips = asyncio.run(amain(data_file, out_dir, max_clips=0))
 
 if __name__ == '__main__':
     main()
