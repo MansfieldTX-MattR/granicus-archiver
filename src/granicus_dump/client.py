@@ -9,6 +9,7 @@ import tempfile
 import click
 from aiohttp import ClientSession, ClientTimeout
 import aiojobs
+import aiofile
 from yarl import URL
 
 from .parser import parse_page
@@ -110,14 +111,20 @@ async def download_clip(session: ClientSession, clip: Clip):
         async with session.get(url, timeout=timeout) as response:
             # logger.debug(f'{response.headers=}')
             meta = clip.files.set_metadata(key, response.headers)
-            with temp_filename.open('wb') as fd:
+            async with aiofile.async_open(temp_filename, 'wb') as fd:
                 async for chunk in response.content.iter_chunked(chunk_size):
-                    fd.write(chunk)
-            if meta.content_length is not None:
-                stat = temp_filename.stat()
-                if stat.st_size != meta.content_length:
-                    raise DownloadError(f'Filesize mismatch: {clip.unique_name=}, {key=}, {url=}, {stat.st_size=}, {response.headers=}')
-            temp_filename.rename(filename)
+                    await fd.write(chunk)
+        if meta.content_length is not None:
+            stat = temp_filename.stat()
+            if stat.st_size != meta.content_length:
+                raise DownloadError(f'Filesize mismatch: {clip.unique_name=}, {key=}, {url=}, {stat.st_size=}, {response.headers=}')
+        logger.debug(f'download complete for "{clip.unique_name} - {key}" copying...')
+        async with aiofile.async_open(temp_filename, 'rb') as src_fd:
+            async with aiofile.async_open(filename, 'wb') as dst_fd:
+                async for chunk in src_fd.iter_chunked(chunk_size):
+                    await dst_fd.write(chunk)
+        logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
+        temp_filename.unlink()
 
     scheduler = get_scheduler()
     logger.info(f'downloading clip "{clip.unique_name}"')
