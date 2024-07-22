@@ -102,7 +102,14 @@ async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -
 
 
 async def download_clip(session: ClientSession, clip: Clip):
-    async def download_file(key: ClipFileKey, url: URL, filename: Path, temp_dir: Path):
+    scheduler = get_scheduler()
+
+    async def download_file(
+        key: ClipFileKey,
+        url: URL,
+        filename: Path,
+        temp_dir: Path
+    ) -> asyncio.Task:
         temp_filename = temp_dir / filename.name
         logger.debug(f'download {url} to {filename}')
         chunk_size = 64*1024
@@ -121,28 +128,49 @@ async def download_clip(session: ClientSession, clip: Clip):
             stat = temp_filename.stat()
             if stat.st_size != meta.content_length:
                 raise DownloadError(f'Filesize mismatch: {clip.unique_name=}, {key=}, {url=}, {stat.st_size=}, {response.headers=}')
-        logger.debug(f'download complete for "{clip.unique_name} - {key}" copying...')
-        async with aiofile.async_open(temp_filename, 'rb') as src_fd:
-            async with aiofile.async_open(filename, 'wb') as dst_fd:
+        logger.debug(f'download complete for "{clip.unique_name} - {key}"')
+        copy_task = asyncio.create_task(copy_clip_to_dest(key, src_file=temp_filename, dst_file=filename))
+        return copy_task
+
+
+    async def copy_clip_to_dest(key: ClipFileKey, src_file: Path, dst_file: Path) -> None:
+        chunk_size = 64*1024
+        logger.debug(f'copying "{clip.unique_name} - {key}"')
+
+        async with aiofile.async_open(src_file, 'rb') as src_fd:
+            async with aiofile.async_open(dst_file, 'wb') as dst_fd:
                 async for chunk in src_fd.iter_chunked(chunk_size):
                     await dst_fd.write(chunk)
         logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
-        temp_filename.unlink()
+        src_file.unlink()
 
-    scheduler = get_scheduler()
     logger.info(f'downloading clip "{clip.unique_name}"')
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir).resolve()
         clip.root_dir_abs.mkdir(exist_ok=True, parents=True)
-        jobs: set[aiojobs.Job] = set()
+        download_jobs: set[aiojobs.Job[asyncio.Task]] = set()
+        download_job_waiters: set[asyncio.Task[asyncio.Task]] = set()
+        copy_tasks: set[asyncio.Task] = set()
         for key, url, filename in clip.iter_url_paths():
             if filename.exists():
                 logger.debug(f'filename exists: {key=}, {filename=}')
                 continue
+            logger.debug(f'{scheduler.active_count=}')
             job = await scheduler.spawn(download_file(key, url, filename, temp_dir))
-            jobs.add(job)
-        if len(jobs):
-            await asyncio.gather(*[job.wait() for job in jobs])
+            download_jobs.add(job)
+            download_job_waiters.add(asyncio.create_task(job.wait()))
+        while len(download_job_waiters):
+            done, pending = await asyncio.wait(download_job_waiters, return_when=asyncio.FIRST_COMPLETED)
+            for t in done:
+                exc = t.exception()
+                if exc is not None:
+                    raise exc
+                copy_task = t.result()
+                copy_tasks.add(copy_task)
+                download_job_waiters.discard(t)
+        if len(copy_tasks):
+            await asyncio.gather(*copy_tasks)
+
     logger.success(f'clip "{clip.unique_name}" complete')
 
 
@@ -171,6 +199,7 @@ async def amain(
             if clip.complete:
                 logger.debug(f'skipping {clip.unique_name}')
                 continue
+            logger.debug(f'{scheduler.active_count=}')
             job = await scheduler.spawn(download_clip(session, clip))
             jobs.add(job)
             i += 1
