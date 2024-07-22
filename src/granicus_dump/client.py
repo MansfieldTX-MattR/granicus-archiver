@@ -173,6 +173,26 @@ async def download_clip(session: ClientSession, clip: Clip):
 
     logger.success(f'clip "{clip.unique_name}" complete')
 
+def check_clip_files(clip: Clip):
+    for key, url, filename in clip.iter_url_paths():
+        if not filename.exists():
+            continue
+        meta = clip.files.get_metadata(key)
+        if meta is None:
+            logger.warning(f'No metadata for "{filename}"')
+            filename.unlink()
+            continue
+        assert meta.content_length is not None
+        if filename.stat().st_size != meta.content_length:
+            logger.warning(f'Size mismatch for "{filename}"')
+            filename.unlink()
+
+def check_all_clip_files(clips: ClipCollection):
+    for clip in clips:
+        if clip.complete:
+            continue
+        check_clip_files(clip)
+
 
 @logger.catch
 async def amain(
@@ -191,6 +211,7 @@ async def amain(
             clips = clips.merge(local_clips)
         await replace_all_pdf_links(session, clips)
         clips.save(data_file)
+        check_all_clip_files(clips)
         i = 0
         jobs: set[aiojobs.Job] = set()
         for clip in clips:
@@ -226,10 +247,21 @@ async def amain(
     required=False,
 )
 @click.option('--max-clips', type=int, required=False)
-@click.option('--job-limit', type=int, default=16, show_default=True)
-def main(out_dir: Path, data_file: Path|None, max_clips: int|None, job_limit: int):
+@click.option('--job-limit', type=int, default=8, show_default=True)
+@click.option('--check-only', is_flag=True)
+def main(
+    out_dir: Path,
+    data_file: Path|None,
+    max_clips: int|None,
+    job_limit: int,
+    check_only: bool,
+):
     if data_file is None:
         data_file = out_dir / 'data.json'
+    if check_only:
+        clips = ClipCollection.load(data_file)
+        check_all_clip_files(clips)
+        return
     clips = asyncio.run(amain(
         data_file=data_file,
         out_dir=out_dir,
