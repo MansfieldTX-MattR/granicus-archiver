@@ -203,8 +203,10 @@ class ClipFiles(Serializable):
 
     @property
     def complete(self) -> bool:
-        paths = self.existing_paths
-        return all([p.exists() for p in paths.values()])
+        for key, u, p in self.clip.iter_url_paths():
+            if not p.exists():
+                return False
+        return True
 
     def get_metadata(self, key: ClipFileKey) -> FileMeta|None:
         return self.metadata.get(key)
