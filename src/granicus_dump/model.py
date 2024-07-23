@@ -97,9 +97,13 @@ class ParseClipData(Serializable):
     def unique_name(self) -> str:
         return f'{self.id}_{self.title_name}'
 
-    def build_fs_dir(self, root_dir: Path|None) -> Path:
+    def build_fs_dir(self, root_dir: Path|None, replace_invalid: bool = True) -> Path:
         year = self.datetime.strftime('%Y')
-        stem = Path(year) / self.location / self.title_name
+        title_name = self.title_name
+        if replace_invalid:
+            if '/' in title_name:
+                title_name = title_name.replace('/', ':')
+        stem = Path(year) / self.location / title_name
         if root_dir is None:
             return stem
         return root_dir / stem
