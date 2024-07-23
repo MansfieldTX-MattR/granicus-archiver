@@ -388,17 +388,23 @@ class ClipCollection(Serializable):
     def merge(self, other: ClipCollection) -> ClipCollection:
         self_keys = set(self.clips.keys())
         oth_keys = set(other.clips.keys())
-        missing = oth_keys - self_keys
-        overlap = self_keys & oth_keys
+        missing_in_self = oth_keys - self_keys      # I Don't Have
+        missing_in_other = self_keys - oth_keys     # I Have, Other Doesn't
+        all_keys = self_keys | oth_keys
         key_order = list(self.clips.keys())
-        key_order.extend(missing)
+        key_order.extend(missing_in_self)
         assert len(key_order) == len(set(key_order))
         all_clips: dict[CLIP_ID, Clip] = {}
         for key in key_order:
-            if key in missing:
+            if key in missing_in_other:
+                assert key not in other
+                all_clips[key] = self.clips[key]
+                continue
+            elif key in missing_in_self:
+                assert key not in self
                 all_clips[key] = other.clips[key]
                 continue
-            assert key in overlap
+            assert key in all_keys
             self_clip = self.clips[key]
             oth_clip = other.clips[key]
             c = self_clip
