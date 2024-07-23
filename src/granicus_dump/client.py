@@ -14,7 +14,7 @@ from yarl import URL
 
 from .parser import parse_page
 from .model import ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey
-from .utils import JobWaiters
+from .utils import JobWaiters, is_same_filesystem
 
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
@@ -153,6 +153,9 @@ async def download_clip(session: ClientSession, clip: Clip):
 
 
     async def copy_clip_to_dest(key: ClipFileKey, src_file: Path, dst_file: Path) -> None:
+        if is_same_filesystem(src_file, dst_file):
+            src_file.rename(dst_file)
+            return
         chunk_size = 64*1024
         logger.debug(f'copying "{clip.unique_name} - {key}"')
 

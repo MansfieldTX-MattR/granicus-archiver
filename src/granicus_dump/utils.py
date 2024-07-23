@@ -3,6 +3,7 @@ from typing import (
     TypeVar, Generic, Coroutine, Iterator, Generator, Sized, Iterable,
     Container, Awaitable, AsyncIterable, AsyncGenerator, Literal, Any,
 )
+from pathlib import Path
 
 import asyncio
 import aiojobs
@@ -268,3 +269,14 @@ class JobWaiters(
 
     def __getitem__(self, key: aiojobs.Job) -> JobWaiter[T]:
         return self.waiters[key]
+
+
+def find_mount_point(p: Path) -> Path:
+    p = p.resolve()
+    while not p.is_mount():
+        p = p.parent
+    return p
+
+
+def is_same_filesystem(a: Path, b: Path) -> bool:
+    return find_mount_point(a) == find_mount_point(b)
