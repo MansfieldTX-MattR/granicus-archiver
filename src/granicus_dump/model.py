@@ -98,7 +98,8 @@ class ParseClipData(Serializable):
         return f'{self.id}_{self.title_name}'
 
     def build_fs_dir(self, root_dir: Path|None) -> Path:
-        stem = Path(self.location) / self.title_name
+        year = self.datetime.strftime('%Y')
+        stem = Path(year) / self.location / self.title_name
         if root_dir is None:
             return stem
         return root_dir / stem
