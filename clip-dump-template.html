@@ -21,7 +21,7 @@
         <td data-key="id" data-type="string">{$Clip.ID}</td>
         <td data-key="location" data-type="string">{$Clip.Location}</td>
         <td data-key="name" data-type="string">{$Clip.Name}</td>
-        <td data-key="date" data-type="integer" data-value="{$Clip.Date}">{$Clip.Date|date_format:"%D"}</td>
+        <td data-key="date" data-type="integer" data-value="{$Clip.Time}">{$Clip.Date|date_format:"%D"} {$Clip.Time|time_format:"%H:%M"}</td>
         <td data-key="duration" data-type="integer" data-value="{$Clip.Duration}">{$Clip.Duration|time_format:"%Hh&nbsp;%Mm"}</td>
         <td data-key="agenda" data-type="URL">{if $Clip.AgendaLink}<a href="{$Clip.AgendaLink}">Agenda</a>{/if}</td>
         <td data-key="minutes" data-type="URL">{if $Clip.MinutesLink}<a href="{$Clip.MinutesLink}">Minutes</a>{/if}</td>
