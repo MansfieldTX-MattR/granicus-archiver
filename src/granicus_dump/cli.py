@@ -50,16 +50,16 @@ def fix_dts(obj: BaseContext):
         if data_file.exists():
             local_clips = ClipCollection.load(data_file)
         async with ClientSession() as session:
-            clips = await client.get_main_data(session, out_dir)
+            clips = orig_clips = await client.get_main_data(session, out_dir)
         if local_clips is not None:
             local_keys = set(local_clips.clips.keys())
             overlap = set(clips.clips.keys()) & local_keys
             clips = clips.merge(local_clips)
             assert len(overlap)
             for key in overlap:
-                local_clip = local_clips.clips[key]
+                orig_clip = orig_clips.clips[key]
                 clip = clips.clips[key]
-                assert local_clip.parse_data.datetime == clip.parse_data.datetime
+                clip.parse_data.date = orig_clip.parse_data.date
             clips.save(data_file)
 
     asyncio.run(do_fix())
