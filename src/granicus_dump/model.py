@@ -7,6 +7,7 @@ from pathlib import Path
 import dataclasses
 from dataclasses import dataclass, field
 import datetime
+import zoneinfo
 import json
 
 from yarl import URL
@@ -15,6 +16,7 @@ from multidict import MultiMapping
 # __all__ = ('CLIP_ID', 'ParseClipData', 'ClipCollection')
 
 UTC = datetime.timezone.utc
+CLIP_TZ = zoneinfo.ZoneInfo('US/Central')
 
 CLIP_ID = str
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
@@ -86,7 +88,8 @@ class ParseClipData(Serializable):
 
     @property
     def datetime(self) -> datetime.datetime:
-        return datetime.datetime.fromtimestamp(self.date)
+        dt = datetime.datetime.fromtimestamp(self.date)
+        return dt.replace(tzinfo=CLIP_TZ)
 
     @property
     def title_name(self) -> str:
@@ -166,6 +169,30 @@ class FileMeta(Serializable):
             dt = datetime.datetime.strptime(kw['last_modified'], cls.dt_fmt)
             kw['last_modified'] = dt.replace(tzinfo=UTC)
         return cls(**kw)
+
+@dataclass
+class ClipFile(Serializable):
+    filename_rel: Path      #: Path relative to the :attr:`ClipCollection.base_dir`
+    filename_abs: Path
+    metadata: FileMeta|None = None
+
+    def serialize(self) -> dict[str, Any]:
+        return dict(
+            filename_rel=str(self.filename_rel),
+            filename_abs=str(self.filename_abs),
+            metadata=None if not self.metadata else self.metadata.serialize(),
+        )
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        meta = None
+        if data['metadata'] is not None:
+            meta = FileMeta.deserialize(data['metadata'])
+        return cls(
+            filename_rel=Path(data['filename_rel']),
+            filename_abs=Path(data['filename_abs']),
+            metadata=meta
+        )
 
 
 @dataclass
@@ -285,7 +312,8 @@ class Clip(Serializable):
 
     @property
     def datetime(self) -> datetime.datetime:
-        return datetime.datetime.fromtimestamp(self.parse_data.date)
+        dt = datetime.datetime.fromtimestamp(self.parse_data.date)
+        return dt.replace(tzinfo=CLIP_TZ)
 
     @property
     def duration(self):
