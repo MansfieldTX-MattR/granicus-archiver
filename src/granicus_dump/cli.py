@@ -8,6 +8,7 @@ from aiohttp import ClientSession
 
 from .model import ClipCollection
 from . import client
+from . import html_builder
 
 
 @dataclass
@@ -79,6 +80,16 @@ def download(
         max_clips=max_clips,
     ))
 
+@cli.command
+@click.argument(
+    'html-filename',
+    type=click.Path(dir_okay=False, file_okay=True, path_type=Path)
+)
+@click.pass_obj
+def build_html(obj: BaseContext, html_filename: Path):
+    clips = ClipCollection.load(obj.data_file)
+    html = html_builder.build_html(clips, html_dir=html_filename.parent)
+    html_filename.write_text(html)
 
 
 if __name__ == '__main__':
