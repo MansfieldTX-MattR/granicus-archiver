@@ -9,6 +9,7 @@ from aiohttp import ClientSession
 from .model import ClipCollection
 from . import client
 from . import html_builder
+from .googledrive import client as googleclient
 
 
 @dataclass
@@ -90,6 +91,20 @@ def build_html(obj: BaseContext, html_filename: Path):
     clips = ClipCollection.load(obj.data_file)
     html = html_builder.build_html(clips, html_dir=html_filename.parent)
     html_filename.write_text(html)
+
+
+@cli.command
+@click.option(
+    '--drive-folder',
+    type=click.Path(path_type=Path),
+    default=Path('granicus-archive/data'),
+)
+@click.option('--max-clips', type=int)
+@click.pass_obj
+def upload(obj: BaseContext, max_clips: int, drive_folder: Path):
+    clips = ClipCollection.load(obj.data_file)
+    asyncio.run(googleclient.upload_clips(clips, upload_dir=drive_folder, max_clips=max_clips))
+
 
 
 if __name__ == '__main__':

@@ -12,7 +12,8 @@ dependencies = [
     "yarl",
     "pyquery",
     "click",
-    "loguru"
+    "loguru",
+    "aiogoogle"
 ]
 
 [project.optional-dependencies]
