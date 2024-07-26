@@ -256,15 +256,20 @@ async def _stream_upload_file(
     drive_v3: DriveResource,
     local_file: Path,
     upload_filename: Path,
-    check_exists: bool = True
+    check_exists: bool = True,
+    folder_id: str|None = None
 ) -> bool:
     chunk_size = 64*1024
 
-    path_parts = upload_filename.parts
-    if len(path_parts) > 1:
-        parent = await create_folder_from_path(aiogoogle, drive_v3, upload_filename.parent)
+    if folder_id is not None:
+        parent = folder_id
     else:
-        parent = None
+        path_parts = upload_filename.parts
+        if len(path_parts) > 1:
+            parent = await create_folder_from_path(aiogoogle, drive_v3, upload_filename.parent)
+        else:
+            parent = None
+
     file_meta: FileMeta = {
         'name': upload_filename.name,
     }
@@ -291,13 +296,19 @@ async def _stream_upload_file(
 async def upload_clip(aiogoogle: Aiogoogle, drive_v3: DriveResource, clip: Clip, upload_dir: Path) -> bool:
     waiter = JobWaiters[bool](scheduler=get_scheduler())
     num_jobs = 0
+    drive_folder_id: str|None = None
+
     for key, url, filename in clip.iter_url_paths():
         if not filename.exists():
             continue
         rel_filename = clip.get_file_path(key, absolute=False)
         upload_filename = upload_dir / rel_filename
+        if drive_folder_id is None:
+            drive_folder_id = await create_folder_from_path(
+                aiogoogle, drive_v3, upload_filename.parent
+            )
         await waiter.spawn(_stream_upload_file(
-            aiogoogle, drive_v3, filename, upload_filename,
+            aiogoogle, drive_v3, filename, upload_filename, folder_id=drive_folder_id,
         ))
         num_jobs += 1
     results = await waiter
