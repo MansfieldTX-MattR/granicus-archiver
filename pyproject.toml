@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "granicus_dump"
+name = "granicus-archiver"
 version = "0.0.1"
 dependencies = [
     "aiohttp",

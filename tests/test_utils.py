@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 import aiojobs
 
-from granicus_dump.utils import JobWaiter, JobWaiters, JobResult
+from granicus_archiver.utils import JobWaiter, JobWaiters, JobResult
 
 WaiterCoros = dict[int, Coroutine[Any, Any, int]]
 WaiterJobs = dict[aiojobs.Job, int]

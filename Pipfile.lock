@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "319ee212982e875dff41eca9530b4e3384c0cad26bd925391a0421a333d8cebe"
+            "sha256": "b0371f4a72078911f47e7062493e96f00ee265a174a28a96641b919f3c20d4d6"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -287,7 +287,7 @@
             "markers": "python_version >= '3.7'",
             "version": "==2.32.0"
         },
-        "granicus-dump": {
+        "granicus-archiver": {
             "editable": true,
             "extras": [
                 "tests"
