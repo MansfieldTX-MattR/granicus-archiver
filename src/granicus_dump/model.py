@@ -326,6 +326,10 @@ class Clip(Serializable):
     def root_dir_abs(self) -> Path:
         return self.parent.base_dir / self.root_dir
 
+    def get_file_path(self, key: ClipFileKey, absolute: bool = False) -> Path:
+        root_dir = self.root_dir_abs if absolute else self.root_dir
+        return self.files.build_path(root_dir, key)
+
     @classmethod
     def from_parse_data(cls, parent: ClipCollection, parse_data: ParseClipData) -> Self:
         root_dir = parse_data.build_fs_dir(None)
