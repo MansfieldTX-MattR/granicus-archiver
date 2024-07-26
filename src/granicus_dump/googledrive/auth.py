@@ -66,7 +66,7 @@ async def callback(request: web.Request):
         full_user_creds = await aiogoogle.oauth2.build_user_creds(
             grant=request.query.get("code"), client_creds=client_conf._asdict()
         )
-        config.USER_CREDENTIALS_FILE.write_text(json.dumps(full_user_creds))
+        config.save_user_credentials(full_user_creds)
         response_txt = '\n'.join([
             'Authorization Complete.'
             f'Credentials saved to {config.USER_CREDENTIALS_FILE}'

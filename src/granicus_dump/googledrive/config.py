@@ -2,6 +2,13 @@ from typing import NamedTuple, Self
 import os
 from pathlib import Path
 import json
+import stat
+import getpass
+from loguru import logger
+
+
+ST_PERM_MASK = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
+ST_USER_RW = stat.S_IRUSR | stat.S_IWUSR
 
 
 USER_CREDENTIALS_FILE = Path.home() / '.granicus-oauth-user.json'
@@ -49,6 +56,7 @@ class UserCredentials(NamedTuple):
 
     @classmethod
     def load(cls) -> Self:
+        check_file_perms()
         if USER_CREDENTIALS_FILE.exists():
             kw = json.loads(USER_CREDENTIALS_FILE.read_text())
             kw['email'] = os.environ['OAUTH_CLIENT_EMAIL']
@@ -56,3 +64,30 @@ class UserCredentials(NamedTuple):
         return cls(
             email=os.environ['OAUTH_CLIENT_EMAIL'],
         )
+
+
+def check_file_perms(show_warning: bool = True):
+    for p in [USER_CREDENTIALS_FILE]:
+        if not p.exists():
+            continue
+        mode = p.stat().st_mode
+        cur_perms = mode & ST_PERM_MASK
+        if cur_perms == ST_USER_RW:
+            continue
+        msg = f'Credentials file "{p}" has insecure permissions.'
+        if p.owner() != getpass.getuser():
+            msg = f'{msg} File not owned by current user, cannot correct'
+            show_warning = True
+        else:
+            msg = f'{msg}  File mode changed'
+            new_mode = mode - cur_perms
+            new_mode |= ST_USER_RW
+            assert new_mode & ST_PERM_MASK == ST_USER_RW
+            p.chmod(new_mode)
+        if show_warning:
+            logger.warning(msg)
+
+
+def save_user_credentials(data: dict) -> None:
+    USER_CREDENTIALS_FILE.write_text(json.dumps(data))
+    check_file_perms(show_warning=False)
