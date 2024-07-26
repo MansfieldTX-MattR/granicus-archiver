@@ -441,7 +441,8 @@ class ClipCollection(Serializable):
             oth_clip = other.clips[key]
             c = self_clip
             if self_clip != oth_clip:
-                if oth_clip.parse_data.actual_links is not None:
+                self_p, oth_p = self_clip.parse_data, oth_clip.parse_data
+                if self_p.actual_links is None and oth_p.actual_links is not None:
                     c = oth_clip
             all_clips[key] = c
         assert set(all_clips.keys()) == self_keys | oth_keys
