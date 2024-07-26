@@ -379,11 +379,26 @@ class Clip(Serializable):
         obj.files = ClipFiles.deserialize(file_data)
         return obj
 
+ClipDict = dict[CLIP_ID, Clip]
 
 @dataclass
 class ClipCollection(Serializable):
     base_dir: Path
-    clips: dict[CLIP_ID, Clip] = field(default_factory=dict)
+    clips: ClipDict = field(default_factory=dict)
+    clips_by_dt: dict[datetime.datetime, list[CLIP_ID]] = field(init=False)
+
+    def __post_init__(self):
+        self.clips_by_dt = self._sort_clips_by_dt()
+
+    def _sort_clips_by_dt(self) -> dict[datetime.datetime, list[CLIP_ID]]:
+        result: dict[datetime.datetime, list[CLIP_ID]] = {}
+        keys = [int(key) for key in self.clips.keys()]
+        for int_key in sorted(keys):
+            key = str(int_key)
+            clip = self.clips[key]
+            l = result.setdefault(clip.datetime, [])
+            l.append(clip.id)
+        return result
 
     @classmethod
     def load(cls, filename: Path) -> Self:
@@ -399,6 +414,8 @@ class ClipCollection(Serializable):
         if clip.id in self.clips:
             raise KeyError(f'Clip with id "{clip.id}" exists')
         self.clips[clip.id] = clip
+        l = self.clips_by_dt.setdefault(clip.datetime, [])
+        l.append(clip.id)
         return clip
 
     def __contains__(self, key):
@@ -408,7 +425,18 @@ class ClipCollection(Serializable):
         return len(self.clips)
 
     def __iter__(self):
-        yield from self.clips.values()
+        yield from self.iter_sorted()
+
+    def iter_sorted(self, reverse: bool = True) -> Iterator[Clip]:
+        dt_keys = sorted(self.clips_by_dt.keys())
+        if reverse:
+            dt_keys = reversed(dt_keys)
+        for dt in dt_keys:
+            clip_ids = self.clips_by_dt[dt]
+            if reverse:
+                clip_ids = reversed(clip_ids)
+            for clip_id in clip_ids:
+                yield self.clips[clip_id]
 
     def relative_to(self, base_dir: Path) -> Self:
         clips = {k:v.relative_to(base_dir) for k,v in self.clips.items()}
@@ -461,4 +489,5 @@ class ClipCollection(Serializable):
             clip = Clip.deserialize(val)
             assert clip.id == key
             obj.clips[key] = clip
+        obj.clips_by_dt = obj._sort_clips_by_dt()
         return obj
