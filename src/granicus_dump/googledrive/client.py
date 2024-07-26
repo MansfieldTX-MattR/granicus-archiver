@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Coroutine, Any, cast
+from typing import Coroutine, TypedDict, Literal, Any, cast
 import mimetypes
 from pathlib import Path
 import asyncio
@@ -22,12 +22,31 @@ CACHE_LOCK = asyncio.Lock()
 CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
 
 
-SCHEDULER: aiojobs.Scheduler|None = None
-def get_scheduler() -> aiojobs.Scheduler:
-    global SCHEDULER
-    if SCHEDULER is None:
-        SCHEDULER = aiojobs.Scheduler(limit=8)
-    return SCHEDULER
+UPLOAD_CHECK_LIMIT = 4
+
+class SchedulersTD(TypedDict):
+    general: aiojobs.Scheduler
+    uploads: aiojobs.Scheduler
+    upload_checks: aiojobs.Scheduler
+
+SchedulerKey = Literal['general', 'uploads', 'upload_checks']
+
+
+SCHEDULERS: SchedulersTD|None = None
+def get_schedulers() -> SchedulersTD:
+    global SCHEDULERS
+    if SCHEDULERS is None:
+        SCHEDULERS = {
+            'general':aiojobs.Scheduler(limit=32),
+            'uploads':aiojobs.Scheduler(limit=8),
+            'upload_checks':aiojobs.Scheduler(limit=UPLOAD_CHECK_LIMIT),
+        }
+    return SCHEDULERS
+
+
+def get_scheduler(key: SchedulerKey) -> aiojobs.Scheduler:
+    d = get_schedulers()
+    return d[key]
 
 
 
@@ -278,9 +297,9 @@ async def _stream_upload_file(
     if check_exists:
         exists = await file_exists(aiogoogle, drive_v3, upload_filename.name, parent)
         if exists:
-            logger.debug(f'file "{upload_filename}" exists')
+            logger.warning(f'file "{upload_filename}" exists')
             return False
-    logger.info(f'uploading "{upload_filename}"')
+    logger.debug(f'uploading "{upload_filename}"')
     async with aiofile.async_open(local_file, 'rb') as src_fd:
         chunk_iter = src_fd.iter_chunked(chunk_size)
         req = drive_v3.files.create(
@@ -289,12 +308,12 @@ async def _stream_upload_file(
             json=file_meta,
         )
         upload_res = await aiogoogle.as_user(req)
-        logger.success(f"Uploaded complete for {upload_filename}. File ID: {upload_res['id']}")
+        logger.debug(f"Upload complete for {upload_filename}. File ID: {upload_res['id']}")
     return True
 
 
 async def upload_clip(aiogoogle: Aiogoogle, drive_v3: DriveResource, clip: Clip, upload_dir: Path) -> bool:
-    waiter = JobWaiters[bool](scheduler=get_scheduler())
+    waiter = JobWaiters[bool](scheduler=get_scheduler('uploads'))
     num_jobs = 0
     drive_folder_id: str|None = None
 
@@ -311,8 +330,11 @@ async def upload_clip(aiogoogle: Aiogoogle, drive_v3: DriveResource, clip: Clip,
             aiogoogle, drive_v3, filename, upload_filename, folder_id=drive_folder_id,
         ))
         num_jobs += 1
+    if not len(waiter):
+        return True
     results = await waiter
     all_skipped = True not in results
+    logger.success(f'Upload complete for clip "{clip.unique_name}"')
     return all_skipped
 
 
@@ -345,41 +367,41 @@ async def check_clip_needs_upload(aiogoogle: Aiogoogle, drive_v3: DriveResource,
 @logger.catch
 async def upload_clips(clips: ClipCollection, upload_dir: Path, max_clips: int):
     load_cache()
-    scheduler = get_scheduler()
-    assert scheduler.limit is not None
-    waiter = JobWaiters[bool](scheduler=scheduler)
+    schedulers = get_schedulers()
+    upload_check_waiters = JobWaiters(scheduler=get_scheduler('upload_checks'))
+    upload_clip_waiters = JobWaiters[bool](scheduler=get_scheduler('general'))
+
+    # Using a dict here for nested context mutability
+    tracking_vars = {'num_uploaded': 0}
+
     async with get_client() as aiogoogle:
         drive_v3 = cast(DriveResource, await aiogoogle.discover("drive", "v3"))
-        num_uploaded = 0
-        for clip in clips:
+
+        async def upload_clip_if_needed(clip: Clip):
+            if tracking_vars['num_uploaded'] >= max_clips:
+                return False
             needs_upload = await check_clip_needs_upload(aiogoogle, drive_v3, clip, upload_dir)
-            if not needs_upload:
-                logger.debug(f'skipping {clip.unique_name}')
-                continue
-            logger.debug(f'Upload clip {clip.unique_name}')
-            await waiter.spawn(upload_clip(aiogoogle, drive_v3, clip, upload_dir))
-            num_uploaded += 1
-            if num_uploaded >= max_clips:
+            if not needs_upload or tracking_vars['num_uploaded'] >= max_clips:
+                return False
+            tracking_vars['num_uploaded'] += 1
+            logger.info(f'Upload clip {clip.unique_name}')
+            await upload_clip_waiters.spawn(upload_clip(aiogoogle, drive_v3, clip, upload_dir))
+            return needs_upload
+
+        for clip in clips:
+            await upload_check_waiters.spawn(upload_clip_if_needed(clip))
+            if tracking_vars['num_uploaded'] >= max_clips:
                 break
-            # if len(waiter) >= 4:
-            #     done, pending = await waiter.wait()
-            #     # _done_count = 0
-            #     for job_result in done:
-            #         if job_result.exception:
-            #             raise job_result.exception
-            #         if job_result.result:
-            #             num_uploaded += 1
-            #             if num_uploaded >= max_clips:
-            #                 break
-            #     done_results = [jr.result for jr in done]
-            #     logger.info(f'{done_results=}')
-            # num_iter += 1
-            # if num_iter >= max_iter:
-            #     logger.warning('exiting from max_iter')
-            #     break
 
-        logger.debug(f'waiting for waiters ({len(waiter)=})')
-        results = await waiter
-        # logger.info(f'{results=}')
+        if len(upload_check_waiters):
+            logger.info(f'waiting for check_waiters ({len(upload_check_waiters)=})')
+            await upload_check_waiters
 
+        if len(upload_clip_waiters):
+            logger.info(f'waiting for waiters ({len(upload_clip_waiters)=})')
+            await upload_clip_waiters
+
+        logger.info('closing schedulers..')
+        scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
+        await asyncio.gather(*[sch.close() for sch in scheduler_list])
     save_cache()
