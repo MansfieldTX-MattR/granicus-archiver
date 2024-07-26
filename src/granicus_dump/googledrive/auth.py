@@ -1,5 +1,6 @@
 import json
 import webbrowser
+import asyncio
 from aiohttp import web
 from aiogoogle.client import Aiogoogle
 from aiogoogle.auth.creds import UserCreds, ClientCreds
@@ -12,6 +13,7 @@ AIOGOOGLE_KEY = web.AppKey('Aiogoogle', Aiogoogle)
 AUTH_STATE_KEY = web.AppKey('AUTH_STATE', str)
 CLIENT_CONF_KEY = web.AppKey('CLIENT_CONF', config.OAuthClientConf)
 USER_CREDS_KEY = web.AppKey('USER_CREDS', config.UserCredentials)
+CLOSE_EVENT_KEY = web.AppKey('CLOSE_EVENT', asyncio.Event)
 
 
 LOCAL_ADDRESS = "localhost"
@@ -48,6 +50,7 @@ async def callback(request: web.Request):
     aiogoogle = request.app[AIOGOOGLE_KEY]
     client_conf = request.app[CLIENT_CONF_KEY]
     state = request.app[AUTH_STATE_KEY]
+    request.app[CLOSE_EVENT_KEY].set()
     if request.query.get("error"):
         error = {
             "error": request.query.get("error"),
@@ -64,7 +67,12 @@ async def callback(request: web.Request):
             grant=request.query.get("code"), client_creds=client_conf._asdict()
         )
         config.USER_CREDENTIALS_FILE.write_text(json.dumps(full_user_creds))
-        return web.json_response(full_user_creds)
+        response_txt = '\n'.join([
+            'Authorization Complete.'
+            f'Credentials saved to {config.USER_CREDENTIALS_FILE}'
+            'You may close this browser window'
+        ])
+        return web.Response(text=response_txt)
     else:
         # Should either receive a code or an error
         return web.Response(text="Something's probably wrong with your callback", status=400)
@@ -81,8 +89,20 @@ def build_app():
     app.add_routes(routes)
 
     webbrowser.open(f'http://{LOCAL_ADDRESS}:{LOCAL_PORT}/authorize')
-    web.run_app(app, host=LOCAL_ADDRESS, port=LOCAL_PORT)
+    return app
+
+
+async def run_app():
+    app = build_app()
+    app[CLOSE_EVENT_KEY] = asyncio.Event()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, LOCAL_ADDRESS, LOCAL_PORT)
+    await site.start()
+
+    await app[CLOSE_EVENT_KEY].wait()
+    await runner.cleanup()
 
 
 if __name__ == '__main__':
-    build_app()
+    asyncio.run(run_app())
