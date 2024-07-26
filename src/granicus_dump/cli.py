@@ -9,6 +9,7 @@ from aiohttp import ClientSession
 from .model import ClipCollection
 from . import client
 from . import html_builder
+from .googledrive import auth as googleauth
 from .googledrive import client as googleclient
 
 
@@ -91,6 +92,11 @@ def build_html(obj: BaseContext, html_filename: Path):
     clips = ClipCollection.load(obj.data_file)
     html = html_builder.build_html(clips, html_dir=html_filename.parent)
     html_filename.write_text(html)
+
+@cli.command
+@click.pass_obj
+def authorize(obj: BaseContext):
+    asyncio.run(googleauth.run_app())
 
 
 @cli.command
