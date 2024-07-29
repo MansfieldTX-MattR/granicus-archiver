@@ -60,7 +60,7 @@ def fix_dts(obj: BaseContext):
             assert len(overlap)
             for key in overlap:
                 orig_clip = orig_clips.clips[key]
-                clip = clips.clips[key]
+                clip = clips[key]
                 clip.parse_data.date = orig_clip.parse_data.date
             clips.save(data_file)
 

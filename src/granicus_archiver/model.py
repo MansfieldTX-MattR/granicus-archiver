@@ -418,6 +418,9 @@ class ClipCollection(Serializable):
         l.append(clip.id)
         return clip
 
+    def __getitem__(self, key: CLIP_ID) -> Clip:
+        return self.clips[key]
+
     def __contains__(self, key):
         return key in self.clips
 
@@ -436,7 +439,7 @@ class ClipCollection(Serializable):
             if reverse:
                 clip_ids = reversed(clip_ids)
             for clip_id in clip_ids:
-                yield self.clips[clip_id]
+                yield self[clip_id]
 
     def relative_to(self, base_dir: Path) -> Self:
         clips = {k:v.relative_to(base_dir) for k,v in self.clips.items()}
@@ -458,15 +461,15 @@ class ClipCollection(Serializable):
         for key in key_order:
             if key in missing_in_other:
                 assert key not in other
-                all_clips[key] = self.clips[key]
+                all_clips[key] = self[key]
                 continue
             elif key in missing_in_self:
                 assert key not in self
-                all_clips[key] = other.clips[key]
+                all_clips[key] = other[key]
                 continue
             assert key in all_keys
-            self_clip = self.clips[key]
-            oth_clip = other.clips[key]
+            self_clip = self[key]
+            oth_clip = other[key]
             c = self_clip
             if self_clip != oth_clip:
                 self_p, oth_p = self_clip.parse_data, oth_clip.parse_data
