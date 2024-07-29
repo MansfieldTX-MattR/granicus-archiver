@@ -37,10 +37,12 @@ class Serializable(ABC):
 
 @dataclass
 class ParseClipLinks(Serializable):
-    agenda: URL|None = None
-    minutes: URL|None = None
-    audio: URL|None = None
-    video: URL|None = None
+    """Links for clip assets
+    """
+    agenda: URL|None = None     #: Agenda link
+    minutes: URL|None = None    #: Minutes link
+    audio: URL|None = None      #: MP3 link
+    video: URL|None = None      #: MP4 link
 
     link_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
 
@@ -76,31 +78,51 @@ class ParseClipLinks(Serializable):
 
 @dataclass
 class ParseClipData(Serializable):
-    id: CLIP_ID
-    location: str
-    name: str
-    date: int
-    duration: int
+    """Data for a clip parsed from granicus
+    """
+    id: CLIP_ID     #: The (assumingly) primary key of the clip
+    location: str   #: The "Location" (category or folder would be better terms)
+    name: str       #: The clip name
+    date: int       #: POSIX timestamp of the clip
+    duration: int   #: Duration of the clip (in seconds)
     original_links: ParseClipLinks
+    """The asset links as reported by granicus.  Some will be actually be
+    redirects to a PDF viewer which will need to be resolved
+    """
+
     actual_links: ParseClipLinks|None = None
+    """The :attr:`original_links` after the redirects have been resolved
+    """
 
     date_fmt: ClassVar[str] = '%Y-%m-%d'
 
     @property
     def datetime(self) -> datetime.datetime:
+        """The clip's datetime (derived from the :attr:`date`)
+        """
         dt = datetime.datetime.fromtimestamp(self.date)
         return dt.replace(tzinfo=CLIP_TZ)
 
     @property
     def title_name(self) -> str:
+        """Combination of the clip's formatted :attr:`datetime`,
+        :attr:`name` and :attr:`id`
+        """
         dt_str = self.datetime.strftime(self.date_fmt)
         return f'{dt_str}_{self.name}_{self.id}'
 
     @property
     def unique_name(self) -> str:
+        """A unique name for the clip
+        """
         return f'{self.id}_{self.title_name}'
 
     def build_fs_dir(self, root_dir: Path|None, replace_invalid: bool = True) -> Path:
+        """Create a path for the clip within the given *root_dir*
+
+        If *replace_invalid* is True, forward slashes ("/") will be replaced
+        with colons (":") to prevent invalid and unexpected path names
+        """
         year = self.datetime.strftime('%Y')
         title_name = self.title_name
         if replace_invalid:
@@ -130,16 +152,20 @@ class ParseClipData(Serializable):
 
 @dataclass
 class FileMeta(Serializable):
-    content_length: int
-    content_type: str
-    last_modified: datetime.datetime|None
-    etag: str|None
+    """Metadata for a file
+    """
+    content_length: int                     #: File size (in bytes)
+    content_type: str                       #: The file's mime type
+    last_modified: datetime.datetime|None   #: Last modified datetime
+    etag: str|None                          #: The etag value (if available)
 
     # Tue, 04 Jun 2024 00:22:54 GMT
     dt_fmt: ClassVar[str] = '%a, %d %b %Y %H:%M:%S GMT'
 
     @classmethod
     def from_headers(cls, headers: Headers) -> Self:
+        """Create an instance from http headers
+        """
         dt_str = headers.get('Last-Modified')
         if dt_str is not None:
             dt = datetime.datetime.strptime(dt_str, cls.dt_fmt).replace(tzinfo=UTC)
@@ -197,17 +223,22 @@ class ClipFile(Serializable):
 
 @dataclass
 class ClipFiles(Serializable):
-    clip: Clip = field(repr=False)
-    agenda: Path|None
-    minutes: Path|None
-    audio: Path|None
-    video: Path|None
+    """File information for a :class:`Clip`
+    """
+    clip: Clip = field(repr=False)  #: The parent :class:`Clip`
+    agenda: Path|None               #: Agenda filename
+    minutes: Path|None              #: Minutes filename
+    audio: Path|None                #: MP3 filename
+    video: Path|None                #: MP4 filename
     metadata: dict[ClipFileKey, FileMeta] = field(default_factory=dict)
+    """:class:`FileMeta` for each file (if available)"""
 
     path_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
 
     @classmethod
     def from_parse_data(cls, clip: Clip, parse_data: ParseClipData) -> Self:
+        """Create an instance from a :class:`ParseClipData` instance
+        """
         root_dir = clip.root_dir
         links = parse_data.original_links
         kw = {k: v if not v else cls.build_path(root_dir, k) for k,v in links}
@@ -215,6 +246,8 @@ class ClipFiles(Serializable):
 
     @classmethod
     def build_path(cls, root_dir: Path, key: ClipFileKey) -> Path:
+        """Build the filename for the given file type with *root_dir* prepended
+        """
         suffixes: dict[ClipFileKey, str] = {
             'agenda':'.pdf',
             'minutes':'.pdf',
@@ -240,9 +273,13 @@ class ClipFiles(Serializable):
         return True
 
     def get_metadata(self, key: ClipFileKey) -> FileMeta|None:
+        """Get the :class:`FileMeta` for the given file type (if available)
+        """
         return self.metadata.get(key)
 
     def set_metadata(self, key: ClipFileKey, headers: Headers) -> FileMeta:
+        """Set the :class:`FileMeta` for the given file type from request headers
+        """
         meta = FileMeta.from_headers(headers)
         self.metadata[key] = meta
         return meta
@@ -296,10 +333,18 @@ class ClipFiles(Serializable):
 
 @dataclass
 class Clip(Serializable):
+    """Stores all information for a single clip
+    """
     parse_data: ParseClipData = field(repr=False)
+
     root_dir: Path
+    """Path for the clip (relative to its :attr:`parent`)"""
+
     files: ClipFiles = field(init=False)
+    """The clip's file information"""
+
     parent: ClipCollection
+    """The parent :class:`ClipCollection`"""
 
     @property
     def id(self) -> CLIP_ID: return self.parse_data.id
@@ -324,14 +369,20 @@ class Clip(Serializable):
 
     @property
     def root_dir_abs(self) -> Path:
+        """The :attr:`root_dir` with its parent prepended
+        """
         return self.parent.base_dir / self.root_dir
 
     def get_file_path(self, key: ClipFileKey, absolute: bool = False) -> Path:
+        """Get the relative or absolute path for the given file type
+        """
         root_dir = self.root_dir_abs if absolute else self.root_dir
         return self.files.build_path(root_dir, key)
 
     @classmethod
     def from_parse_data(cls, parent: ClipCollection, parse_data: ParseClipData) -> Self:
+        """Create an instance from a :class:`ParseClipData` instance
+        """
         root_dir = parse_data.build_fs_dir(None)
         obj = cls(
             parse_data=parse_data,
@@ -344,7 +395,19 @@ class Clip(Serializable):
         )
         return obj
 
-    def iter_url_paths(self, actual: bool = True, absolute: bool = True) -> Iterator[tuple[ClipFileKey, URL, Path]]:
+    def iter_url_paths(
+        self,
+        actual: bool = True,
+        absolute: bool = True
+    ) -> Iterator[tuple[ClipFileKey, URL, Path]]:
+        """Iterate over the clip's file types, url's and filenames
+
+        Arguments:
+            actual: If True, only yields file types with valid URL's
+            absolute: If True, the :attr:`root_dir_abs` is prepended to each
+                filename
+
+        """
         if actual:
             assert self.parse_data.actual_links is not None
             it = self.parse_data.actual_links.iter_existing()
@@ -383,7 +446,11 @@ ClipDict = dict[CLIP_ID, Clip]
 
 @dataclass
 class ClipCollection(Serializable):
+    """Container for :attr:`Clips <Clip>`
+    """
     base_dir: Path
+    """Root filesystem path for the clip assets"""
+
     clips: ClipDict = field(default_factory=dict)
     clips_by_dt: dict[datetime.datetime, list[CLIP_ID]] = field(init=False)
 
@@ -402,14 +469,21 @@ class ClipCollection(Serializable):
 
     @classmethod
     def load(cls, filename: Path) -> Self:
+        """Loads an instance from previously saved data
+        """
         data = json.loads(filename.read_text())
         return cls.deserialize(data)
 
     def save(self, filename: Path, indent: int|None = 2) -> None:
+        """Saves all clip data as JSON to the given filename
+        """
         data = self.serialize()
         filename.write_text(json.dumps(data, indent=indent))
 
     def add_clip(self, parse_data: ParseClipData) -> Clip:
+        """Parse a :class:`Clip` from the :class:`ParseClipData` and
+        add it to the collection
+        """
         clip = Clip.from_parse_data(parent=self, parse_data=parse_data)
         if clip.id in self.clips:
             raise KeyError(f'Clip with id "{clip.id}" exists')
@@ -449,6 +523,8 @@ class ClipCollection(Serializable):
         )
 
     def merge(self, other: ClipCollection) -> ClipCollection:
+        """Merge the clips in this instance with another
+        """
         self_keys = set(self.clips.keys())
         oth_keys = set(other.clips.keys())
         missing_in_self = oth_keys - self_keys      # I Don't Have

@@ -18,6 +18,9 @@ from ..utils import JobWaiters
 FOLDER_MTYPE = 'application/vnd.google-apps.folder'
 
 FOLDER_CACHE: dict[Path, FileId] = {}
+"""A cache of Drive folders and their id
+"""
+
 CACHE_LOCK = asyncio.Lock()
 CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
 
@@ -62,6 +65,10 @@ def save_cache():
 
 
 def find_folder_cache(folder: Path) -> tuple[list[FileId], Path]|None:
+    """Search for cached Drive folders previously found by :func:`find_folder`
+
+    Returns the longest matching path and id (similar to :func:`find_folder`)
+    """
     assert not folder.is_absolute()
     f_ids = []
     parts = folder.parts
@@ -78,6 +85,11 @@ def find_folder_cache(folder: Path) -> tuple[list[FileId], Path]|None:
         return f_ids, p
 
 def cache_folder_parts(*parts_and_ids: tuple[str, FileId]):
+    """Store Drive folder ids in the :attr:`FOLDER_CACHE`
+
+    Each argument should be a tuple of the folder name and its id
+    (for each folder level)
+    """
     p = None
     for part, f_id in parts_and_ids:
         if p is None:
@@ -96,10 +108,25 @@ def get_client() -> Aiogoogle:
     return Aiogoogle(user_creds=user_creds, client_creds=client_creds)   # type: ignore
 
 
-async def find_folder(aiogoogle: Aiogoogle, drive_v3: DriveResource, folder: Path) -> tuple[FileId, Path]|None:
-    # drive_v3 = await aiogoogle.discover('drive', 'v3')
+async def find_folder(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    folder: Path
+) -> tuple[FileId, Path]|None:
+    """Find a (possibly nested) Drive folder
 
-    async def find_part(*folder_parts: str, parent_id: FileId|None) -> list[FileId]|None:
+    Searches each :attr:`part <pathlib.Path.parts>` of the given *folder*
+    for a Drive folder with a matching name, then recursively searches for each
+    sub-folder.
+
+    Returns the longest matching path and the id for each part of that path.
+    If the root of the given folder was not found, returns ``None``
+    """
+
+    async def find_part(
+        *folder_parts: str,
+        parent_id: FileId|None
+    ) -> list[FileId]|None:
         folder_part = folder_parts[0]
         folders_remain = folder_parts[1:]
         q = f"trashed = false and mimeType = '{FOLDER_MTYPE}' and name = '{folder_part}'"
@@ -159,7 +186,17 @@ async def find_folder(aiogoogle: Aiogoogle, drive_v3: DriveResource, folder: Pat
     return None
 
 
-async def create_folder(aiogoogle: Aiogoogle, drive_v3: DriveResource, name: str, parent: FileId|None) -> FileId:
+async def create_folder(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    name: str,
+    parent: FileId|None
+) -> FileId:
+    """Create a Drive folder with the given *name*
+
+    If *parent* is given, it should be a valid folder id to use as a parent
+    folder
+    """
     # drive_v3 = await aiogoogle.discover('drive', 'v3')
     file_meta: FileMeta = {
         'name': name,
@@ -187,6 +224,16 @@ async def create_folder_nested(
     parent_path: Path|None = None,
     use_cache: bool = False
 ) -> FileId:
+    """Create a nested group of folders using the *parts* for each name
+
+    Arguments:
+        *parts: The folder name for each directory level
+        parent: The id of the folder to create the nested folders in
+        parent_path: The root path to use if *use_cache* is True
+        use_cache: If True, stores the results in the :attr:`FOLDER_CACHE`.
+            *parent_path* must be provided to accurately store the results
+
+    """
     prev_parent = parent
     full_path = parent_path
     for part in parts:
@@ -198,7 +245,13 @@ async def create_folder_nested(
     return prev_parent
 
 
-async def create_folder_from_path(aiogoogle: Aiogoogle, drive_v3: DriveResource, folder: Path) -> FileId:
+async def create_folder_from_path(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    folder: Path
+) -> FileId:
+    """Find or create a (possibly nested) Drive folder with the given path
+    """
     async with CACHE_LOCK:
         find_result = await find_folder(aiogoogle, drive_v3, folder)
         logger.debug(f'{find_result=}')
@@ -225,7 +278,12 @@ async def create_folder_from_path(aiogoogle: Aiogoogle, drive_v3: DriveResource,
             parent_path=parent_path, use_cache=use_cache,
         )
 
-async def file_exists(aiogoogle: Aiogoogle, drive_v3: DriveResource, filename: str, parent_id: FileId|None) -> bool:
+async def file_exists(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    filename: str,
+    parent_id: FileId|None
+) -> bool:
     q = f"trashed = false and mimeType != '{FOLDER_MTYPE}' and name = '{filename}'"
     if parent_id is not None:
         q = f"{q} and '{parent_id}' in parents"
@@ -240,7 +298,13 @@ async def file_exists(aiogoogle: Aiogoogle, drive_v3: DriveResource, filename: s
             return True
     return False
 
-async def get_file_meta(aiogoogle: Aiogoogle, drive_v3: DriveResource, filename: Path) -> FileMeta|None:
+async def get_file_meta(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    filename: Path
+) -> FileMeta|None:
+    """Get metadata for the given file (if it exists)
+    """
     folder = filename.parent
     folder_find = await find_folder(aiogoogle, drive_v3, folder)
     if folder_find is None:
@@ -312,7 +376,14 @@ async def _stream_upload_file(
     return True
 
 
-async def upload_clip(aiogoogle: Aiogoogle, drive_v3: DriveResource, clip: Clip, upload_dir: Path) -> bool:
+async def upload_clip(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    clip: Clip,
+    upload_dir: Path
+) -> bool:
+    """Upload all assets for the given clip
+    """
     waiter = JobWaiters[bool](scheduler=get_scheduler('uploads'))
     num_jobs = 0
     drive_folder_id: str|None = None
@@ -338,7 +409,14 @@ async def upload_clip(aiogoogle: Aiogoogle, drive_v3: DriveResource, clip: Clip,
     return all_skipped
 
 
-async def check_clip_needs_upload(aiogoogle: Aiogoogle, drive_v3: DriveResource, clip: Clip, upload_dir: Path) -> bool:
+async def check_clip_needs_upload(
+    aiogoogle: Aiogoogle,
+    drive_v3: DriveResource,
+    clip: Clip,
+    upload_dir: Path
+) -> bool:
+    """Check if the given clip has any assets that need to be uploaded
+    """
     async def do_check(key: ClipFileKey, filename: Path) -> bool:
         rel_filename = clip.get_file_path(key, absolute=False)
         upload_filename = upload_dir / rel_filename
