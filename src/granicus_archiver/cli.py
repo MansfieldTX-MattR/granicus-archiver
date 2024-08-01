@@ -78,7 +78,7 @@ def fix_dts(obj: BaseContext):
 )
 @click.option(
     '--io-job-limit', type=int, default=8, show_default=True,
-    help='Limit number of concurrent downloads to this amount'
+    help='Limit number of concurrent uploads to this amount'
 )
 @click.pass_obj
 def download(
@@ -150,12 +150,26 @@ def authorize(obj: BaseContext):
     '--max-clips', type=int,
     help='Maximum number of clips to download. If not provided, there is no limit',
 )
+@click.option(
+    '--io-job-limit', type=int, default=8, show_default=True,
+    help='Limit number of concurrent downloads to this amount'
+)
 @click.pass_obj
-def upload(obj: BaseContext, max_clips: int, drive_folder: Path):
+def upload(
+    obj: BaseContext,
+    max_clips: int,
+    drive_folder: Path,
+    io_job_limit: int
+):
     """Upload all local content to Google Drive
     """
     clips = ClipCollection.load(obj.data_file)
-    asyncio.run(googleclient.upload_clips(clips, upload_dir=drive_folder, max_clips=max_clips))
+    asyncio.run(googleclient.upload_clips(
+        clips,
+        upload_dir=drive_folder,
+        max_clips=max_clips,
+        scheduler_limit=io_job_limit,
+    ))
 
 
 

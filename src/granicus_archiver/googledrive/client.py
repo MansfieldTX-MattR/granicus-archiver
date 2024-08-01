@@ -42,14 +42,18 @@ SchedulerKey = Literal['general', 'uploads', 'upload_checks']
 
 
 SCHEDULERS: SchedulersTD|None = None
-def get_schedulers() -> SchedulersTD:
+def get_schedulers(limit: int|None = None) -> SchedulersTD:
     global SCHEDULERS
     if SCHEDULERS is None:
+        if limit is None:
+            raise RuntimeError('scheduler limits must be set')
         SCHEDULERS = {
             'general':aiojobs.Scheduler(limit=32),
-            'uploads':aiojobs.Scheduler(limit=8),
+            'uploads':aiojobs.Scheduler(limit=limit),
             'upload_checks':aiojobs.Scheduler(limit=UPLOAD_CHECK_LIMIT),
         }
+    elif limit is not None:
+        raise RuntimeError('schedulers already created')
     return SCHEDULERS
 
 
@@ -498,9 +502,14 @@ async def check_clip_needs_upload(
 
 
 @logger.catch
-async def upload_clips(clips: ClipCollection, upload_dir: Path, max_clips: int):
+async def upload_clips(
+    clips: ClipCollection,
+    upload_dir: Path,
+    max_clips: int,
+    scheduler_limit: int,
+) -> None:
     load_cache()
-    schedulers = get_schedulers()
+    schedulers = get_schedulers(scheduler_limit)
     upload_check_waiters = JobWaiters(scheduler=get_scheduler('upload_checks'))
     upload_clip_waiters = JobWaiters[bool](scheduler=get_scheduler('general'))
 
@@ -544,7 +553,7 @@ async def upload_clips(clips: ClipCollection, upload_dir: Path, max_clips: int):
 async def get_all_clip_file_meta(clips: ClipCollection, upload_dir: Path) -> None:
     logger.info('Updating clip metadata from Drive...')
     load_cache()
-    schedulers = get_schedulers()
+    schedulers = get_schedulers(limit=8)
     scheduler = schedulers['general']
     waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
     async with get_client() as aiogoogle:
