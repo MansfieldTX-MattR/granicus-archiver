@@ -20,14 +20,17 @@ class BaseContext:
 
 
 @click.group
-@click.argument(
-    'out_dir',
+@click.option(
+    '-o', '--out-dir',
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    required=True,
+    help='Root directory to store downloaded files',
 )
 @click.option(
     '--data-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
+    help='Filename to store download information. Defaults to "<out-dir>/data.json"',
 )
 @click.pass_context
 def cli(ctx: click.Context, out_dir: Path, data_file: Path|None):
@@ -39,6 +42,8 @@ def cli(ctx: click.Context, out_dir: Path, data_file: Path|None):
 @cli.command
 @click.pass_obj
 def check(obj: BaseContext):
+    """Check downloaded files using the stored metadata
+    """
     clips = ClipCollection.load(obj.data_file)
     client.check_all_clip_files(clips)
 
@@ -67,8 +72,14 @@ def fix_dts(obj: BaseContext):
     asyncio.run(do_fix())
 
 @cli.command
-@click.option('--max-clips', type=int, required=False)
-@click.option('--io-job-limit', type=int, default=8, show_default=True)
+@click.option(
+    '--max-clips', type=int, required=False,
+    help='Maximum number of clips to download. If not provided, there is no limit',
+)
+@click.option(
+    '--io-job-limit', type=int, default=8, show_default=True,
+    help='Limit number of concurrent downloads to this amount'
+)
 @click.pass_obj
 def download(
     obj: BaseContext,
@@ -89,6 +100,9 @@ def download(
 )
 @click.pass_obj
 def build_html(obj: BaseContext, html_filename: Path):
+    """Build a static html file with links to all downloaded content and
+    save it to HTML_FILENAME
+    """
     clips = ClipCollection.load(obj.data_file)
     html = html_builder.build_html(clips, html_dir=html_filename.parent)
     html_filename.write_text(html)
@@ -102,9 +116,14 @@ def build_html(obj: BaseContext, html_filename: Path):
     '--drive-folder',
     type=click.Path(path_type=Path),
     default=Path('granicus-archive/data'),
+    show_default=True,
+    help='Name of the root folder the files were uploaded to',
 )
 @click.pass_obj
 def build_drive_html(obj: BaseContext, html_filename: Path, drive_folder: Path):
+    """Build a static html file with links to the all content uploaded to
+    Drive
+    """
     clips = ClipCollection.load(obj.data_file)
     html = asyncio.run(googleclient.build_html(
         clips, html_dir=html_filename.parent, upload_dir=drive_folder
@@ -114,6 +133,8 @@ def build_drive_html(obj: BaseContext, html_filename: Path, drive_folder: Path):
 @cli.command
 @click.pass_obj
 def authorize(obj: BaseContext):
+    """Launch a browser window to authorize uploads to Drive
+    """
     asyncio.run(googleauth.run_app())
 
 
@@ -122,10 +143,17 @@ def authorize(obj: BaseContext):
     '--drive-folder',
     type=click.Path(path_type=Path),
     default=Path('granicus-archive/data'),
+    show_default=True,
+    help='Name of the root folder to upload to',
 )
-@click.option('--max-clips', type=int)
+@click.option(
+    '--max-clips', type=int,
+    help='Maximum number of clips to download. If not provided, there is no limit',
+)
 @click.pass_obj
 def upload(obj: BaseContext, max_clips: int, drive_folder: Path):
+    """Upload all local content to Google Drive
+    """
     clips = ClipCollection.load(obj.data_file)
     asyncio.run(googleclient.upload_clips(clips, upload_dir=drive_folder, max_clips=max_clips))
 
