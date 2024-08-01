@@ -14,6 +14,7 @@ from .types import FileId, FileMeta, DriveResource
 from . import config
 from ..model import ClipCollection, Clip, ClipFileKey, CLIP_ID
 from ..utils import JobWaiters
+from .. import html_builder
 
 FOLDER_MTYPE = 'application/vnd.google-apps.folder'
 
@@ -576,3 +577,13 @@ async def get_all_clip_file_meta(clips: ClipCollection, upload_dir: Path) -> Non
     if changed:
         logger.info(f'Meta changed, saving cache file')
         save_cache()
+
+async def build_html(clips: ClipCollection, html_dir: Path, upload_dir: Path) -> str:
+    await get_all_clip_file_meta(clips, upload_dir)
+
+    def link_callback(clip: Clip, key: ClipFileKey) -> str|None:
+        meta = find_cached_file_meta(clip.id, key)
+        if meta is None:
+            return None
+        return meta.get('webViewLink')
+    return html_builder.build_html(clips, html_dir, link_callback)

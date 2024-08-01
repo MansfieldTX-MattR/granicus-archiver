@@ -1,12 +1,17 @@
 from __future__ import annotations
-from typing import Self
+from typing import Self, Callable
 from pathlib import Path
 import datetime
 
-from .model import ClipCollection, Clip
+from yarl import URL
+
+from .model import ClipCollection, Clip, ClipFileKey
 
 
 ElemAttrs = dict[str, str|None]
+UrlLike = URL|str
+FileLinkCallback = Callable[[Clip, ClipFileKey], UrlLike|None]
+
 
 def str_indent(s: str, indent: int) -> str:
     pre = ' ' * indent
@@ -127,7 +132,11 @@ def StyleSheet(href: str) -> Element:
 header_keys = ['id', 'location', 'name', 'datetime', 'agenda', 'minutes', 'video']
 
 
-def build_html(clips: ClipCollection, html_dir: Path) -> str:
+def build_html(
+    clips: ClipCollection,
+    html_dir: Path,
+    link_callback: FileLinkCallback|None = None
+) -> str:
     doc = DocTypeElement()
     root = doc.add_child('html')
     head = root.add_child('head')
@@ -138,11 +147,15 @@ def build_html(clips: ClipCollection, html_dir: Path) -> str:
     )
     body = root.add_child('body')
     section = body.add_child('section', attrs={'class':'section'})
-    tbl = build_table(clips, html_dir.resolve())
+    tbl = build_table(clips, html_dir.resolve(), link_callback)
     section.append(tbl)
     return doc.render_as_str()
 
-def build_table(clips: ClipCollection, html_dir: Path) -> Element:
+def build_table(
+    clips: ClipCollection,
+    html_dir: Path,
+    link_callback: FileLinkCallback|None
+) -> Element:
     tbl_root = Element('table', attrs={'class':'table is-bordered is-striped'})
     thead_row = tbl_root.add_child('thead').add_child('tr')
     for key in header_keys:
@@ -151,25 +164,37 @@ def build_table(clips: ClipCollection, html_dir: Path) -> Element:
     tbl_root.add_child('tfoot').append(tfoot_row)
     tbody = tbl_root.add_child('tbody')
     for clip in clips:
-        tbody.append(build_clip_row(clip, html_dir))
+        tbody.append(build_clip_row(clip, html_dir, link_callback))
     return tbl_root
 
 
-def build_clip_row(clip: Clip, html_dir: Path) -> Element:
+def build_clip_row(
+    clip: Clip,
+    html_dir: Path,
+    link_callback: FileLinkCallback|None
+) -> Element:
     tr = Element('tr')
     for key in header_keys:
         tag = 'th' if key == 'id' else 'td'
         cell = tr.add_child(tag, attrs={'data-key':key})
         if key in clip.files.path_attrs:
-            value = clip.files[key]
-            if value is not None:
+            url: UrlLike|None = None
+            if link_callback is not None:
+                url = link_callback(clip, key)
+                if url is None:
+                    continue
+            else:
+                value = clip.files[key]
+                if value is None:
+                    continue
                 value = clip.parent.base_dir / value
                 value = value.resolve()
                 if value.exists():
-                    value = value.relative_to(html_dir)
-                    cell.add_child(
-                        'a', attrs={'href':str(value)}, content=key.title(),
-                    )
+                    url = str(value)
+            if url is not None:
+                cell.add_child(
+                    'a', attrs={'href':str(url)}, content=key.title(),
+                )
         else:
             value = getattr(clip.parse_data, key)
             if isinstance(value, datetime.datetime):

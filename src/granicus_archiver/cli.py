@@ -94,6 +94,24 @@ def build_html(obj: BaseContext, html_filename: Path):
     html_filename.write_text(html)
 
 @cli.command
+@click.argument(
+    'html-filename',
+    type=click.Path(dir_okay=False, file_okay=True, path_type=Path)
+)
+@click.option(
+    '--drive-folder',
+    type=click.Path(path_type=Path),
+    default=Path('granicus-archive/data'),
+)
+@click.pass_obj
+def build_drive_html(obj: BaseContext, html_filename: Path, drive_folder: Path):
+    clips = ClipCollection.load(obj.data_file)
+    html = asyncio.run(googleclient.build_html(
+        clips, html_dir=html_filename.parent, upload_dir=drive_folder
+    ))
+    html_filename.write_text(html)
+
+@cli.command
 @click.pass_obj
 def authorize(obj: BaseContext):
     asyncio.run(googleauth.run_app())

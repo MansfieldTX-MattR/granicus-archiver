@@ -13,6 +13,8 @@ class FileMeta(TypedDict):
     mimeType: NotRequired[str]
     parents: NotRequired[list[FileId]]
     size: NotRequired[str]
+    webViewLink: NotRequired[str]
+    webContentLink: NotRequired[str]
 
 class DriveResource(GoogleAPI):
     files: DriveFiles
