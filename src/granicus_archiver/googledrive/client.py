@@ -12,7 +12,7 @@ import aiofile
 
 from .types import FileId, FileMeta, DriveResource
 from . import config
-from ..model import ClipCollection, Clip, ClipFileKey
+from ..model import ClipCollection, Clip, ClipFileKey, CLIP_ID
 from ..utils import JobWaiters
 
 FOLDER_MTYPE = 'application/vnd.google-apps.folder'
@@ -21,8 +21,13 @@ FOLDER_CACHE: dict[Path, FileId] = {}
 """A cache of Drive folders and their id
 """
 
+META_CACHE: dict[CLIP_ID, dict[ClipFileKey, FileMeta]] = {}
+"""Cache for uploaded file metadata
+"""
+
 CACHE_LOCK = asyncio.Lock()
 CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
+META_CACHE_FILE = Path(__file__).resolve().parent / 'meta-cache.json'
 
 
 UPLOAD_CHECK_LIMIT = 4
@@ -58,10 +63,15 @@ def load_cache():
         d = json.loads(CACHE_FILE.read_text())
         d = {Path(k): v for k,v in d.items()}
         FOLDER_CACHE.update(d)
+    if META_CACHE_FILE.exists():
+        d = json.loads(META_CACHE_FILE.read_text())
+        META_CACHE.update(d)
 
 def save_cache():
     d = {str(k):v for k,v in FOLDER_CACHE.items()}
     CACHE_FILE.write_text(json.dumps(d, indent=2))
+
+    META_CACHE_FILE.write_text(json.dumps(META_CACHE, indent=2))
 
 
 def find_folder_cache(folder: Path) -> tuple[list[FileId], Path]|None:
@@ -100,6 +110,32 @@ def cache_folder_parts(*parts_and_ids: tuple[str, FileId]):
 
 def cache_single_folder(folder: Path, f_id: FileId):
     FOLDER_CACHE[folder] = f_id
+
+
+def find_cached_file_meta(
+    clip_id: CLIP_ID,
+    key: ClipFileKey
+) -> FileMeta|None:
+    """Search the cache for metadata by :attr:`.model.Clip.id` and file type
+    """
+    d = META_CACHE.get(clip_id)
+    if d is None:
+        return None
+    meta = d.get(key)
+    if meta is None or 'size' not in meta:
+        return None
+    return meta
+
+
+def set_cached_file_meta(
+    clip_id: CLIP_ID,
+    key: ClipFileKey,
+    meta: FileMeta
+) -> None:
+    """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
+    """
+    d = META_CACHE.setdefault(clip_id, {})
+    d[key] = meta
 
 
 def get_client() -> Aiogoogle:
@@ -341,7 +377,7 @@ async def _stream_upload_file(
     upload_filename: Path,
     check_exists: bool = True,
     folder_id: str|None = None
-) -> bool:
+) -> FileMeta|None:
     chunk_size = 64*1024
 
     if folder_id is not None:
@@ -362,7 +398,7 @@ async def _stream_upload_file(
         exists = await file_exists(aiogoogle, drive_v3, upload_filename.name, parent)
         if exists:
             logger.warning(f'file "{upload_filename}" exists')
-            return False
+            return None
     logger.debug(f'uploading "{upload_filename}"')
     async with aiofile.async_open(local_file, 'rb') as src_fd:
         chunk_iter = src_fd.iter_chunked(chunk_size)
@@ -373,7 +409,9 @@ async def _stream_upload_file(
         )
         upload_res = await aiogoogle.as_user(req)
         logger.debug(f"Upload complete for {upload_filename}. File ID: {upload_res['id']}")
-    return True
+    uploaded_meta = await get_file_meta(aiogoogle, drive_v3, upload_filename)
+    assert uploaded_meta is not None
+    return uploaded_meta
 
 
 async def upload_clip(
@@ -388,6 +426,20 @@ async def upload_clip(
     num_jobs = 0
     drive_folder_id: str|None = None
 
+    async def _do_upload(
+        key: ClipFileKey,
+        filename: Path,
+        upload_filename: Path,
+        folder_id: str|None
+    ) -> bool:
+        meta = await _stream_upload_file(
+            aiogoogle, drive_v3, filename, upload_filename, folder_id=folder_id,
+        )
+        if meta is not None:
+            set_cached_file_meta(clip.id, key, meta)
+            return True
+        return False
+
     for key, url, filename in clip.iter_url_paths():
         if not filename.exists():
             continue
@@ -397,8 +449,8 @@ async def upload_clip(
             drive_folder_id = await create_folder_from_path(
                 aiogoogle, drive_v3, upload_filename.parent
             )
-        await waiter.spawn(_stream_upload_file(
-            aiogoogle, drive_v3, filename, upload_filename, folder_id=drive_folder_id,
+        await waiter.spawn(_do_upload(
+            key, filename, upload_filename, drive_folder_id,
         ))
         num_jobs += 1
     if not len(waiter):
@@ -418,9 +470,11 @@ async def check_clip_needs_upload(
     """Check if the given clip has any assets that need to be uploaded
     """
     async def do_check(key: ClipFileKey, filename: Path) -> bool:
-        rel_filename = clip.get_file_path(key, absolute=False)
-        upload_filename = upload_dir / rel_filename
-        upload_meta = await get_file_meta(aiogoogle, drive_v3, upload_filename)
+        upload_meta = find_cached_file_meta(clip.id, key)
+        if upload_meta is None:
+            rel_filename = clip.get_file_path(key, absolute=False)
+            upload_filename = upload_dir / rel_filename
+            upload_meta = await get_file_meta(aiogoogle, drive_v3, upload_filename)
         if upload_meta is None:
             return True
         assert 'size' in upload_meta
@@ -483,3 +537,42 @@ async def upload_clips(clips: ClipCollection, upload_dir: Path, max_clips: int):
         scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
         await asyncio.gather(*[sch.close() for sch in scheduler_list])
     save_cache()
+
+
+@logger.catch
+async def get_all_clip_file_meta(clips: ClipCollection, upload_dir: Path) -> None:
+    logger.info('Updating clip metadata from Drive...')
+    load_cache()
+    schedulers = get_schedulers()
+    scheduler = schedulers['general']
+    waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
+    async with get_client() as aiogoogle:
+        drive_v3 = cast(DriveResource, await aiogoogle.discover("drive", "v3"))
+
+        async def get_meta(clip: Clip, key: ClipFileKey) -> bool:
+            rel_filename = clip.get_file_path(key, absolute=False)
+            upload_filename = upload_dir / rel_filename
+            logger.debug(f'getting meta for {clip.id}, {key}')
+            meta = await get_file_meta(aiogoogle, drive_v3, upload_filename)
+            if meta is not None:
+                logger.debug(f'got meta for {clip.id}, {key}')
+                set_cached_file_meta(clip.id, key, meta)
+                return True
+            return False
+
+        for clip in clips:
+            for key in clip.files.path_attrs:
+                local_meta = clip.files.get_metadata(key)
+                if local_meta is None:
+                    continue
+                meta = find_cached_file_meta(clip.id, key)
+                if meta is not None:
+                    continue
+                await waiters.spawn(get_meta(clip, key))
+
+        results = await waiters
+        changed = any(results)
+        await scheduler.close()
+    if changed:
+        logger.info(f'Meta changed, saving cache file')
+        save_cache()
