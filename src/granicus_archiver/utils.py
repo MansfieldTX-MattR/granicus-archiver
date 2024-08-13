@@ -280,3 +280,12 @@ def find_mount_point(p: Path) -> Path:
 
 def is_same_filesystem(a: Path, b: Path) -> bool:
     return find_mount_point(a) == find_mount_point(b)
+
+
+def seconds_to_time_str(seconds: int) -> str:
+    """Format *seconds* as ``HH:MM:SS``
+    """
+    h = seconds // 3600
+    m = (seconds - h * 3600) // 60
+    s = seconds % 60
+    return f'{h:02d}:{m:02d}:{s:02d}'

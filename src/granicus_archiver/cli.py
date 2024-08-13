@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import click
 from aiohttp import ClientSession
 
-from .model import ClipCollection
+from .model import ClipCollection, AgendaTimestampCollection
 from . import client
 from . import html_builder
 from .googledrive import auth as googleauth
@@ -53,6 +53,28 @@ def cli(
     ctx.obj = BaseContext(
         out_dir=out_dir, data_file=data_file, timestamp_file=timestamp_file,
     )
+
+@cli.command
+@click.pass_obj
+def build_vtt(obj: BaseContext):
+    """Build vtt files with chapters from agenda timestamp data
+    """
+    clips = ClipCollection.load(obj.data_file)
+    timestamps = AgendaTimestampCollection.load(obj.timestamp_file)
+    for clip in clips:
+        if clip not in timestamps:
+            continue
+        vtt_filename = clip.get_chapters_file(absolute=True)
+        if vtt_filename.exists():
+            continue
+        if not vtt_filename.parent.exists():
+            continue
+        ts_obj = timestamps[clip]
+        if not len(ts_obj):
+            continue
+        click.echo(f'{vtt_filename}')
+        vtt_text = ts_obj.build_vtt(clip)
+        vtt_filename.write_text(vtt_text)
 
 
 @cli.command

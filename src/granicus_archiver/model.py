@@ -20,6 +20,8 @@ from yaml import (
 from yarl import URL
 from multidict import MultiMapping
 
+from .utils import seconds_to_time_str
+
 # __all__ = ('CLIP_ID', 'ParseClipData', 'ClipCollection')
 
 UTC = datetime.timezone.utc
@@ -358,6 +360,12 @@ class AgendaTimestamp(Serializable):
     seconds: int    #: The timestamp in seconds
     text: str       #: Agenda item text
 
+    @property
+    def time_str(self) -> str:
+        """:attr:`seconds` formatted as ``HH:MM:SS``
+        """
+        return seconds_to_time_str(self.seconds)
+
     def serialize(self) -> dict[str, Any]:
         return {'seconds': self.seconds, 'text': self.text}
 
@@ -373,8 +381,46 @@ class AgendaTimestamps(Serializable):
     clip_id: CLIP_ID                #: The associated clip's :attr:`~Clip.id`
     items: list[AgendaTimestamp]    #: Timestamps for the clip
 
+    def build_vtt(self, clip: Clip) -> str:
+        """Generate WebVTT-formatted chapters with timestamp/text data
+
+        Arguments:
+            clip: The associated :class:`Clip` instance. This is needed for
+                the end timestamp of last cue in the VTT track.
+
+        """
+        def iter_pairs() -> Iterator[tuple[int, AgendaTimestamp, AgendaTimestamp|None]]:
+            if not len(self.items):
+                raise IndexError('Item list is empty')
+            for i, item in enumerate(self.items):
+                try:
+                    next_item = self.items[i+1]
+                except IndexError:
+                    next_item = None
+                yield i, item, next_item
+
+        assert clip.id == self.clip_id
+        lines: list[str] = ['WEBVTT', '']
+        for i, cur_item, next_item in iter_pairs():
+            cur_ts = cur_item.time_str
+            if next_item is not None:
+                next_ts = next_item.time_str
+            else:
+                next_ts = seconds_to_time_str(int(clip.duration.total_seconds()))
+            cue_timing = f'{cur_ts}.000 --> {next_ts}.000'
+            lines.extend([
+                f'{i+1}',
+                cue_timing,
+                cur_item.text,
+                '',
+            ])
+        return '\n'.join(lines)
+
     def __iter__(self) -> Iterator[AgendaTimestamp]:
         yield from self.items
+
+    def __len__(self):
+        return len(self.items)
 
     def serialize(self) -> dict[str, Any]:
         items = [item.serialize() for item in self.items]
@@ -472,6 +518,8 @@ class Clip(Serializable):
     parent: ClipCollection
     """The parent :class:`ClipCollection`"""
 
+    _chapters_filename: ClassVar[str] = 'chapters.vtt'
+
     @property
     def id(self) -> CLIP_ID: return self.parse_data.id
 
@@ -504,6 +552,14 @@ class Clip(Serializable):
         """
         root_dir = self.root_dir_abs if absolute else self.root_dir
         return self.files.build_path(root_dir, key)
+
+    def get_chapters_file(self, absolute: bool = False) -> Path:
+        """Get the filename to use for WebVTT chapter data
+
+        See :meth:`AgendaTimestamps.build_vtt`
+        """
+        root_dir = self.root_dir_abs if absolute else self.root_dir
+        return root_dir / self._chapters_filename
 
     @classmethod
     def from_parse_data(cls, parent: ClipCollection, parse_data: ParseClipData) -> Self:
