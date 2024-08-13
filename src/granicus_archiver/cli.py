@@ -106,11 +106,15 @@ def fix_dts(obj: BaseContext):
     '--io-job-limit', type=int, default=8, show_default=True,
     help='Limit number of concurrent uploads to this amount'
 )
+@click.option(
+    '--folder', type=str,
+)
 @click.pass_obj
 def download(
     obj: BaseContext,
     max_clips: int|None,
     io_job_limit: int,
+    folder: str|None,
 ):
     clips = asyncio.run(client.amain(
         data_file=obj.data_file,
@@ -118,6 +122,7 @@ def download(
         out_dir=obj.out_dir,
         scheduler_limit=io_job_limit,
         max_clips=max_clips,
+        folder=folder,
     ))
 
 @cli.command

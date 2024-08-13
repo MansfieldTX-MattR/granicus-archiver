@@ -272,6 +272,7 @@ async def amain(
     out_dir: Path,
     scheduler_limit: int,
     max_clips: int|None = None,
+    folder: str|None = None,
 ):
     schedulers = get_schedulers(limit=scheduler_limit)
     waiter = JobWaiters(scheduler=schedulers['general'])
@@ -296,6 +297,8 @@ async def amain(
         for clip in clips:
             if max_clips == 0:
                 break
+            if folder is not None and clip.location != folder:
+                continue
             build_web_vtt(clip, timestamps, mkdir=True)
             if clip.complete:
                 logger.debug(f'skipping {clip.unique_name}')
