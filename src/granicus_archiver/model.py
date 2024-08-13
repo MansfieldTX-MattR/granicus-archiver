@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Self, ClassVar, Literal, Iterator, Any
 from abc import ABC, abstractmethod
 
+from os import PathLike
 from pathlib import Path
 import dataclasses
 from dataclasses import dataclass, field
@@ -468,15 +469,19 @@ class ClipCollection(Serializable):
         return result
 
     @classmethod
-    def load(cls, filename: Path) -> Self:
+    def load(cls, filename: PathLike) -> Self:
         """Loads an instance from previously saved data
         """
+        if not isinstance(filename, Path):
+            filename = Path(filename)
         data = json.loads(filename.read_text())
         return cls.deserialize(data)
 
-    def save(self, filename: Path, indent: int|None = 2) -> None:
+    def save(self, filename: PathLike, indent: int|None = 2) -> None:
         """Saves all clip data as JSON to the given filename
         """
+        if not isinstance(filename, Path):
+            filename = Path(filename)
         data = self.serialize()
         filename.write_text(json.dumps(data, indent=indent))
 
