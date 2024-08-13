@@ -95,6 +95,8 @@ class ParseClipData(Serializable):
     """The :attr:`original_links` after the redirects have been resolved
     """
 
+    player_link: URL|None = None
+
     date_fmt: ClassVar[str] = '%Y-%m-%d'
 
     @property
@@ -134,11 +136,19 @@ class ParseClipData(Serializable):
             return stem
         return root_dir / stem
 
+    def check(self, other: Self) -> None:
+        """Check *other* for any missing data in self
+        """
+        if self.player_link is None and other.player_link is not None:
+            self.player_link = other.player_link
+
     def serialize(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)
         d['original_links'] = self.original_links.serialize()
         if self.actual_links is not None:
             d['actual_links'] = self.actual_links.serialize()
+        if self.player_link is not None:
+            d['player_link'] = str(self.player_link)
         return d
 
     @classmethod
@@ -148,6 +158,9 @@ class ParseClipData(Serializable):
             if kw[key] is None:
                 continue
             kw[key] = ParseClipLinks.deserialize(kw[key])
+        p_link = kw.get('player_link')
+        if p_link is not None:
+            kw['player_link'] = URL(p_link)
         return cls(**kw)
 
 
@@ -330,6 +343,111 @@ class ClipFiles(Serializable):
                     val = Path(val)
             kw[key] = val
         return cls(**kw)
+
+
+@dataclass
+class AgendaTimestamp(Serializable):
+    """A timestamped agenda item
+    """
+    seconds: int    #: The timestamp in seconds
+    text: str       #: Agenda item text
+
+    def serialize(self) -> dict[str, Any]:
+        return {'seconds': self.seconds, 'text': self.text}
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        return cls(**data)
+
+
+@dataclass
+class AgendaTimestamps(Serializable):
+    """Collection of :class:`AgendaTimestamp` for a :class:`Clip`
+    """
+    clip_id: CLIP_ID                #: The associated clip's :attr:`~Clip.id`
+    items: list[AgendaTimestamp]    #: Timestamps for the clip
+
+    def __iter__(self) -> Iterator[AgendaTimestamp]:
+        yield from self.items
+
+    def serialize(self) -> dict[str, Any]:
+        items = [item.serialize() for item in self.items]
+        return {'clip_id': self.clip_id, 'items': items}
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        items = [AgendaTimestamp.deserialize(item) for item in data['items']]
+        return cls(clip_id=data['clip_id'], items=items)
+
+
+@dataclass
+class AgendaTimestampCollection(Serializable):
+    """Container for :class:`AgendaTimestamps`
+    """
+
+    clips: dict[CLIP_ID, AgendaTimestamps] = field(default_factory=dict)
+    """
+    """
+
+    @classmethod
+    def load(cls, filename: PathLike) -> Self:
+        """Loads an instance from previously saved data
+        """
+        if not isinstance(filename, Path):
+            filename = Path(filename)
+        data = json.loads(filename.read_text())
+        return cls.deserialize(data)
+
+    def save(self, filename: PathLike, indent: int|None = 2) -> None:
+        """Saves all data as JSON to the given filename
+        """
+        if not isinstance(filename, Path):
+            filename = Path(filename)
+        data = self.serialize()
+        filename.write_text(json.dumps(data, indent=indent))
+
+    def add(self, item: AgendaTimestamps) -> None:
+        """Add an :class:`AgendaTimestamps` instance
+        """
+        assert item.clip_id not in self
+        self.clips[item.clip_id] = item
+
+    def get(self, key: CLIP_ID|Clip) -> AgendaTimestamps|None:
+        """Get an :class:`AgendaTimestamps` object if it exists
+
+        The *key* can be a :class:`Clip` instance or the clip's :attr:`~Clip.id`
+        """
+        if isinstance(key, Clip):
+            key = key.id
+        return self.clips.get(key)
+
+    def __getitem__(self, key: CLIP_ID|Clip) -> AgendaTimestamps:
+        if isinstance(key, Clip):
+            key = key.id
+        return self.clips[key]
+
+    def __contains__(self, key: CLIP_ID|Clip):
+        if isinstance(key, Clip):
+            key = key.id
+        return key in self.clips
+
+    def __len__(self):
+        return len(self.clips)
+
+    def __iter__(self):
+        yield from self.clips.values()
+
+    def serialize(self) -> dict[str, Any]:
+        clips = {key: val.serialize() for key, val in self.clips.items()}
+        return {'clips': clips}
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        clips = {
+            key: AgendaTimestamps.deserialize(val)
+            for key, val in data['clips'].items()
+        }
+        return cls(clips=clips)
 
 
 @dataclass
@@ -554,6 +672,8 @@ class ClipCollection(Serializable):
             c = self_clip
             if self_clip != oth_clip:
                 self_p, oth_p = self_clip.parse_data, oth_clip.parse_data
+                self_p.check(oth_p)
+                oth_p.check(self_p)
                 if self_p.actual_links is None and oth_p.actual_links is not None:
                     c = oth_clip
             all_clips[key] = c

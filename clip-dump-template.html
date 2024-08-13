@@ -14,6 +14,7 @@
         <!-- <th data-key="DirectLink">DirectLink</th> -->
         <th data-key="audio_link">MP3Link</th>
         <th data-key="video_link">MP4Link</th>
+        <th data-key="player_link">Player</th>
       </tr></thead>
       <tbody>
       {foreach from=$Archives item=Clip}
@@ -28,6 +29,7 @@
         <!-- <td data-key="DirectLink"></td> -->
         <td data-key="audio" data-type="URL">{if $Clip.MP3Link !=""}<a href="{$Clip.MP3Link}">MP3</a>{/if}</td>
         <td data-key="video" data-type="URL">{if $Clip.MP4Link !=""}<a href="{$Clip.MP4Link}">MP4</a>{/if}</td>
+        <td data-key="player_link" data-type="string" data-value="{$Clip.PlayerPopupJS}">Player</td>
       </tr>
       {/foreach}
   </div>

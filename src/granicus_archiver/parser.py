@@ -1,4 +1,4 @@
-from typing import Literal, overload, TYPE_CHECKING
+from typing import Literal, Iterator, overload, TYPE_CHECKING
 from pathlib import Path
 
 from yarl import URL
@@ -79,6 +79,14 @@ def elem_attr(elem: PyQuery, name: str) -> str:
     assert isinstance(value, str)
     return value
 
+
+# The value for [data-key="player_link"] is taken from `{$Clip.PlayerPopupJS}`
+# and formatted like this:
+# window.open('//mansfieldtx.granicus.com/MediaPlayer.php?view_id=6&clip_id=2195','player','toolbar=no,directories=no,status=yes,scrollbars=yes,resizable=yes,menubar=no')
+#
+# We just care about the first argument to `window.open()`, but there doesn't
+# seem to be any better way than just parsing it out
+
 def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
     data_type_map = {
         'string':str,
@@ -95,6 +103,12 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
         py_type = data_type_map[data_type]
         if attr_in(td, 'data-value'):
             str_val = elem_attr(td, 'data-value')
+            if data_key == 'player_link':
+                assert str_val.startswith('window.open(') and str_val.endswith(')')
+                str_val = str_val.split('window.open(')[1].rstrip(')')
+                str_val = str_val.split(',')[0].strip("'").strip('"')
+                assert str_val.startswith('//')
+                py_type = URL
         elif data_type == 'URL':
             anchor = td.find('a').eq(0)
             if len(anchor):
@@ -106,6 +120,7 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
             str_val = td.text()
             assert isinstance(str_val, str)
             assert len(str_val)
+
         value = py_type(str_val)
         if data_key == 'id':
             assert value == clip_id
@@ -118,3 +133,19 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
             kw[data_key] = value
     kw['original_links'] = ParseClipLinks(**link_kw)
     return ParseClipData(**kw)
+
+
+
+def parse_player_page(response: str|bytes) -> Iterator[tuple[int, str]]:
+    """Parse the ``{$Clip.PlayerPopupJS}`` page for timestamps and agenda text
+
+    Results are ``(time_in_seconds, item_text)``
+    """
+    doc = PyQuery(response)
+    index_section = doc.find('#index').eq(0)
+    for div_el in index_section.find('div.index-point').items():
+        item_time = elem_attr(div_el, 'time')
+        time_seconds = int(item_time)
+        item_text = div_el.text()
+        assert isinstance(item_text, str)
+        yield time_seconds, item_text

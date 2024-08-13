@@ -17,6 +17,7 @@ from .googledrive import client as googleclient
 class BaseContext:
     out_dir: Path
     data_file: Path
+    timestamp_file: Path
 
 
 @click.group
@@ -32,11 +33,26 @@ class BaseContext:
     required=False,
     help='Filename to store download information. Defaults to "<out-dir>/data.json"',
 )
+@click.option(
+    '--timestamp-file',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    required=False,
+    help='Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.json"',
+)
 @click.pass_context
-def cli(ctx: click.Context, out_dir: Path, data_file: Path|None):
+def cli(
+    ctx: click.Context,
+    out_dir: Path,
+    data_file: Path|None,
+    timestamp_file: Path|None
+):
     if data_file is None:
         data_file = out_dir / 'data.json'
-    ctx.obj = BaseContext(out_dir=out_dir, data_file=data_file)
+    if timestamp_file is None:
+        timestamp_file = out_dir / 'timestamp-data.json'
+    ctx.obj = BaseContext(
+        out_dir=out_dir, data_file=data_file, timestamp_file=timestamp_file,
+    )
 
 
 @cli.command
@@ -88,6 +104,7 @@ def download(
 ):
     clips = asyncio.run(client.amain(
         data_file=obj.data_file,
+        timestamp_file=obj.timestamp_file,
         out_dir=obj.out_dir,
         scheduler_limit=io_job_limit,
         max_clips=max_clips,

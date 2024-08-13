@@ -10,8 +10,11 @@ import aiojobs
 import aiofile
 from yarl import URL
 
-from .parser import parse_page
-from .model import ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey
+from .parser import parse_page, parse_player_page
+from .model import (
+    ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey,
+    AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps,
+)
 from .utils import JobWaiters, is_same_filesystem
 
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
@@ -202,9 +205,49 @@ def check_all_clip_files(clips: ClipCollection):
         check_clip_files(clip)
 
 
+async def get_agenda_timestamps(
+    session: ClientSession,
+    timestamps: AgendaTimestampCollection,
+    clip: Clip
+) -> bool:
+    if clip in timestamps:
+        return False
+    url = clip.parse_data.player_link
+    if url is None:
+        return False
+    logger.debug(f'getting timestamps for "{clip.id} - {clip.parse_data.name}"')
+    async with session.get(url) as response:
+        if not response.ok:
+            response.raise_for_status()
+        html = await response.text()
+        items: list[AgendaTimestamp] = []
+        for time_seconds, item_text in parse_player_page(html):
+            items.append(AgendaTimestamp(seconds=time_seconds, text=item_text))
+    timestamps.add(AgendaTimestamps(clip_id=clip.id, items=items))
+    return True
+
+
+async def get_all_agenda_timestamps(
+    session: ClientSession,
+    clips: ClipCollection,
+    timestamps: AgendaTimestampCollection
+):
+    scheduler = get_scheduler('general')
+    waiter: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
+    for clip in clips:
+        if clip in timestamps:
+            continue
+        if clip.parse_data.player_link is None:
+            continue
+        await waiter.spawn(get_agenda_timestamps(session, timestamps, clip))
+    await waiter
+
+
+
 @logger.catch
 async def amain(
     data_file: Path,
+    timestamp_file: Path,
     out_dir: Path,
     scheduler_limit: int,
     max_clips: int|None = None,
@@ -215,12 +258,18 @@ async def amain(
     local_clips: ClipCollection|None = None
     if data_file.exists():
         local_clips = ClipCollection.load(data_file)
+    if timestamp_file.exists():
+        timestamps = AgendaTimestampCollection.load(timestamp_file)
+    else:
+        timestamps = AgendaTimestampCollection()
     async with ClientSession() as session:
         clips = await get_main_data(session, out_dir)
         if local_clips is not None:
             clips = clips.merge(local_clips)
         await replace_all_pdf_links(session, clips)
+        await get_all_agenda_timestamps(session, clips, timestamps)
         clips.save(data_file)
+        timestamps.save(timestamp_file)
         check_all_clip_files(clips)
         i = 0
         for clip in clips:
