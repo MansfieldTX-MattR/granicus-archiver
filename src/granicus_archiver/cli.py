@@ -37,7 +37,7 @@ class BaseContext:
     '--timestamp-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
-    help='Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.json"',
+    help='Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.yaml"',
 )
 @click.pass_context
 def cli(
@@ -49,7 +49,7 @@ def cli(
     if data_file is None:
         data_file = out_dir / 'data.json'
     if timestamp_file is None:
-        timestamp_file = out_dir / 'timestamp-data.json'
+        timestamp_file = out_dir / 'timestamp-data.yaml'
     ctx.obj = BaseContext(
         out_dir=out_dir, data_file=data_file, timestamp_file=timestamp_file,
     )

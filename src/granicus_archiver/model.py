@@ -11,6 +11,12 @@ import datetime
 import zoneinfo
 import json
 
+from yaml import (
+    load as yaml_load,
+    dump as yaml_dump,
+    CLoader as YamlLoader,
+    CDumper as YamlDumper,
+)
 from yarl import URL
 from multidict import MultiMapping
 
@@ -395,7 +401,7 @@ class AgendaTimestampCollection(Serializable):
         """
         if not isinstance(filename, Path):
             filename = Path(filename)
-        data = json.loads(filename.read_text())
+        data = yaml_load(filename.read_text(), Loader=YamlLoader)
         return cls.deserialize(data)
 
     def save(self, filename: PathLike, indent: int|None = 2) -> None:
@@ -404,7 +410,8 @@ class AgendaTimestampCollection(Serializable):
         if not isinstance(filename, Path):
             filename = Path(filename)
         data = self.serialize()
-        filename.write_text(json.dumps(data, indent=indent))
+        s = yaml_dump(data, Dumper=YamlDumper)
+        filename.write_text(s)
 
     def add(self, item: AgendaTimestamps) -> None:
         """Add an :class:`AgendaTimestamps` instance

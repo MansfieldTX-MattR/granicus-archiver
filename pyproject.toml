@@ -10,6 +10,7 @@ dependencies = [
     "aiojobs",
     "aiofile",
     "yarl",
+    "pyyaml",
     "pyquery",
     "click",
     "loguru",
