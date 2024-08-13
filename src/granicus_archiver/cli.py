@@ -62,19 +62,7 @@ def build_vtt(obj: BaseContext):
     clips = ClipCollection.load(obj.data_file)
     timestamps = AgendaTimestampCollection.load(obj.timestamp_file)
     for clip in clips:
-        if clip not in timestamps:
-            continue
-        vtt_filename = clip.get_chapters_file(absolute=True)
-        if vtt_filename.exists():
-            continue
-        if not vtt_filename.parent.exists():
-            continue
-        ts_obj = timestamps[clip]
-        if not len(ts_obj):
-            continue
-        click.echo(f'{vtt_filename}')
-        vtt_text = ts_obj.build_vtt(clip)
-        vtt_filename.write_text(vtt_text)
+        client.build_web_vtt(clip, timestamps)
 
 
 @cli.command

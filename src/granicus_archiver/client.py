@@ -243,6 +243,27 @@ async def get_all_agenda_timestamps(
     await waiter
 
 
+def build_web_vtt(
+    clip: Clip,
+    timestamps: AgendaTimestampCollection,
+    mkdir: bool = False
+) -> None:
+    if clip not in timestamps:
+        return
+    vtt_filename = clip.get_chapters_file(absolute=True)
+    if vtt_filename.exists():
+        return
+    if not vtt_filename.parent.exists():
+        if not mkdir:
+            return
+        vtt_filename.parent.mkdir(parents=True)
+    ts_obj = timestamps[clip]
+    if not len(ts_obj):
+        return
+    logger.debug(f'{vtt_filename}')
+    vtt_text = ts_obj.build_vtt(clip)
+    vtt_filename.write_text(vtt_text)
+
 
 @logger.catch
 async def amain(
@@ -275,6 +296,7 @@ async def amain(
         for clip in clips:
             if max_clips == 0:
                 break
+            build_web_vtt(clip, timestamps, mkdir=True)
             if clip.complete:
                 logger.debug(f'skipping {clip.unique_name}')
                 continue
