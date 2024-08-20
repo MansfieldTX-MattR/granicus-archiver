@@ -220,30 +220,6 @@ class FileMeta(Serializable):
             kw['last_modified'] = dt.replace(tzinfo=UTC)
         return cls(**kw)
 
-@dataclass
-class ClipFile(Serializable):
-    filename_rel: Path      #: Path relative to the :attr:`ClipCollection.base_dir`
-    filename_abs: Path
-    metadata: FileMeta|None = None
-
-    def serialize(self) -> dict[str, Any]:
-        return dict(
-            filename_rel=str(self.filename_rel),
-            filename_abs=str(self.filename_abs),
-            metadata=None if not self.metadata else self.metadata.serialize(),
-        )
-
-    @classmethod
-    def deserialize(cls, data: dict[str, Any]) -> Self:
-        meta = None
-        if data['metadata'] is not None:
-            meta = FileMeta.deserialize(data['metadata'])
-        return cls(
-            filename_rel=Path(data['filename_rel']),
-            filename_abs=Path(data['filename_abs']),
-            metadata=meta
-        )
-
 
 @dataclass
 class ClipFiles(Serializable):
