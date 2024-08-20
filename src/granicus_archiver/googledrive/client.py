@@ -10,7 +10,7 @@ from loguru import logger
 import aiojobs
 import aiofile
 
-from .types import FileId, FileMeta, DriveResource
+from .types import *
 from . import config
 from ..model import ClipCollection, Clip, ClipFileKey, CLIP_ID
 from ..utils import JobWaiters
@@ -24,7 +24,7 @@ FOLDER_CACHE: dict[Path, FileId] = {}
 
 ClipFileKeyVTT = ClipFileKey | Literal['chapters']
 
-META_CACHE: dict[CLIP_ID, dict[ClipFileKeyVTT, FileMeta]] = {}
+META_CACHE: dict[CLIP_ID, dict[ClipFileKeyVTT, FileMetaFull]] = {}
 """Cache for uploaded file metadata
 """
 
@@ -122,7 +122,7 @@ def cache_single_folder(folder: Path, f_id: FileId):
 def find_cached_file_meta(
     clip_id: CLIP_ID,
     key: ClipFileKeyVTT
-) -> FileMeta|None:
+) -> FileMetaFull|None:
     """Search the cache for metadata by :attr:`.model.Clip.id` and file type
     """
     d = META_CACHE.get(clip_id)
@@ -137,7 +137,7 @@ def find_cached_file_meta(
 def set_cached_file_meta(
     clip_id: CLIP_ID,
     key: ClipFileKeyVTT,
-    meta: FileMeta
+    meta: FileMetaFull
 ) -> None:
     """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
     """
@@ -183,6 +183,7 @@ async def find_folder(
         found_fids: list[FileId] = []
         found_parts: list[str] = []
         res = await aiogoogle.as_user(req, full_res=True)
+        res = cast(FileListResponse[FileMetaFull], res)
         async for page in res:
             for f in page['files']:
                 # logger.debug(f'{parent_id=}, {f.get("id")=}, {f.get("name")=}')
@@ -255,6 +256,7 @@ async def create_folder(
         fields="id",
     )
     res = await aiogoogle.as_user(req)
+    res = cast(FileUploadResponse, res)
     # cache_single_folder()
 
     return res['id']
@@ -336,6 +338,7 @@ async def file_exists(
         spaces='drive',
     )
     res = await aiogoogle.as_user(req, full_res=True)
+    res = cast(FileListResponse[FileMetaFull], res)
     async for page in res:
         for f in page['files']:
             return True
@@ -345,7 +348,7 @@ async def get_file_meta(
     aiogoogle: Aiogoogle,
     drive_v3: DriveResource,
     filename: Path
-) -> FileMeta|None:
+) -> FileMetaFull|None:
     """Get metadata for the given file (if it exists)
     """
     folder = filename.parent
@@ -365,6 +368,7 @@ async def get_file_meta(
         # fields=['id', 'size', 'name'],
     )
     res = await aiogoogle.as_user(req, full_res=True)
+    res = cast(FileListResponse[FileMetaFull], res)
     async for page in res:
         for f in page['files']:
             return f
@@ -384,7 +388,7 @@ async def _stream_upload_file(
     upload_filename: Path,
     check_exists: bool = True,
     folder_id: str|None = None
-) -> FileMeta|None:
+) -> FileMetaFull|None:
     chunk_size = 64*1024
 
     if folder_id is not None:
@@ -415,6 +419,7 @@ async def _stream_upload_file(
             json=file_meta,
         )
         upload_res = await aiogoogle.as_user(req)
+        upload_res = cast(FileUploadResponse, upload_res)
         logger.debug(f"Upload complete for {upload_filename}. File ID: {upload_res['id']}")
     uploaded_meta = await get_file_meta(aiogoogle, drive_v3, upload_filename)
     assert uploaded_meta is not None
