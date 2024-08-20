@@ -247,22 +247,24 @@ def build_web_vtt(
     clip: Clip,
     timestamps: AgendaTimestampCollection,
     mkdir: bool = False
-) -> None:
+) -> bool:
     if clip not in timestamps:
-        return
-    vtt_filename = clip.get_chapters_file(absolute=True)
+        return False
+    vtt_filename = clip.get_file_path('chapters', absolute=True)
     if vtt_filename.exists():
-        return
+        return False
     if not vtt_filename.parent.exists():
         if not mkdir:
-            return
+            return False
         vtt_filename.parent.mkdir(parents=True)
     ts_obj = timestamps[clip]
     if not len(ts_obj):
-        return
+        return False
     logger.debug(f'{vtt_filename}')
     vtt_text = ts_obj.build_vtt(clip)
     vtt_filename.write_text(vtt_text)
+    clip.files.check_chapters_file()
+    return True
 
 
 @logger.catch

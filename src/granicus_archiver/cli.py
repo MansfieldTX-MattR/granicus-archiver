@@ -61,8 +61,13 @@ def build_vtt(obj: BaseContext):
     """
     clips = ClipCollection.load(obj.data_file)
     timestamps = AgendaTimestampCollection.load(obj.timestamp_file)
+    changed = False
     for clip in clips:
-        client.build_web_vtt(clip, timestamps)
+        _changed = client.build_web_vtt(clip, timestamps)
+        if _changed:
+            changed = True
+    if changed:
+        clips.save(obj.data_file)
 
 
 @cli.command

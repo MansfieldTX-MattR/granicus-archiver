@@ -12,7 +12,7 @@ import aiofile
 
 from .types import *
 from . import config
-from ..model import ClipCollection, Clip, ClipFileKey, CLIP_ID
+from ..model import ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID
 from ..utils import JobWaiters
 from .. import html_builder
 
@@ -22,9 +22,8 @@ FOLDER_CACHE: dict[Path, FileId] = {}
 """A cache of Drive folders and their id
 """
 
-ClipFileKeyVTT = ClipFileKey | Literal['chapters']
 
-META_CACHE: dict[CLIP_ID, dict[ClipFileKeyVTT, FileMetaFull]] = {}
+META_CACHE: dict[CLIP_ID, dict[ClipFileUploadKey, FileMetaFull]] = {}
 """Cache for uploaded file metadata
 """
 
@@ -121,7 +120,7 @@ def cache_single_folder(folder: Path, f_id: FileId):
 
 def find_cached_file_meta(
     clip_id: CLIP_ID,
-    key: ClipFileKeyVTT
+    key: ClipFileUploadKey
 ) -> FileMetaFull|None:
     """Search the cache for metadata by :attr:`.model.Clip.id` and file type
     """
@@ -136,7 +135,7 @@ def find_cached_file_meta(
 
 def set_cached_file_meta(
     clip_id: CLIP_ID,
-    key: ClipFileKeyVTT,
+    key: ClipFileUploadKey,
     meta: FileMetaFull
 ) -> None:
     """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
@@ -439,7 +438,7 @@ async def upload_clip(
     drive_folder_id: str|None = None
 
     async def _do_upload(
-        key: ClipFileKeyVTT,
+        key: ClipFileUploadKey,
         filename: Path,
         upload_filename: Path,
         folder_id: str|None
@@ -452,7 +451,7 @@ async def upload_clip(
             return True
         return False
 
-    for key, url, filename in clip.iter_url_paths():
+    for key, filename in clip.iter_paths(for_download=False):
         if not filename.exists():
             continue
         rel_filename = clip.get_file_path(key, absolute=False)
@@ -463,19 +462,6 @@ async def upload_clip(
             )
         await waiter.spawn(_do_upload(
             key, filename, upload_filename, drive_folder_id,
-        ))
-        num_jobs += 1
-
-    vtt_filename = clip.get_chapters_file(absolute=True)
-    if vtt_filename.exists():
-        vtt_filename_rel = clip.get_chapters_file(absolute=False)
-        vtt_upload_fn = upload_dir / vtt_filename_rel
-        if drive_folder_id is None:
-            drive_folder_id = await create_folder_from_path(
-                aiogoogle, drive_v3, vtt_upload_fn.parent
-            )
-        await waiter.spawn(_do_upload(
-            'chapters', vtt_filename, vtt_upload_fn, drive_folder_id,
         ))
         num_jobs += 1
 
@@ -495,13 +481,10 @@ async def check_clip_needs_upload(
 ) -> bool:
     """Check if the given clip has any assets that need to be uploaded
     """
-    async def do_check(key: ClipFileKeyVTT, filename: Path) -> bool:
+    async def do_check(key: ClipFileUploadKey, filename: Path) -> bool:
         upload_meta = find_cached_file_meta(clip.id, key)
         if upload_meta is None:
-            if key == 'chapters':
-                rel_filename = clip.get_chapters_file(absolute=False)
-            else:
-                rel_filename = clip.get_file_path(key, absolute=False)
+            rel_filename = clip.get_file_path(key, absolute=False)
             upload_filename = upload_dir / rel_filename
             upload_meta = await get_file_meta(aiogoogle, drive_v3, upload_filename)
         if upload_meta is None:
@@ -514,13 +497,10 @@ async def check_clip_needs_upload(
         return False
 
     coros: set[Coroutine[Any, Any, bool]] = set()
-    for key, url, filename in clip.iter_url_paths():
+    for key, filename in clip.iter_paths(for_download=False):
         if not filename.exists():
             continue
         coros.add(do_check(key, filename))
-    vtt_filename = clip.get_chapters_file(absolute=True)
-    if vtt_filename.exists():
-        coros.add(do_check('chapters', vtt_filename))
     if len(coros):
         results = await asyncio.gather(*coros)
         if any(results):

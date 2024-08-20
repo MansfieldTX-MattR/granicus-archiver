@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Self, ClassVar, Literal, Iterator, Any
+from typing import Self, ClassVar, Literal, Iterator, Any, overload
 from abc import ABC, abstractmethod
 
 from os import PathLike
@@ -29,6 +29,7 @@ CLIP_TZ = zoneinfo.ZoneInfo('US/Central')
 
 CLIP_ID = str
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
+ClipFileUploadKey = ClipFileKey | Literal['chapters']
 
 Headers = MultiMapping[str]|dict[str, str]
 
@@ -104,6 +105,7 @@ class ParseClipData(Serializable):
     """
 
     player_link: URL|None = None
+    """URL for the popup video player with agenda view"""
 
     date_fmt: ClassVar[str] = '%Y-%m-%d'
 
@@ -252,7 +254,10 @@ class ClipFiles(Serializable):
     minutes: Path|None              #: Minutes filename
     audio: Path|None                #: MP3 filename
     video: Path|None                #: MP4 filename
-    metadata: dict[ClipFileKey, FileMeta] = field(default_factory=dict)
+    chapters: Path|None = None
+    """WebVTT chapters filename (built by :meth:`AgendaTimestamps.build_vtt`)
+    """
+    metadata: dict[ClipFileUploadKey, FileMeta] = field(default_factory=dict)
     """:class:`FileMeta` for each file (if available)"""
 
     path_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
@@ -267,9 +272,11 @@ class ClipFiles(Serializable):
         return cls(clip=clip, metadata={}, **kw)
 
     @classmethod
-    def build_path(cls, root_dir: Path, key: ClipFileKey) -> Path:
+    def build_path(cls, root_dir: Path, key: ClipFileUploadKey) -> Path:
         """Build the filename for the given file type with *root_dir* prepended
         """
+        if key == 'chapters':
+            return root_dir / 'chapters.vtt'
         suffixes: dict[ClipFileKey, str] = {
             'agenda':'.pdf',
             'minutes':'.pdf',
@@ -294,17 +301,40 @@ class ClipFiles(Serializable):
                 return False
         return True
 
-    def get_metadata(self, key: ClipFileKey) -> FileMeta|None:
+    def get_metadata(self, key: ClipFileUploadKey) -> FileMeta|None:
         """Get the :class:`FileMeta` for the given file type (if available)
         """
         return self.metadata.get(key)
 
-    def set_metadata(self, key: ClipFileKey, headers: Headers) -> FileMeta:
+    def set_metadata(self, key: ClipFileUploadKey, headers: Headers) -> FileMeta:
         """Set the :class:`FileMeta` for the given file type from request headers
         """
         meta = FileMeta.from_headers(headers)
         self.metadata[key] = meta
         return meta
+
+    def check_chapters_file(self) -> bool:
+        """Check for an existing :attr:`chapters` file
+
+        If :attr:`chapters` is not set and the expected filename for it exists,
+        the filename and its :attr:`metadata` will be added.
+        """
+        if self.chapters is not None:
+            return False
+        full_filename = self.clip.get_file_path('chapters', absolute=True)
+        if not full_filename.exists():
+            return False
+        self.chapters = self.build_path(self.clip.root_dir, 'chapters')
+        st = full_filename.stat()
+        dt = datetime.datetime.fromtimestamp(st.st_mtime).astimezone(UTC)
+        meta = FileMeta(
+            content_length=st.st_size,
+            content_type='text/vtt',
+            last_modified=dt,
+            etag=None,
+        )
+        self.metadata['chapters'] = meta
+        return True
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {
@@ -317,7 +347,7 @@ class ClipFiles(Serializable):
         # kw.update(paths)
         # return self.__class__
 
-    def __getitem__(self, key: ClipFileKey) -> Path|None:
+    def __getitem__(self, key: ClipFileUploadKey) -> Path|None:
         assert key in self.path_attrs
         return getattr(self, key)
 
@@ -325,10 +355,40 @@ class ClipFiles(Serializable):
         for attr in self.path_attrs:
             yield attr, self[attr]
 
-    def iter_existing(self) -> Iterator[tuple[ClipFileKey, Path]]:
+    @overload
+    def iter_existing(
+        self,
+        for_download: bool = True
+    ) -> Iterator[tuple[ClipFileKey, Path]]: ...
+    @overload
+    def iter_existing(
+        self,
+        for_download: bool = False
+    ) -> Iterator[tuple[ClipFileUploadKey, Path]]: ...
+    def iter_existing(
+        self,
+        for_download: bool = True
+    ) -> Iterator[tuple[ClipFileKey|ClipFileUploadKey, Path]]:
+        """Iterate over existing filenames
+
+        Arguments:
+            for_download: If ``True`` (the default), only the filenames expected
+                to be on the Granicus server will be yielded.  If ``False``,
+                locally-generated files will be included (such as :attr:`chapters`).
+
+        Yields:
+            (tuple): a tuple of
+
+                key:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
+                    if *for_download* it True)
+                filename: The relative :class:`Path` for the file
+
+        """
         for attr, p in self:
             if p is not None:
                 yield attr, p
+        if not for_download and self.chapters is not None:
+            yield 'chapters', self.chapters
 
     def serialize(self) -> dict[str, Any]:
         d = {}
@@ -337,6 +397,7 @@ class ClipFiles(Serializable):
             if val is not None:
                 val = str(val)
             d[attr] = val
+        d['chapters'] = str(self.chapters) if self.chapters else None
         d['metadata'] = {mkey: mval.serialize() for mkey, mval in self.metadata.items()}
         return d
 
@@ -547,19 +608,11 @@ class Clip(Serializable):
         """
         return self.parent.base_dir / self.root_dir
 
-    def get_file_path(self, key: ClipFileKey, absolute: bool = False) -> Path:
+    def get_file_path(self, key: ClipFileUploadKey, absolute: bool = False) -> Path:
         """Get the relative or absolute path for the given file type
         """
         root_dir = self.root_dir_abs if absolute else self.root_dir
         return self.files.build_path(root_dir, key)
-
-    def get_chapters_file(self, absolute: bool = False) -> Path:
-        """Get the filename to use for WebVTT chapter data
-
-        See :meth:`AgendaTimestamps.build_vtt`
-        """
-        root_dir = self.root_dir_abs if absolute else self.root_dir
-        return root_dir / self._chapters_filename
 
     @classmethod
     def from_parse_data(cls, parent: ClipCollection, parse_data: ParseClipData) -> Self:
@@ -599,6 +652,47 @@ class Clip(Serializable):
         for urlkey, url in it:
             filename = self.files.build_path(root_dir, urlkey)
             yield urlkey, url, filename
+
+    @overload
+    def iter_paths(
+        self,
+        absolute: bool = True,
+        for_download: bool = False
+    ) -> Iterator[tuple[ClipFileUploadKey, Path]]: ...
+    @overload
+    def iter_paths(
+        self,
+        absolute: bool = True,
+        for_download: bool = True
+    ) -> Iterator[tuple[ClipFileKey, Path]]: ...
+    def iter_paths(
+        self,
+        absolute: bool = True,
+        for_download: bool = True
+    ) -> Iterator[tuple[ClipFileKey|ClipFileUploadKey, Path]]:
+        """Iterate over paths in :attr:`files`
+
+        Arguments:
+            absolute: Whether to yield absolute paths
+            for_download: If ``True`` (the default), only the filenames expected
+                to be on the Granicus server will be yielded.  If ``False``,
+                locally-generated files will be included (such as
+                :attr:`ClipFiles.chapters`).
+
+        Yields:
+            (tuple): a tuple of
+
+                key:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
+                    if *for_download* it True)
+                filename: The :class:`Path` for the file relative to the
+                    :attr:`parent` :attr:`~ClipCollection.root_dir`
+                    (or :attr:`~ClipCollection.root_dir_abs` if *absolute* is True).
+
+        """
+        root_dir = self.root_dir_abs if absolute else self.root_dir
+        for key, p in self.files.iter_existing(for_download=for_download):
+            filename = self.files.build_path(root_dir, key)
+            yield key, filename
 
     def relative_to(self, base_dir: Path) -> Self:
         new_root_dir = self.parse_data.build_fs_dir(base_dir)
@@ -656,7 +750,10 @@ class ClipCollection(Serializable):
         if not isinstance(filename, Path):
             filename = Path(filename)
         data = json.loads(filename.read_text())
-        return cls.deserialize(data)
+        obj = cls.deserialize(data)
+        for clip in obj:
+            clip.files.check_chapters_file()
+        return obj
 
     def save(self, filename: PathLike, indent: int|None = 2) -> None:
         """Saves all clip data as JSON to the given filename
