@@ -661,8 +661,7 @@ class Clip(Serializable):
                 key:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
                     if *for_download* it True)
                 filename: The :class:`Path` for the file relative to the
-                    :attr:`parent` :attr:`~ClipCollection.root_dir`
-                    (or :attr:`~ClipCollection.root_dir_abs` if *absolute* is True).
+                    :attr:`root_dir` (or :attr:`root_dir_abs` if *absolute* is True).
 
         """
         root_dir = self.root_dir_abs if absolute else self.root_dir
