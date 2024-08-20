@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import click
 from aiohttp import ClientSession
 
-from .model import ClipCollection, AgendaTimestampCollection
+from .model import ClipCollection, AgendaTimestampCollection, ClipsIndex
 from . import client
 from . import html_builder
 from .googledrive import auth as googleauth
@@ -208,6 +208,26 @@ def upload(
         scheduler_limit=io_job_limit,
     ))
 
+@cli.command
+@click.option(
+    '--index-root',
+    type=click.Path(dir_okay=True, file_okay=True, exists=True, path_type=Path),
+    default=Path('.'),
+    show_default=True,
+)
+@click.option(
+    '--indent', type=int, default=2, show_default=True
+)
+@click.option('--overwrite/--no-overwrite', default=True)
+@click.pass_obj
+def write_clip_index(obj: BaseContext, indent: int, index_root: Path, overwrite: bool):
+    clips = ClipCollection.load(obj.data_file)
+    clips_index = ClipsIndex.from_clip_collection(clips, index_root)
+    clips_index.write_data(
+        clip_collection=clips,
+        exist_ok=overwrite,
+        indent=None if indent<=0 else indent
+    )
 
 
 if __name__ == '__main__':

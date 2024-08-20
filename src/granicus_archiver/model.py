@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import datetime
 import zoneinfo
 import json
+from loguru import logger
 
 from yaml import (
     load as yaml_load,
@@ -561,6 +562,9 @@ class Clip(Serializable):
     def id(self) -> CLIP_ID: return self.parse_data.id
 
     @property
+    def name(self) -> str: return self.parse_data.name
+
+    @property
     def unique_name(self) -> str: return self.parse_data.unique_name
 
     @property
@@ -830,3 +834,168 @@ class ClipCollection(Serializable):
             obj.clips[key] = clip
         obj.clips_by_dt = obj._sort_clips_by_dt()
         return obj
+
+@dataclass
+class ClipIndex(Serializable):
+    """Model for only essential :class:`Clip` data to be included in
+    :class:`ClipsIndex`
+    """
+    id: CLIP_ID                 #: :attr:`Clip.id`
+    location: str               #: :attr:`Clip.location`
+    name: str                   #: :attr:`Clip.name`
+    datetime: datetime.datetime #: :attr:`Clip.datetime`
+    data_file: Path
+    """Path to the full :class:`Clip` data file within its :attr:`~Clip.root_dir`
+    """
+
+    dt_fmt: ClassVar[str] = '%a, %d %b %Y %H:%M:%S GMT'
+
+    @classmethod
+    def from_clip(cls, clip: Clip, root_dir: Path) -> Self:
+        """Create an instance from a :class:`Clip`
+
+        Arguments:
+            clip: The :class:`Clip` instance
+            root_dir: Relative parent directory of the :attr:`Clip.root_dir`.
+                This will typically be the :attr:`ClipsIndex.root_dir`
+        """
+        assert not root_dir.is_absolute()
+        return cls(
+            id=clip.id,
+            location=clip.location,
+            name=clip.name,
+            datetime=clip.datetime,
+            data_file=cls._get_data_filename(clip, root_dir),
+        )
+
+    @classmethod
+    def _get_data_filename(cls, clip: Clip, root_dir: Path) -> Path:
+        return root_dir / clip.root_dir / 'data.json'
+
+    def write_data(
+        self,
+        clip: Clip|ClipCollection,
+        exist_ok: bool = False,
+        indent: int|None = 2
+    ) -> None:
+        """Serialize the clip data and save it to :attr:`data_file`
+
+        Arguments:
+            clip: A :class:`ClipCollection` or :class:`Clip` instance
+            exist_ok: If ``False`` and the :attr:`data_file` exists,
+                it will not be overwritten and an exception will be raised
+            indent: Indentation parameter to pass to :func:`json.dumps`
+
+        """
+        if not self.data_file.parent.exists():
+            logger.debug(f'skipping {self.data_file}')
+            return
+        if not exist_ok and self.data_file.exists():
+            raise Exception(f'Data file exists: {self.data_file}')
+        logger.debug(f'writing data to {self.data_file}')
+        if isinstance(clip, ClipCollection):
+            clip = clip[self.id]
+        root_dir = self.data_file.parent
+        clip_files = {key: str(root_dir / f.name) for key, f in clip.iter_paths(for_download=False)}
+        clip_data = clip.serialize()
+        clip_data['files'].update(clip_files)
+        self.data_file.write_text(json.dumps(clip_data, indent=indent))
+
+    def serialize(self) -> dict[str, Any]:
+        return dict(
+            id=self.id,
+            location=self.location,
+            name=self.name,
+            datetime=self.datetime.strftime(self.dt_fmt),
+            data_file=str(self.data_file)
+        )
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        # kw = data.copy()
+        return cls(
+            id=data['id'],
+            location=data['location'],
+            name=data['name'],
+            datetime=datetime.datetime.strptime(data['datetime'], cls.dt_fmt),
+            data_file=Path(data['data_file']),
+        )
+
+
+@dataclass
+class ClipsIndex(Serializable):
+    """An index of all clips containing a minimal amount of data
+
+    When serialized, this data will contain only basic clip information
+    with relative paths to each clip's full data representation.
+
+    This is intended for web services to use in order to avoid fetching a
+    large amount of unnecessary data.
+    """
+    clips: dict[CLIP_ID, ClipIndex]
+    """Mapping of :class:`ClipIndex` using the :attr:`ClipIndex.id` as keys
+    """
+
+    root_dir: Path
+    """Relative parent directory of the :attr:`ClipCollection.base_dir`
+    """
+
+    @classmethod
+    def from_clip_collection(cls, clips: ClipCollection, root_dir: PathLike) -> Self:
+        """Create an instance from a :class:`ClipCollection`
+        """
+        if not isinstance(root_dir, Path):
+            root_dir = Path(root_dir)
+        assert not root_dir.is_absolute()
+        root_rel = clips.base_dir.relative_to(root_dir)
+        d = {clip.id: ClipIndex.from_clip(clip, root_rel) for clip in clips}
+        return cls(clips=d, root_dir=root_rel)
+
+    def write_data(
+        self,
+        clip_collection: ClipCollection|None = None,
+        exist_ok: bool = False,
+        indent: int|None = 2
+    ) -> None:
+        """Write the root index data and each :class:`clip's <ClipIndex>` full
+        data
+
+        The root index will be stored as "clip-index.json" within the
+        :attr:`root_dir`.  All items in :attr:`clips` will be flattened as
+        a :class:`list` of the serialized form of :class:`ClipIndex`.
+
+        Arguments:
+            clip_collection: If provided, the :meth:`~ClipIndex.write_data`
+                method will be called on each item in :attr:`clips` using the
+                clip collection's data.  If ``None``, only the root index data
+                will be saved.
+            exist_ok: If ``False`` and the data file exists, it will not be
+                overwritten and an exception will be raised.  This will also
+                be passed when calling :meth:`ClipIndex.write_data`.
+            indent: Indentation parameter to pass to :func:`json.dumps`
+
+        """
+        if clip_collection is not None:
+            for clip in self.clips.values():
+                clip.write_data(clip_collection, exist_ok=exist_ok, indent=indent)
+
+        filename = self.root_dir / 'clip-index.json'
+        if not exist_ok and filename.exists():
+            raise Exception(f'Data file exists: {filename}')
+        data = self.serialize()
+        filename.write_text(json.dumps(data, indent=indent))
+
+    def serialize(self) -> dict[str, Any]:
+        return dict(
+            clips=[clip.serialize() for clip in self.clips.values()],
+            root_dir=str(self.root_dir),
+        )
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        clip_list = [ClipIndex.deserialize(d) for d in data['clips']]
+        clips = {clip.id: clip for clip in clip_list}
+        return cls(
+            clips=clips,
+            root_dir=Path(data['root_dir']),
+        )
