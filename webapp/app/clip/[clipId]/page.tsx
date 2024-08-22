@@ -7,7 +7,7 @@ import Section from "@/app/components/Section";
 import { FlexColumn } from "@/app/components/FlexBox";
 import { LinkButton } from "@/app/components/Button";
 import { formatDurationDelta } from "@/app/components/utils";
-import { getUrl } from "@/app/model";
+import { getUrl } from "@/app/utils";
 
 
 export default async function Page({params}: {params: {clipId: ClipId}}) {

@@ -3,26 +3,29 @@ import { useState, useEffect, useTransition, useRef, useId } from "react";
 
 import type { Clip } from "@/app/model";
 import { ToggleButton } from "@/app/components/Button";
-import { getUrl } from "@/app/model";
 import { formatDurationDelta } from "@/app/components/utils";
 import { mergeClassNames } from "@/app/components/utils";
 
 
-
+interface VideoProps {
+  clip: Clip;
+  videoUrl?: string;
+  chaptersUrl?: string;
+  className?: string;
+  col1Class?: string;
+  col2Class?: string;
+  videoClass?: string;
+}
 
 export const Video = (
-  {clip, className, col1Class, col2Class, videoClass}:
-  {clip: Clip, className?: string, col1Class?: string, col2Class?: string, videoClass?: string}
+  {clip, videoUrl, chaptersUrl, className, col1Class, col2Class, videoClass}:
+  VideoProps
 ) => {
   const videoRef = useRef<HTMLVideoElement|null>(null);
   const textTrackRef = useRef<TextTrack|null>(null);
   const textTrackId = useId();
   const [ cueList, setCueList ] = useState<VTTCue[]|null>(null);
   const [ activeCues, setActiveCues ] = useState<VTTCue[]|null>(null);
-  const videoPath = clip.files.video;
-  const videoUrl = videoPath ? getUrl(videoPath) : undefined;
-  const chaptersPath = clip.files.chapters;
-  const chaptersUrl = chaptersPath ? getUrl(chaptersPath) : undefined;
 
   useEffect(() => {
     if (textTrackRef.current !== null) return;
@@ -111,10 +114,10 @@ export const Video = (
         {/* <video ref={videoRef} controls src={videoUrl ? videoUrl.toString() : undefined}> */}
         <video ref={videoRef} controls className={mergeClassNames("px-2 py-2 aspect-video", videoClass)} crossOrigin="use-credentials">
           {/* {videoPath ? <source src={videoPath} type="video/mp4" /> : <></>} */}
-          {videoUrl ? <source src={videoUrl.toString()} type="video/mp4" /> : <></>}
+          {videoUrl ? <source src={videoUrl} type="video/mp4" /> : <></>}
           {/* {chaptersUrl ? <track src={chaptersUrl.toString()} kind="captions" default srcLang="en" /> : <></>} */}
           {/* <track id={textTrackId} src={`/clip/${clip.id}/webvtt`} default srcLang="en" /> */}
-          {chaptersUrl ? <track id={textTrackId} src={chaptersUrl.toString()} default kind="chapters" srcLang="en" /> : <></>}
+          {chaptersUrl ? <track id={textTrackId} src={chaptersUrl} default kind="chapters" srcLang="en" /> : <></>}
           {/* <track id={textTrackId} src={chaptersUrl.toString()} default kind="chapters" srcLang="en" /> */}
         </video>
       </div>

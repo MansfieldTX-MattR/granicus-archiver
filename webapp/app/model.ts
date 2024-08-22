@@ -114,31 +114,7 @@ type ModelResp<Tn extends keyof ModelRespT> = ModelRespT[Tn];
 
 
 
-function splitPathParts(path: string): string[] {
-  return path.split('/').filter((s) => s.length > 0);
-}
 
-export function getFileUrl(rootPath: string, path: string, clip?: Clip): URL {
-  // let fullPath: string = rootPath;
-  // if (fullPath.startsWith('/')) {
-
-  // }
-  let pathParts: string[] = splitPathParts(rootPath);
-  if (clip) {
-    pathParts = [...pathParts, ...splitPathParts(clip.rootDir)];
-  }
-  pathParts = [...pathParts, ...splitPathParts(path)];
-  // return URL(pathParts.join('/'))
-  return getUrl(pathParts.join('/'));
-  // const fullPath = 'http://localhost:8080/' + pathParts.join('/');
-  // return new URL(fullPath);
-  // return fullPath;
-}
-
-export function getUrl(path: string): URL {
-  const fullPath = 'http://localhost:8080/' + path;
-  return new URL(fullPath);
-}
 
 function castResponseType<Tn extends keyof ModelRespT>(typeName: Tn, data: Object): ModelResp<Tn> {
   return data as ModelResp<Tn>;

@@ -3,6 +3,8 @@ import 'server-only';
 import type { ClipId, Clip, ClipResp } from "./model";
 import { deserialize } from "./model";
 
+const HOST_PATH = process.env.CONTENT_HOST_PATH;
+
 interface ClipMainResp {
   base_dir: string;
   clip_ids: string[];
@@ -22,13 +24,13 @@ export interface ClipsIndexResp {
 }
 
 export const getTextData = async(path: string) => {
-  const url = `http://localhost:8080/${path}`;
+  const url = getUrl(path);
   const req = await fetch(url);
   return await req.text();
 };
 
 const getJsonData = async(path: string) => {
-  const url = `http://localhost:8080/${path}`;
+  const url = getUrl(path);
   const req = await fetch(url, {cache: 'no-cache'});
   return await req.json();
 };
@@ -66,3 +68,24 @@ export const getClipRootData = async(): Promise<ClipMainResp> => {
 //   const dataStr = await getTextData('data/data.json');
 //   return loadData(dataStr);
 // };
+
+function splitPathParts(path: string): string[] {
+  return path.split('/').filter((s) => s.length > 0);
+}
+
+export function getFileUrl(rootPath: string, path: string, clip?: Clip): URL {
+  let pathParts: string[] = splitPathParts(rootPath);
+  if (clip) {
+    pathParts = [...pathParts, ...splitPathParts(clip.rootDir)];
+  }
+  pathParts = [...pathParts, ...splitPathParts(path)];
+  return getUrl(pathParts.join('/'));
+}
+
+export function getUrl(path: string): URL {
+  let baseUrl = HOST_PATH;
+  if (!baseUrl) throw new Error('CONTENT_HOST_PATH not set');
+  if (!baseUrl.endsWith('/')) baseUrl = `${baseUrl}/`;
+  const fullPath = `${baseUrl}${path}`;
+  return new URL(fullPath);
+}
