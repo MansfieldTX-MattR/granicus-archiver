@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import webbrowser
 import asyncio
@@ -7,8 +8,10 @@ from aiogoogle.auth.creds import UserCreds, ClientCreds
 from aiogoogle.auth.utils import create_secret
 
 from . import config
+from ..config import Config
 
 
+ROOT_CONF_KEY = web.AppKey('ROOT_CONF', Config)
 AIOGOOGLE_KEY = web.AppKey('Aiogoogle', Aiogoogle)
 AUTH_STATE_KEY = web.AppKey('AUTH_STATE', str)
 CLIENT_CONF_KEY = web.AppKey('CLIENT_CONF', config.OAuthClientConf)
@@ -47,6 +50,7 @@ async def authorize(request: web.Request):
 
 @routes.get("/callback/aiogoogle")
 async def callback(request: web.Request):
+    root_conf = request.app[ROOT_CONF_KEY]
     aiogoogle = request.app[AIOGOOGLE_KEY]
     client_conf = request.app[CLIENT_CONF_KEY]
     state = request.app[AUTH_STATE_KEY]
@@ -66,7 +70,10 @@ async def callback(request: web.Request):
         full_user_creds = await aiogoogle.oauth2.build_user_creds(
             grant=request.query.get("code"), client_creds=client_conf._asdict()
         )
-        config.save_user_credentials(full_user_creds)
+        config.save_user_credentials(
+            full_user_creds,
+            filename=root_conf.google.user_credentials_filename,
+        )
         response_txt = '\n'.join([
             'Authorization Complete.'
             f'Credentials saved to {config.USER_CREDENTIALS_FILE}'
@@ -78,10 +85,11 @@ async def callback(request: web.Request):
         return web.Response(text="Something's probably wrong with your callback", status=400)
 
 
-def build_app():
+def build_app(root_conf: Config):
     app = web.Application()
+    app[ROOT_CONF_KEY] = root_conf
     app[CLIENT_CONF_KEY] = client_conf = config.OAuthClientConf.load_from_env(REDIRECT_URI)
-    app[USER_CREDS_KEY] = config.UserCredentials.load()
+    app[USER_CREDS_KEY] = config.UserCredentials.load(root_conf=root_conf)
     aiogoogle = Aiogoogle(client_creds=client_conf._asdict())   # type: ignore
     app[AIOGOOGLE_KEY] = aiogoogle
     app[AUTH_STATE_KEY] = create_secret()
@@ -92,8 +100,8 @@ def build_app():
     return app
 
 
-async def run_app():
-    app = build_app()
+async def run_app(root_conf: Config):
+    app = build_app(root_conf=root_conf)
     app[CLOSE_EVENT_KEY] = asyncio.Event()
     runner = web.AppRunner(app)
     await runner.setup()
@@ -102,7 +110,3 @@ async def run_app():
 
     await app[CLOSE_EVENT_KEY].wait()
     await runner.cleanup()
-
-
-if __name__ == '__main__':
-    asyncio.run(run_app())

@@ -1,10 +1,14 @@
-from typing import NamedTuple, Self
+from __future__ import annotations
+from typing import NamedTuple, Self, TYPE_CHECKING
 import os
 from pathlib import Path
 import json
 import stat
 import getpass
 from loguru import logger
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 
 ST_PERM_MASK = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
@@ -55,10 +59,11 @@ class UserCredentials(NamedTuple):
     revoke_uri: str|None = None
 
     @classmethod
-    def load(cls) -> Self:
-        check_file_perms()
-        if USER_CREDENTIALS_FILE.exists():
-            kw = json.loads(USER_CREDENTIALS_FILE.read_text())
+    def load(cls, root_conf: Config) -> Self:
+        cred_file = root_conf.google.user_credentials_filename
+        check_file_perms(cred_file)
+        if cred_file.exists():
+            kw = json.loads(cred_file.read_text())
             kw['email'] = os.environ['OAUTH_CLIENT_EMAIL']
             return cls(**kw)
         return cls(
@@ -66,8 +71,8 @@ class UserCredentials(NamedTuple):
         )
 
 
-def check_file_perms(show_warning: bool = True):
-    for p in [USER_CREDENTIALS_FILE]:
+def check_file_perms(filename: Path, show_warning: bool = True):
+    for p in [filename]:
         if not p.exists():
             continue
         mode = p.stat().st_mode
@@ -88,6 +93,6 @@ def check_file_perms(show_warning: bool = True):
             logger.warning(msg)
 
 
-def save_user_credentials(data: dict) -> None:
-    USER_CREDENTIALS_FILE.write_text(json.dumps(data))
-    check_file_perms(show_warning=False)
+def save_user_credentials(data: dict, filename: Path) -> None:
+    filename.write_text(json.dumps(data))
+    check_file_perms(filename, show_warning=False)

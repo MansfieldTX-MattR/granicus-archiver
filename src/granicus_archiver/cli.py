@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import click
 from aiohttp import ClientSession
 
+from .config import Config
 from .model import ClipCollection, AgendaTimestampCollection, ClipsIndex
 from . import client
 from . import html_builder
@@ -15,16 +16,20 @@ from .googledrive import client as googleclient
 
 @dataclass
 class BaseContext:
-    out_dir: Path
-    data_file: Path
-    timestamp_file: Path
+    config: Config
+    config_file: Path
 
 
 @click.group
 @click.option(
+    '-c', '--config-file',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    default=Config.default_filename,
+)
+@click.option(
     '-o', '--out-dir',
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    required=True,
+    required=False,
     help='Root directory to store downloaded files',
 )
 @click.option(
@@ -42,16 +47,28 @@ class BaseContext:
 @click.pass_context
 def cli(
     ctx: click.Context,
+    config_file: Path,
     out_dir: Path,
     data_file: Path|None,
     timestamp_file: Path|None
 ):
-    if data_file is None:
-        data_file = out_dir / 'data.json'
-    if timestamp_file is None:
-        timestamp_file = out_dir / 'timestamp-data.yaml'
+    conf_kw = dict(
+        out_dir=out_dir,
+        data_file=data_file,
+        timestamp_file=timestamp_file,
+    )
+    conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
+    if config_file.exists():
+        config = Config.load(config_file)
+        if config.update(**conf_kw):
+            config.save(config_file)
+    else:
+        config = Config.build_defaults(**conf_kw)
+        config.save(config_file)
+
     ctx.obj = BaseContext(
-        out_dir=out_dir, data_file=data_file, timestamp_file=timestamp_file,
+        config=config,
+        config_file=config_file,
     )
 
 @cli.command
@@ -59,15 +76,15 @@ def cli(
 def build_vtt(obj: BaseContext):
     """Build vtt files with chapters from agenda timestamp data
     """
-    clips = ClipCollection.load(obj.data_file)
-    timestamps = AgendaTimestampCollection.load(obj.timestamp_file)
+    clips = ClipCollection.load(obj.config.data_file)
+    timestamps = AgendaTimestampCollection.load(obj.config.timestamp_file)
     changed = False
     for clip in clips:
         _changed = client.build_web_vtt(clip, timestamps)
         if _changed:
             changed = True
     if changed:
-        clips.save(obj.data_file)
+        clips.save(obj.config.data_file)
 
 
 @cli.command
@@ -75,13 +92,13 @@ def build_vtt(obj: BaseContext):
 def check(obj: BaseContext):
     """Check downloaded files using the stored metadata
     """
-    clips = ClipCollection.load(obj.data_file)
+    clips = ClipCollection.load(obj.config.data_file)
     client.check_all_clip_files(clips)
 
 @cli.command
 @click.pass_obj
 def fix_dts(obj: BaseContext):
-    out_dir, data_file = obj.out_dir, obj.data_file
+    out_dir, data_file = obj.config.out_dir, obj.config.data_file
 
     async def do_fix():
         local_clips: ClipCollection|None = None
@@ -122,9 +139,9 @@ def download(
     folder: str|None,
 ):
     clips = asyncio.run(client.amain(
-        data_file=obj.data_file,
-        timestamp_file=obj.timestamp_file,
-        out_dir=obj.out_dir,
+        data_file=obj.config.data_file,
+        timestamp_file=obj.config.timestamp_file,
+        out_dir=obj.config.out_dir,
         scheduler_limit=io_job_limit,
         max_clips=max_clips,
         folder=folder,
@@ -140,7 +157,7 @@ def build_html(obj: BaseContext, html_filename: Path):
     """Build a static html file with links to all downloaded content and
     save it to HTML_FILENAME
     """
-    clips = ClipCollection.load(obj.data_file)
+    clips = ClipCollection.load(obj.config.data_file)
     html = html_builder.build_html(clips, html_dir=html_filename.parent)
     html_filename.write_text(html)
 
@@ -161,9 +178,13 @@ def build_drive_html(obj: BaseContext, html_filename: Path, drive_folder: Path):
     """Build a static html file with links to the all content uploaded to
     Drive
     """
-    clips = ClipCollection.load(obj.data_file)
+    google_conf = obj.config.google
+    if google_conf.drive_folder != drive_folder:
+        google_conf.drive_folder = drive_folder
+        obj.config.save(obj.config_file)
+    clips = ClipCollection.load(obj.config.data_file)
     html = asyncio.run(googleclient.build_html(
-        clips, html_dir=html_filename.parent, upload_dir=drive_folder
+        clips, html_dir=html_filename.parent, root_conf=obj.config,
     ))
     html_filename.write_text(html)
 
@@ -172,7 +193,7 @@ def build_drive_html(obj: BaseContext, html_filename: Path, drive_folder: Path):
 def authorize(obj: BaseContext):
     """Launch a browser window to authorize uploads to Drive
     """
-    asyncio.run(googleauth.run_app())
+    asyncio.run(googleauth.run_app(root_conf=obj.config))
 
 
 @cli.command
@@ -200,10 +221,14 @@ def upload(
 ):
     """Upload all local content to Google Drive
     """
-    clips = ClipCollection.load(obj.data_file)
+    google_conf = obj.config.google
+    if google_conf.drive_folder != drive_folder:
+        google_conf.drive_folder = drive_folder
+        obj.config.save(obj.config_file)
+    clips = ClipCollection.load(obj.config.data_file)
     asyncio.run(googleclient.upload_clips(
         clips,
-        upload_dir=drive_folder,
+        root_conf=obj.config,
         max_clips=max_clips,
         scheduler_limit=io_job_limit,
     ))
@@ -221,7 +246,7 @@ def upload(
 @click.option('--overwrite/--no-overwrite', default=True)
 @click.pass_obj
 def write_clip_index(obj: BaseContext, indent: int, index_root: Path, overwrite: bool):
-    clips = ClipCollection.load(obj.data_file)
+    clips = ClipCollection.load(obj.config.data_file)
     clips_index = ClipsIndex.from_clip_collection(clips, index_root)
     clips_index.write_data(
         clip_collection=clips,

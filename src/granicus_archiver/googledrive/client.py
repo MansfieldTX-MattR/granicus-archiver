@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Coroutine, TypedDict, Literal, Any, cast
+from typing import Coroutine, TypedDict, Literal, Any, cast, TYPE_CHECKING
 import mimetypes
 from pathlib import Path
 import asyncio
@@ -15,6 +15,9 @@ from . import config
 from ..model import ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID
 from ..utils import JobWaiters
 from .. import html_builder
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 FOLDER_MTYPE = 'application/vnd.google-apps.folder'
 
@@ -144,9 +147,9 @@ def set_cached_file_meta(
     d[key] = meta
 
 
-def get_client() -> Aiogoogle:
+def get_client(root_conf: Config) -> Aiogoogle:
     client_creds = config.OAuthClientConf.load_from_env()._asdict()
-    user_creds = config.UserCredentials.load()._asdict()
+    user_creds = config.UserCredentials.load(root_conf=root_conf)._asdict()
     return Aiogoogle(user_creds=user_creds, client_creds=client_creds)   # type: ignore
 
 
@@ -374,8 +377,8 @@ async def get_file_meta(
 
 
 
-async def stream_upload_file(local_file: Path, upload_filename: Path):
-    async with get_client() as aiogoogle:
+async def stream_upload_file(local_file: Path, upload_filename: Path, root_conf: Config):
+    async with get_client(root_conf=root_conf) as aiogoogle:
         drive_v3 = cast(DriveResource, await aiogoogle.discover("drive", "v3"))
         await _stream_upload_file(aiogoogle, drive_v3, local_file, upload_filename)
 
@@ -511,10 +514,11 @@ async def check_clip_needs_upload(
 @logger.catch
 async def upload_clips(
     clips: ClipCollection,
-    upload_dir: Path,
+    root_conf: Config,
     max_clips: int,
     scheduler_limit: int,
 ) -> None:
+    upload_dir = root_conf.google.drive_folder
     load_cache()
     schedulers = get_schedulers(scheduler_limit)
     upload_check_waiters = JobWaiters(scheduler=get_scheduler('upload_checks'))
@@ -523,7 +527,7 @@ async def upload_clips(
     # Using a dict here for nested context mutability
     tracking_vars = {'num_uploaded': 0}
 
-    async with get_client() as aiogoogle:
+    async with get_client(root_conf=root_conf) as aiogoogle:
         drive_v3 = cast(DriveResource, await aiogoogle.discover("drive", "v3"))
 
         async def upload_clip_if_needed(clip: Clip):
@@ -557,13 +561,14 @@ async def upload_clips(
 
 
 @logger.catch
-async def get_all_clip_file_meta(clips: ClipCollection, upload_dir: Path) -> None:
+async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> None:
+    upload_dir = root_conf.google.drive_folder
     logger.info('Updating clip metadata from Drive...')
     load_cache()
     schedulers = get_schedulers(limit=8)
     scheduler = schedulers['general']
     waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
-    async with get_client() as aiogoogle:
+    async with get_client(root_conf=root_conf) as aiogoogle:
         drive_v3 = cast(DriveResource, await aiogoogle.discover("drive", "v3"))
 
         async def get_meta(clip: Clip, key: ClipFileKey) -> bool:
@@ -594,8 +599,8 @@ async def get_all_clip_file_meta(clips: ClipCollection, upload_dir: Path) -> Non
         logger.info(f'Meta changed, saving cache file')
         save_cache()
 
-async def build_html(clips: ClipCollection, html_dir: Path, upload_dir: Path) -> str:
-    await get_all_clip_file_meta(clips, upload_dir)
+async def build_html(clips: ClipCollection, html_dir: Path, root_conf: Config) -> str:
+    await get_all_clip_file_meta(clips, root_conf=root_conf)
 
     def link_callback(clip: Clip, key: ClipFileKey) -> str|None:
         meta = find_cached_file_meta(clip.id, key)
