@@ -23,16 +23,47 @@ export interface ClipsIndexResp {
   root_dir: string;
 }
 
+
+interface FetchErrorPayload {
+  aborted?: boolean;
+  url: URL|string;
+  status: number;
+  statusText: string;
+}
+
+class FetchError extends Error {
+  readonly payload: FetchErrorPayload;
+  constructor(payload: FetchErrorPayload) {
+    const msg = payload.aborted ? 'Connection aborted' : `${payload.status} - ${payload.statusText}`;
+    super(msg);
+    this.name = 'FetchError';
+    this.payload = payload;
+  }
+}
+
 export const getTextData = async(path: string) => {
   const url = getUrl(path);
   const req = await fetch(url);
   return await req.text();
 };
 
+
+const getFetchResp = async(url: URL|string) => {
+  try {
+    return await fetch(url, {cache: 'no-cache'});
+  } catch (e) {
+    throw new FetchError({url: url, aborted: true, status: 0, statusText: ''});
+  }
+};
+
 const getJsonData = async(path: string) => {
   const url = getUrl(path);
-  const req = await fetch(url, {cache: 'no-cache'});
-  return await req.json();
+  const req = await getFetchResp(url);
+  const data = await req.json();
+  if (!req.ok) {
+    throw new FetchError({url: url, status: req.status, statusText: req.statusText});
+  }
+  return data;
 };
 
 export const getItem = async(path: string) => {
