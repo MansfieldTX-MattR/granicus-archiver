@@ -23,8 +23,8 @@ class BaseConfig(Serializable):
         """Update the config from keyword arguments
         """
 
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def build_defaults(cls, **kwargs) -> Self:
         """Create the config using defaults
 
