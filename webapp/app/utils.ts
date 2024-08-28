@@ -1,9 +1,11 @@
 import 'server-only';
+import { headers } from 'next/headers';
 
 import type { ClipId, Clip, ClipResp } from "./model";
 import { deserialize } from "./model";
 
 const HOST_PATH = process.env.CONTENT_HOST_PATH;
+const HOST_PATH_PUBLIC = process.env.CONTENT_HOST_PATH_PUBLIC;
 
 interface ClipMainResp {
   base_dir: string;
@@ -125,9 +127,26 @@ export function getFileUrl(rootPath: string, path: string, clip?: Clip): URL {
   return getUrl(pathParts.join('/'));
 }
 
-export function getUrl(path: string): URL {
-  let baseUrl = HOST_PATH;
-  if (!baseUrl) throw new Error('CONTENT_HOST_PATH not set');
+export function getPublicHost(): string {
+  if (HOST_PATH_PUBLIC) return HOST_PATH_PUBLIC;
+  let h = headers().get('host');
+  if (!h) {
+    console.warn('could not get hostname');
+    throw new Error(`could not get hostname`);
+  }
+  if (!(h.includes('://'))) h = `http://${h}`;
+  return h;
+}
+
+export function getUrl(path: string, asPublic?: boolean): URL {
+  let baseUrl;
+  if (asPublic) {
+    baseUrl = getPublicHost();
+  } else {
+    baseUrl = HOST_PATH;
+    if (!baseUrl) throw new Error('CONTENT_HOST_PATH not set');
+  }
+
   if (!baseUrl.endsWith('/')) baseUrl = `${baseUrl}/`;
   const fullPath = `${baseUrl}${path}`;
   return new URL(fullPath);

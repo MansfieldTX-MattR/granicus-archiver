@@ -14,9 +14,9 @@ export default async function Page({params}: {params: {clipId: ClipId}}) {
   // const clipRootData = await getClipRootData();
   const clip = await getClipIndexData(indexClip);
   const videoPath = clip.files.video;
-  const videoUrl = videoPath ? getUrl(videoPath) : undefined;
+  const videoUrl = videoPath ? getUrl(videoPath, true) : undefined;
   const chaptersPath = clip.files.chapters;
-  const chaptersUrl = chaptersPath ? getUrl(chaptersPath) : undefined;
+  const chaptersUrl = chaptersPath ? getUrl(chaptersPath, true) : undefined;
 
   return (
     // <Section title={clip.data.name} level={1}>

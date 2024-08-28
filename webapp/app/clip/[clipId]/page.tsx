@@ -42,7 +42,7 @@ const ClipInfo = ({clip}: {clip: Clip}) => {
   const linkDisplays = linkKeys.map((key) => {
     const fileName = clip.files[key];
     // if (!fileName) return <></>;
-    const link = fileName ? <a href={getUrl(fileName).toString()}>Download</a> : <span className="text-slate-500">unavailable</span>
+    const link = fileName ? <a href={getUrl(fileName, true).toString()}>Download</a> : <span className="text-slate-500">unavailable</span>
     return (
       <InfoDisplay key={key} title={key} value={link} />
     );
