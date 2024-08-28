@@ -32,7 +32,8 @@ class Element:
         self._content = content
         self.parent = parent
         self.has_close_tag = has_close_tag
-        self.children: list[Self] = []
+        children: list[Self] = []
+        self.children = children
 
     @property
     def content(self) -> str|None:
