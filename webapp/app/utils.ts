@@ -47,7 +47,9 @@ export const getClipData = async(clipId: ClipId): Promise<Clip> => {
 export const getClipsIndexData = async(): Promise<ClipIndexResp[]> => {
   const data: ClipsIndexResp = await getJsonData('data/clip-index.json');
   const clipsById: {[k: ClipId]: ClipIndexResp} = Object.fromEntries(data.clips.map((clip) => [clip.id, clip]));
-  const clipIds = data.clips.map((clip) => parseInt(clip.id)).toSorted((a, b) => (a - b)).toReversed();
+  const clipIds = data.clips.map((clip) => parseInt(clip.id));
+  clipIds.sort((a, b) => (a - b));
+  clipIds.reverse();
   const clips = clipIds.map((clipId) => clipsById[clipId.toString()]);
   return clips;
 };
