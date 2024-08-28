@@ -1,4 +1,4 @@
-from typing import Coroutine, Any
+from typing import Coroutine, Any, cast
 import asyncio
 import pytest
 import pytest_asyncio
@@ -100,6 +100,7 @@ async def test_waiter_hash(scheduler):
 
 @pytest.mark.asyncio
 async def test_waiters(waiter_jobs):
+    waiter_jobs = cast(WaiterJobs, waiter_jobs)
     w: JobWaiters[int] = JobWaiters()
 
     for job, i in waiter_jobs.items():
@@ -118,6 +119,7 @@ async def test_waiters(waiter_jobs):
 
 @pytest.mark.asyncio
 async def test_as_completed(waiter_jobs):
+    waiter_jobs = cast(WaiterJobs, waiter_jobs)
     w: JobWaiters[int] = JobWaiters()
 
     for job, i in waiter_jobs.items():
@@ -133,6 +135,7 @@ async def test_as_completed(waiter_jobs):
 
 @pytest.mark.asyncio
 async def test_async_for(waiter_jobs):
+    waiter_jobs = cast(WaiterJobs, waiter_jobs)
     w: JobWaiters[int] = JobWaiters()
 
     for job, i in waiter_jobs.items():
@@ -162,6 +165,7 @@ async def test_waiters_await(waiter_jobs):
 
 @pytest.mark.asyncio
 async def test_waiter_await(waiter_jobs):
+    waiter_jobs = cast(WaiterJobs, waiter_jobs)
     w: JobWaiters[int] = JobWaiters()
 
     for job, i in waiter_jobs.items():
