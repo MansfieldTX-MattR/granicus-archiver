@@ -76,7 +76,17 @@ export const getClipData = async(clipId: ClipId): Promise<Clip> => {
 };
 
 export const getClipsIndexData = async(): Promise<ClipIndexResp[]> => {
-  const data: ClipsIndexResp = await getJsonData('data/clip-index.json');
+  let data: ClipsIndexResp;
+  try {
+    data = await getJsonData('data/clip-index.json');
+  } catch(e) {
+    if (e instanceof FetchError) {
+      console.warn(`FetchError for "${e.payload.url}": "${e.message}"`);
+      return [];
+    } else {
+      throw e;
+    }
+  }
   const clipsById: {[k: ClipId]: ClipIndexResp} = Object.fromEntries(data.clips.map((clip) => [clip.id, clip]));
   const clipIds = data.clips.map((clip) => parseInt(clip.id));
   clipIds.sort((a, b) => (a - b));
