@@ -84,6 +84,12 @@ class JobResult(Generic[T]):
             raise asyncio.InvalidStateError()
         return self._result
 
+    def raise_exc(self) -> None:
+        """Raise the :attr:`exception` if it exists
+        """
+        if self.exception is not None:
+            raise self.exception
+
 
 
 class JobWaiters(
