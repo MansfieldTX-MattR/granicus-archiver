@@ -1,10 +1,15 @@
 from typing import Coroutine, Any, cast
 import asyncio
+import datetime
+
 import pytest
 import pytest_asyncio
 import aiojobs
 
-from granicus_archiver.utils import JobWaiter, JobWaiters, JobResult
+from granicus_archiver.utils import (
+    JobWaiter, JobWaiters, JobResult,
+    seconds_to_time_str,
+)
 
 WaiterCoros = dict[int, Coroutine[Any, Any, int]]
 WaiterJobs = dict[aiojobs.Job, int]
@@ -196,3 +201,12 @@ async def test_spawn(scheduler, waiter_coros):
         await check_waiter_result(w, r, i)
 
     assert not len(w)
+
+
+def test_seconds_to_time_str():
+    for h in range(23):
+        for m in range(59):
+            for s in range(59):
+                td = datetime.timedelta(hours=h, minutes=m, seconds=s)
+                time_str = seconds_to_time_str(int(td.total_seconds()))
+                assert time_str == f'{h:02d}:{m:02d}:{s:02d}'
