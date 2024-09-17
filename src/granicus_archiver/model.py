@@ -298,6 +298,25 @@ class ClipFiles(Serializable):
         self.metadata[key] = meta
         return meta
 
+    def check_agenda_packet_file(self, meta: FileMeta|None = None) -> bool:
+        if self.agenda_packet is not None:
+            return False
+        full_filename = self.clip.get_file_path('agenda_packet', absolute=True)
+        if not full_filename.exists():
+            return False
+        self.agenda_packet = self.build_path(self.clip.root_dir, 'agenda_packet')
+        if meta is None:
+            st = full_filename.stat()
+            dt = datetime.datetime.fromtimestamp(st.st_mtime).astimezone(UTC)
+            meta = FileMeta(
+                content_length=st.st_size,
+                content_type='application/pdf',
+                last_modified=dt,
+                etag=None,
+            )
+        self.metadata['agenda_packet'] = meta
+        return True
+
     def check_chapters_file(self) -> bool:
         """Check for an existing :attr:`chapters` file
 
@@ -320,6 +339,25 @@ class ClipFiles(Serializable):
         )
         self.metadata['chapters'] = meta
         return True
+
+    def check(self):
+        keys_checked: set[ClipFileUploadKey] = set()
+        for key, p in self.iter_existing(for_download=False):
+            full_p = self.clip.get_file_path(key, absolute=True)
+            if not full_p.exists():
+                continue
+            st = full_p.stat()
+            meta = self.get_metadata(key)
+            assert meta is not None
+            assert meta.content_length == st.st_size
+            keys_checked.add(key)
+        for key in self.metadata.keys():
+            if key in keys_checked:
+                continue
+            full_p = self.clip.get_file_path(key, absolute=True)
+            assert full_p.exists()
+            st = full_p.stat()
+            assert st == meta.content_length
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {

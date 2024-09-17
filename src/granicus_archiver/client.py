@@ -185,6 +185,7 @@ async def download_clip(session: ClientSession, clip: Clip):
     logger.success(f'clip "{clip.unique_name}" complete')
 
 def check_clip_files(clip: Clip):
+    clip.files.check()
     for key, url, filename in clip.iter_url_paths():
         if not filename.exists():
             continue
@@ -198,6 +199,7 @@ def check_clip_files(clip: Clip):
             logger.warning(f'Size mismatch for "{filename}"')
             filename.unlink()
 
+@logger.catch
 def check_all_clip_files(clips: ClipCollection):
     for clip in clips:
         if clip.complete:
