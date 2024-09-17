@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import click
 from aiohttp import ClientSession
+from yarl import URL
 
 from .config import Config
 from .model import ClipCollection, AgendaTimestampCollection, ClipsIndex
@@ -12,6 +13,7 @@ from . import client
 from . import html_builder
 from .googledrive import auth as googleauth
 from .googledrive import client as googleclient
+from .legistar import client as legistar_client
 
 
 @dataclass
@@ -39,6 +41,17 @@ class BaseContext:
     help='Filename to store download information. Defaults to "<out-dir>/data.json"',
 )
 @click.option(
+    '--legistar-data-file',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    required=False,
+    help='Filename to store legistar information. Defaults to "<out-dir>/legistar-data.json"',
+)
+@click.option(
+    '--legistar-feed-url',
+    type=str, required=False,
+    help='RSS Feed URL for Legistar calendar events',
+)
+@click.option(
     '--timestamp-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
@@ -50,11 +63,16 @@ def cli(
     config_file: Path,
     out_dir: Path,
     data_file: Path|None,
+    legistar_data_file: Path|None,
+    legistar_feed_url: str|None,
     timestamp_file: Path|None
 ):
+    feed_url = None if legistar_feed_url is None else URL(legistar_feed_url)
     conf_kw = dict(
         out_dir=out_dir,
         data_file=data_file,
+        legistar_data_file=legistar_data_file,
+        legistar_feed_url=feed_url,
         timestamp_file=timestamp_file,
     )
     conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
@@ -64,6 +82,11 @@ def cli(
             config.save(config_file)
     else:
         config = Config.build_defaults(**conf_kw)
+        config.save(config_file)
+    if config.legistar_feed_url is None:
+        feed_url = click.prompt('Please enter the Legistar RSS Feed URL', type=str)
+        feed_url = URL(feed_url)
+        config.update(legistar_feed_url=feed_url)
         config.save(config_file)
 
     ctx.obj = BaseContext(
@@ -94,6 +117,18 @@ def check(obj: BaseContext):
     """
     clips = ClipCollection.load(obj.config.data_file)
     client.check_all_clip_files(clips)
+
+    feed_url = obj.config.legistar_feed_url
+    if feed_url is None:
+        return
+    asyncio.run(legistar_client.amain(
+        data_file=obj.config.data_file,
+        legistar_data_file=obj.config.legistar_data_file,
+        legistar_feed_url=feed_url,
+        legistar_category_maps=obj.config.legistar_category_maps,
+        max_clips=0,
+        check_only=True,
+    ))
 
 @cli.command
 @click.pass_obj
@@ -146,6 +181,38 @@ def download(
         max_clips=max_clips,
         folder=folder,
     ))
+
+@cli.command
+@click.option('--granicus-folder', type=str, prompt=True)
+@click.option('--legistar-category', type=str, prompt=True)
+@click.pass_obj
+def add_legistar_category_map(obj: BaseContext, granicus_folder: str, legistar_category: str):
+    obj.config.update(legistar_category_maps={granicus_folder: legistar_category})
+    obj.config.save(obj.config_file)
+    click.echo('category map added')
+
+@cli.command
+@click.option(
+    '--max-clips', type=int, required=False, default=0, show_default=True,
+    help='Maximum number of clips to download agenda packets for. If zero, downloads are disabled',
+)
+@click.pass_obj
+def parse_legistar(obj: BaseContext, max_clips: int):
+    # if obj.config.legistar_feed_url
+    feed_url = obj.config.legistar_feed_url
+    if feed_url is None:
+        feed_url = click.prompt('Please enter the Legistar RSS Feed URL', type=str)
+        feed_url = URL(feed_url)
+        obj.config.update(legistar_feed_url=feed_url)
+        obj.config.save(obj.config_file)
+    asyncio.run(legistar_client.amain(
+        data_file=obj.config.data_file,
+        legistar_data_file=obj.config.legistar_data_file,
+        legistar_feed_url=feed_url,
+        legistar_category_maps=obj.config.legistar_category_maps,
+        max_clips=max_clips,
+    ))
+
 
 @cli.command
 @click.argument(

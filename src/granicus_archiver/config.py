@@ -3,7 +3,9 @@ from typing import ClassVar, Any, Self
 from abc import ABC, abstractmethod
 from pathlib import Path
 from os import PathLike
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from yarl import URL
 
 from yaml import (
     load as yaml_load,
@@ -94,10 +96,14 @@ class Config(BaseConfig):
     timestamp_file: Path
     """Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.yaml"
     """
+    legistar_data_file: Path
+    legistar_feed_url: URL|None
+
     google: GoogleConfig
     """:class:`GoogleConfig` instance
     """
 
+    legistar_category_maps: dict[str,str] = field(default_factory=dict)
     default_filename: ClassVar[Path] = Path.home() / '.granicus.conf.yaml'
 
     @classmethod
@@ -134,7 +140,7 @@ class Config(BaseConfig):
             self.out_dir = out_dir_abs.relative_to(Path.cwd())
             changed = True
 
-        path_attrs = ['data_file', 'timestamp_file']
+        path_attrs = ['data_file', 'legistar_data_file', 'timestamp_file']
 
         for key, val in kwargs.items():
             if val is None:
@@ -143,6 +149,13 @@ class Config(BaseConfig):
                 assert isinstance(val, Path)
                 setattr(self, key, val)
                 changed = True
+            elif key == 'legistar_feed_url':
+                if not isinstance(val, URL):
+                    val = URL(val)
+                setattr(self, key, val)
+                changed = True
+            elif key == 'legistar_category_maps':
+                self.legistar_category_maps.update(val)
             elif key == 'google':
                 if self.google.update(**val):
                     changed = True
@@ -154,10 +167,16 @@ class Config(BaseConfig):
         out_dir_abs = out_dir.resolve()
         # out_dir_abs: Path = kwargs.get('out_dir', Path.cwd() / 'data')
         # out_dir = out_dir_abs.relative_to(Path.cwd())
+        feed_url = kwargs.get('legistar_feed_url')
+        if feed_url is not None:
+            feed_url = URL(feed_url)
         default_kw = dict(
             out_dir=out_dir,
             out_dir_abs=out_dir_abs,
             data_file=out_dir / 'data.json',
+            legistar_data_file=out_dir / 'legistar-data.json',
+            legistar_feed_url=feed_url,
+            legistar_category_maps={},
             timestamp_file=out_dir / 'timestamp-data.yaml',
             google=GoogleConfig.build_defaults(**kwargs.get('google', {}))
         )
@@ -166,16 +185,30 @@ class Config(BaseConfig):
         return cls(**kwargs)
 
     def serialize(self) -> dict[str, Any]:
-        path_attrs = ['out_dir', 'out_dir_abs', 'data_file', 'timestamp_file']
+        path_attrs = ['out_dir', 'out_dir_abs', 'data_file', 'legistar_data_file', 'timestamp_file']
         d: dict[str, object] = {k: str(getattr(self, k)) for k in path_attrs}
         d['google'] = self.google.serialize()
+        d['legistar_feed_url'] = None if self.legistar_feed_url is None else str(self.legistar_feed_url)
+        d['legistar_category_maps'] = self.legistar_category_maps
         return d
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         path_attrs = ['out_dir', 'out_dir_abs', 'data_file', 'timestamp_file']
         kw = {k: Path(data[k]) for k in path_attrs}
+        legistar_data_file = data.get('legistar_data_file')
+        if legistar_data_file is not None:
+            legistar_data_file = Path(legistar_data_file)
+        else:
+            def_obj = cls.build_defaults(**kw)
+            legistar_data_file = def_obj.legistar_data_file
+        kw['legistar_data_file'] = legistar_data_file
+        feed_url = data.get('legistar_feed_url')
+        if feed_url is not None:
+            feed_url = URL(feed_url)
         return cls(
             google=GoogleConfig.deserialize(data['google']),
+            legistar_feed_url=feed_url,
+            legistar_category_maps=data.get('legistar_category_maps', {}),
             **kw
         )
