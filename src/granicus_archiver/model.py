@@ -30,7 +30,7 @@ CLIP_TZ = zoneinfo.ZoneInfo('US/Central')
 
 CLIP_ID = str
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
-ClipFileUploadKey = ClipFileKey | Literal['chapters']
+ClipFileUploadKey = ClipFileKey | Literal['chapters', 'agenda_packet']
 
 Headers = MultiMapping[str]|dict[str, str]
 
@@ -234,6 +234,8 @@ class ClipFiles(Serializable):
     chapters: Path|None = None
     """WebVTT chapters filename (built by :meth:`AgendaTimestamps.build_vtt`)
     """
+    agenda_packet: Path|None = None
+    """Agenda packet (parsed from :class:`.legistar.detail_page.DetailPageResult`)"""
     metadata: dict[ClipFileUploadKey, FileMeta] = field(default_factory=dict)
     """:class:`FileMeta` for each file (if available)"""
 
@@ -254,6 +256,8 @@ class ClipFiles(Serializable):
         """
         if key == 'chapters':
             return root_dir / 'chapters.vtt'
+        elif key == 'agenda_packet':
+            return root_dir / 'agenda_packet.pdf'
         suffixes: dict[ClipFileKey, str] = {
             'agenda':'.pdf',
             'minutes':'.pdf',
@@ -358,14 +362,18 @@ class ClipFiles(Serializable):
 
                 key:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
                     if *for_download* it True)
+
                 filename: The relative :class:`Path` for the file
 
         """
         for attr, p in self:
             if p is not None:
                 yield attr, p
-        if not for_download and self.chapters is not None:
-            yield 'chapters', self.chapters
+        if not for_download:
+            if self.chapters is not None:
+                yield 'chapters', self.chapters
+            if self.agenda_packet is not None:
+                yield 'agenda_packet', self.agenda_packet
 
     def serialize(self) -> dict[str, Any]:
         d = {}
@@ -375,6 +383,7 @@ class ClipFiles(Serializable):
                 val = str(val)
             d[attr] = val
         d['chapters'] = str(self.chapters) if self.chapters else None
+        d['agenda_packet'] = str(self.agenda_packet) if self.agenda_packet else None
         d['metadata'] = {mkey: mval.serialize() for mkey, mval in self.metadata.items()}
         return d
 
