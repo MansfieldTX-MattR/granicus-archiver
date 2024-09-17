@@ -153,6 +153,10 @@ class ParseClipData(Serializable):
         if self.player_link is None and other.player_link is not None:
             self.player_link = other.player_link
 
+    def update(self, other: Self) -> None:
+        if self.location != other.location:
+            self.location = other.location
+
     def serialize(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)
         d['original_links'] = self.original_links.serialize()
@@ -824,6 +828,7 @@ class ClipCollection(Serializable):
                 oth_p.check(self_p)
                 if self_p.actual_links is None and oth_p.actual_links is not None:
                     c = oth_clip
+            oth_clip.parse_data.update(self_clip.parse_data)
             all_clips[key] = c
         assert set(all_clips.keys()) == self_keys | oth_keys
         return dataclasses.replace(self, clips=all_clips)
