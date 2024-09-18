@@ -14,6 +14,7 @@ from . import html_builder
 from .googledrive import auth as googleauth
 from .googledrive import client as googleclient
 from .legistar import client as legistar_client
+from . import set_local_timezone
 
 
 @dataclass
@@ -41,6 +42,9 @@ class BaseContext:
     help='Filename to store download information. Defaults to "<out-dir>/data.json"',
 )
 @click.option(
+    '--local-timezone', type=str, required=False,
+)
+@click.option(
     '--legistar-data-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
@@ -63,6 +67,7 @@ def cli(
     config_file: Path,
     out_dir: Path,
     data_file: Path|None,
+    local_timezone: str|None,
     legistar_data_file: Path|None,
     legistar_feed_url: str|None,
     timestamp_file: Path|None
@@ -71,6 +76,7 @@ def cli(
     conf_kw = dict(
         out_dir=out_dir,
         data_file=data_file,
+        local_timezone_name=local_timezone,
         legistar_data_file=legistar_data_file,
         legistar_feed_url=feed_url,
         timestamp_file=timestamp_file,
@@ -83,6 +89,11 @@ def cli(
     else:
         config = Config.build_defaults(**conf_kw)
         config.save(config_file)
+    if config.local_timezone_name is None:
+        tzname = click.prompt('Please enter the local timezone name', type=str)
+        assert len(tzname)
+        config.update(local_timezone_name=tzname)
+        config.save(config_file)
     if config.legistar_feed_url is None:
         feed_url = click.prompt('Please enter the Legistar RSS Feed URL', type=str)
         feed_url = URL(feed_url)
@@ -93,6 +104,8 @@ def cli(
         config=config,
         config_file=config_file,
     )
+    set_local_timezone(config.local_timezone)
+
 
 @cli.command
 @click.pass_obj

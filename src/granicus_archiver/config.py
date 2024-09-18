@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from os import PathLike
 from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo
 
 from yarl import URL
 
@@ -103,8 +104,15 @@ class Config(BaseConfig):
     """:class:`GoogleConfig` instance
     """
 
+    local_timezone_name: str|None
     legistar_category_maps: dict[str,str] = field(default_factory=dict)
     default_filename: ClassVar[Path] = Path.home() / '.granicus.conf.yaml'
+
+    @property
+    def local_timezone(self) -> ZoneInfo:
+        if self.local_timezone_name is None:
+            raise ValueError('local timezone not set')
+        return ZoneInfo(self.local_timezone_name)
 
     @classmethod
     def load(cls, filename: PathLike) -> Self:
@@ -159,6 +167,8 @@ class Config(BaseConfig):
             elif key == 'google':
                 if self.google.update(**val):
                     changed = True
+            elif key == 'local_timezone_name':
+                self.local_timezone_name = val
         return changed
 
     @classmethod
@@ -178,6 +188,7 @@ class Config(BaseConfig):
             legistar_feed_url=feed_url,
             legistar_category_maps={},
             timestamp_file=out_dir / 'timestamp-data.yaml',
+            local_timezone_name=None,
             google=GoogleConfig.build_defaults(**kwargs.get('google', {}))
         )
         for key, val in default_kw.items():
@@ -190,6 +201,7 @@ class Config(BaseConfig):
         d['google'] = self.google.serialize()
         d['legistar_feed_url'] = None if self.legistar_feed_url is None else str(self.legistar_feed_url)
         d['legistar_category_maps'] = self.legistar_category_maps
+        d['local_timezone_name'] = self.local_timezone_name
         return d
 
     @classmethod
@@ -210,5 +222,6 @@ class Config(BaseConfig):
             google=GoogleConfig.deserialize(data['google']),
             legistar_feed_url=feed_url,
             legistar_category_maps=data.get('legistar_category_maps', {}),
+            local_timezone_name=data.get('local_timezone_name'),
             **kw
         )

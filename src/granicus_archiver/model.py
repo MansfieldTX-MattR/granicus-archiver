@@ -26,13 +26,17 @@ from .utils import seconds_to_time_str
 # __all__ = ('CLIP_ID', 'ParseClipData', 'ClipCollection')
 
 UTC = datetime.timezone.utc
-CLIP_TZ = zoneinfo.ZoneInfo('US/Central')
 
 CLIP_ID = str
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
 ClipFileUploadKey = ClipFileKey | Literal['chapters', 'agenda_packet']
 
 Headers = MultiMapping[str]|dict[str, str]
+
+
+def set_timezone(tz: zoneinfo.ZoneInfo) -> None:
+    ParseClipData.set_timezone(tz)
+
 
 class Serializable(ABC):
 
@@ -110,12 +114,27 @@ class ParseClipData(Serializable):
 
     date_fmt: ClassVar[str] = '%Y-%m-%d'
 
+    _timezone: ClassVar[zoneinfo.ZoneInfo|None] = None
+
+    @classmethod
+    def set_timezone(cls, tz: zoneinfo.ZoneInfo) -> None:
+        cls._timezone = tz
+
+    @classmethod
+    def get_zimezone(cls) -> zoneinfo.ZoneInfo:
+        assert cls._timezone is not None
+        return cls._timezone
+
+    @property
+    def timezone(self) -> zoneinfo.ZoneInfo:
+        return self.get_zimezone()
+
     @property
     def datetime(self) -> datetime.datetime:
         """The clip's datetime (derived from the :attr:`date`)
         """
         dt = datetime.datetime.fromtimestamp(self.date)
-        return dt.replace(tzinfo=CLIP_TZ)
+        return dt.replace(tzinfo=self.timezone)
 
     @property
     def title_name(self) -> str:
@@ -623,8 +642,7 @@ class Clip(Serializable):
 
     @property
     def datetime(self) -> datetime.datetime:
-        dt = datetime.datetime.fromtimestamp(self.parse_data.date)
-        return dt.replace(tzinfo=CLIP_TZ)
+        return self.parse_data.datetime
 
     @property
     def duration(self):

@@ -10,7 +10,7 @@ from loguru import logger
 from yarl import URL
 from pyquery.pyquery import PyQuery
 
-from ..model import Serializable, Clip, CLIP_ID, CLIP_TZ
+from ..model import Serializable, Clip, CLIP_ID
 
 GUID = str
 Category = str
@@ -52,6 +52,9 @@ class DatetimeError(ParseError):
     """
     error_type = 'datetime'
 
+
+def set_timezone(tz: ZoneInfo) -> None:
+    FeedItem.set_timezone(tz)
 
 def parse_pubdate(dtstr: str) -> datetime.datetime:
     dt = datetime.datetime.strptime(dtstr, PUBDATE_FMT)
@@ -126,8 +129,18 @@ class FeedItem(Serializable):
     """Date and time the meeting was published (not the meeting date/time)
     """
 
-    TZ: ClassVar = CLIP_TZ
+
+    _TZ: ClassVar[ZoneInfo|None] = None
     """Local timezone used to parse :attr:`meeting_date`"""
+
+    @classmethod
+    def set_timezone(cls, tz: ZoneInfo) -> None:
+        cls._TZ = tz
+
+    @classmethod
+    def get_timezone(cls) -> ZoneInfo:
+        assert cls._TZ is not None
+        return cls._TZ
 
     @classmethod
     def from_rss(cls, elem: PyQuery) -> Self:
@@ -157,7 +170,8 @@ class FeedItem(Serializable):
         dt_str = ' - '.join(title_spl[-2:])
         dt_fmt = '%m/%d/%Y - %I:%M %p'
         dt = datetime.datetime.strptime(dt_str, dt_fmt)
-        dt = dt.replace(tzinfo=cls.TZ).astimezone(UTC)
+        tz = cls.get_timezone()
+        dt = dt.replace(tzinfo=tz).astimezone(UTC)
         return real_title, dt
 
 

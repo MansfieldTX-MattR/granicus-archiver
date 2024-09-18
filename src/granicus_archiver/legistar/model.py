@@ -89,7 +89,7 @@ class DetailPageResult(Serializable):
             get_elem_text(doc, 'time'),
         ])
         dt = datetime.datetime.strptime(dt_str, dt_fmt)
-        dt = dt.replace(tzinfo=feed_item.TZ)
+        dt = dt.replace(tzinfo=feed_item.get_timezone())
         assert dt == feed_item.meeting_date
         assert get_elem_text(doc, 'title') == feed_item.title
 
