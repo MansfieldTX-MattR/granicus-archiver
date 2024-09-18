@@ -1,7 +1,9 @@
 from typing import Literal, Iterator, overload, TYPE_CHECKING
 from pathlib import Path
 
+import datetime
 from yarl import URL
+from loguru import logger
 # from pyquery import PyQuery as pq
 
 from .model import CLIP_ID, ParseClipData, ParseClipLinks, ClipCollection
@@ -9,6 +11,14 @@ from .model import CLIP_ID, ParseClipData, ParseClipLinks, ClipCollection
 # if TYPE_CHECKING:
 from pyquery.pyquery import PyQuery
 
+
+def parse_clip_dt_str(dt_str: str) -> datetime.datetime:
+    tz = ParseClipData.get_zimezone()
+    utc = datetime.timezone.utc
+    dt_fmt = '%m/%d/%y %H:%M'
+    dt_p = datetime.datetime.strptime(dt_str, dt_fmt)
+    dt_p = dt_p.replace(tzinfo=utc).astimezone(tz)
+    return dt_p
 
 
 
@@ -50,7 +60,7 @@ class MultipleResults(ParseError): ...
 #     return result
 
 
-def parse_page(response: str|bytes, base_dir: Path, scheme: str) -> ClipCollection:
+def parse_page(response: str|bytes, base_dir: Path, scheme: str, use_dt_str: bool = True) -> ClipCollection:
     doc = PyQuery(response)
     clips = ClipCollection(base_dir=base_dir)
     data_root = doc.find('.list-root > table').eq(0)
@@ -64,7 +74,7 @@ def parse_page(response: str|bytes, base_dir: Path, scheme: str) -> ClipCollecti
     # for clip_row in find_many(tbody, 'tr.clip-row'):
     # clip_rows = tbody.find('tr.clip-row')
     for clip_row in tbody.find('tr.clip-row').items():
-        parse_clip = parse_clip_row(clip_row, scheme=scheme)
+        parse_clip = parse_clip_row(clip_row, scheme=scheme, use_dt_str=use_dt_str)
         clips.add_clip(parse_clip)
     return clips
 
@@ -87,7 +97,7 @@ def elem_attr(elem: PyQuery, name: str) -> str:
 # We just care about the first argument to `window.open()`, but there doesn't
 # seem to be any better way than just parsing it out
 
-def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
+def parse_clip_row(elem: PyQuery, scheme: str, use_dt_str: bool) -> ParseClipData:
     data_type_map = {
         'string':str,
         'integer':int,
@@ -101,7 +111,16 @@ def parse_clip_row(elem: PyQuery, scheme: str) -> ParseClipData:
         data_key = elem_attr(td, 'data-key')
         data_type = elem_attr(td, 'data-type')
         py_type = data_type_map[data_type]
-        if attr_in(td, 'data-value'):
+        if data_key == 'date' and use_dt_str:
+            # The generated timestamp from Granicus is off by one day for
+            # some clips.  Use the formatted datetime string instead because
+            # for some reason that's correct.
+            # Why would they need to worry about consistency or correctness?
+            str_val = td.text()
+            assert isinstance(str_val, str)
+            dt = parse_clip_dt_str(str_val)
+            str_val = str(int(dt.timestamp()))
+        elif attr_in(td, 'data-value'):
             str_val = elem_attr(td, 'data-value')
             if data_key == 'player_link':
                 assert str_val.startswith('window.open(') and str_val.endswith(')')
