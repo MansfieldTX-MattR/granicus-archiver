@@ -106,13 +106,7 @@ class Client:
         logger.info('parsing detail pages')
         for clip_id, guid in self.legistar_data.get_unmatched_clips_with_guids():
             feed_item = feed[guid]
-            await self.waiter.spawn(
-                # self.detail_parser.parse_page(clip_id, feed_item)
-                self.parse_detail_page(clip_id, feed_item)
-            )
-        logger.debug('waiting for detail_waiter')
-        results = await self.waiter.gather()
-        for result in results:
+            result = await self.parse_detail_page(clip_id, feed_item)
             self.legistar_data.add_match(result)
         logger.success('detail wait complete')
 
