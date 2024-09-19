@@ -89,6 +89,16 @@ class ParseClipLinks(Serializable):
             if val is not None:
                 yield attr, val
 
+    def merge(self, other: ParseClipLinks) -> bool:
+        """Merge any data missing in *self* from *other*
+        """
+        changed = False
+        for key, oth_val in other.iter_existing():
+            if self[key] is None:
+                setattr(self, key, oth_val)
+                changed = True
+        return changed
+
     def serialize(self) -> dict[str, Any]:
         return {k: str(v) if v else v for k,v in self}
 
@@ -157,6 +167,22 @@ class ParseClipData(Serializable):
         """
         return f'{self.id}_{self.title_name}'
 
+    def iter_incomplete_links(self) -> Iterator[tuple[ClipFileKey, URL]]:
+        """Iterate over links existing in :attr:`original_links` but missing
+        from :attr:`actual_links`
+        """
+        for key, url in self.original_links.iter_existing():
+            if self.actual_links is None:
+                yield key, url
+            elif key not in self.actual_links:
+                yield key, url
+
+    def has_incomplete_links(self):
+        """Check if any links in :attr:`original_links` are missing from
+        :attr:`actual_links`
+        """
+        return len([key for key in self.iter_incomplete_links()]) > 0
+
     def build_fs_dir(self, root_dir: Path|None, replace_invalid: bool = True) -> Path:
         """Create a path for the clip within the given *root_dir*
 
@@ -176,6 +202,7 @@ class ParseClipData(Serializable):
     def check(self, other: Self) -> None:
         """Check *other* for any missing data in self
         """
+        self.original_links.merge(other.original_links)
         if self.player_link is None and other.player_link is not None:
             self.player_link = other.player_link
 
@@ -315,6 +342,20 @@ class ClipFiles(Serializable):
                 return False
         return True
 
+    def ensure_path(self, key: ClipFileUploadKey) -> None:
+        """Ensure path for *key* is set on the instance
+
+        Raises:
+            ValueError: If the file does not exist
+        """
+        if key in self:
+            return
+        rel_p = self.clip.get_file_path(key, absolute=False)
+        abs_p = self.clip.get_file_path(key, absolute=True)
+        if not abs_p.exists():
+            raise ValueError(f'File does not exist for "{key}": {abs_p}')
+        self[key] = rel_p
+
     def get_metadata(self, key: ClipFileUploadKey) -> FileMeta|None:
         """Get the :class:`FileMeta` for the given file type (if available)
         """
@@ -383,10 +424,11 @@ class ClipFiles(Serializable):
         for key in self.metadata.keys():
             if key in keys_checked:
                 continue
+            meta = self.metadata[key]
             full_p = self.clip.get_file_path(key, absolute=True)
             assert full_p.exists()
             st = full_p.stat()
-            assert st == meta.content_length
+            assert st.st_size == meta.content_length
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {

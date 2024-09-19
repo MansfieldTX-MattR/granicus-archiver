@@ -93,18 +93,22 @@ async def replace_pdf_links(
     session: ClientSession,
     parse_clip: ParseClipData,
 ) -> ParseClipData:
-    if parse_clip.actual_links is not None:
+    if not parse_clip.has_incomplete_links():
         return parse_clip
     link_kw = {}
-    for key, url in parse_clip.original_links.iter_existing():
+    for key, url in parse_clip.iter_incomplete_links():
         real_key = key.split('_')[0]
         if key == 'audio' or key == 'video':
             link_kw[real_key] = url
             continue
         real_url = await get_real_pdf_link(session, url)
-        link_kw[real_key] = real_url
-    links = ParseClipLinks(**link_kw)
-    parse_clip.actual_links = links
+        if parse_clip.actual_links is not None:
+            parse_clip.actual_links[key] = real_url
+        else:
+            link_kw[real_key] = real_url
+    if parse_clip.actual_links is None:
+        links = ParseClipLinks(**link_kw)
+        parse_clip.actual_links = links
     return parse_clip
 
 
@@ -112,7 +116,7 @@ async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -
     scheduler = get_scheduler('general')
     jobs: set[aiojobs.Job[ParseClipData]] = set()
     for clip in clips:
-        if clip.parse_data.actual_links is not None:
+        if not clip.parse_data.has_incomplete_links():
             continue
         job = await scheduler.spawn(replace_pdf_links(session, clip.parse_data))
         jobs.add(job)
@@ -156,6 +160,7 @@ async def download_clip(session: ClientSession, clip: Clip):
     async def copy_clip_to_dest(key: ClipFileKey, src_file: Path, dst_file: Path) -> None:
         if is_same_filesystem(src_file, dst_file):
             src_file.rename(dst_file)
+            clip.files.ensure_path(key)
             return
         chunk_size = 64*1024
         logger.debug(f'copying "{clip.unique_name} - {key}"')
@@ -166,6 +171,7 @@ async def download_clip(session: ClientSession, clip: Clip):
                     await dst_fd.write(chunk)
         logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
         src_file.unlink()
+        clip.files.ensure_path(key)
 
     logger.info(f'downloading clip "{clip.unique_name}"')
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -202,8 +208,6 @@ def check_clip_files(clip: Clip):
 @logger.catch
 def check_all_clip_files(clips: ClipCollection):
     for clip in clips:
-        if clip.complete:
-            continue
         check_clip_files(clip)
 
 
