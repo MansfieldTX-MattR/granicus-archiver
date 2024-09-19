@@ -1027,7 +1027,6 @@ class ClipIndex(Serializable):
 
         """
         if not self.data_file.parent.exists():
-            logger.debug(f'skipping {self.data_file}')
             return
         if not exist_ok and self.data_file.exists():
             raise Exception(f'Data file exists: {self.data_file}')
