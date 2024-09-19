@@ -73,6 +73,13 @@ class ParseClipLinks(Serializable):
         assert key in self.link_attrs
         return getattr(self, key)
 
+    def __setitem__(self, key: ClipFileKey, val: URL|None) -> None:
+        assert key in self.link_attrs
+        setattr(self, key, val)
+
+    def __contains__(self, key: ClipFileKey):
+        return self[key] is not None
+
     def __iter__(self) -> Iterator[tuple[ClipFileKey, URL|None]]:
         for attr in self.link_attrs:
             yield attr, self[attr]
@@ -263,6 +270,9 @@ class ClipFiles(Serializable):
     """:class:`FileMeta` for each file (if available)"""
 
     path_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
+    all_path_attrs: ClassVar[list[ClipFileUploadKey]] = [
+        'agenda', 'minutes', 'audio', 'video', 'chapters', 'agenda_packet',
+    ]
 
     @classmethod
     def from_parse_data(cls, clip: Clip, parse_data: ParseClipData) -> Self:
@@ -390,8 +400,16 @@ class ClipFiles(Serializable):
         # return self.__class__
 
     def __getitem__(self, key: ClipFileUploadKey) -> Path|None:
-        assert key in self.path_attrs
+        assert key in self.all_path_attrs
         return getattr(self, key)
+
+    def __setitem__(self, key: ClipFileUploadKey, value: Path) -> None:
+        assert key in self.all_path_attrs
+        assert self[key] is None
+        setattr(self, key, value)
+
+    def __contains__(self, key: ClipFileUploadKey):
+        return self[key] is not None
 
     def __iter__(self) -> Iterator[tuple[ClipFileKey, Path|None]]:
         for attr in self.path_attrs:
