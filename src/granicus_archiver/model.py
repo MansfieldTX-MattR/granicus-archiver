@@ -916,6 +916,14 @@ class ClipCollection(Serializable):
     def merge(self, other: ClipCollection) -> ClipCollection:
         """Merge the clips in this instance with another
         """
+        def dt_diff(a: datetime.datetime, b: datetime.datetime) -> datetime.timedelta:
+            if a > b:
+                return a - b
+            return b - a
+
+        def dt_in_range(a: datetime.datetime, b: datetime.datetime) -> bool:
+            return dt_diff(a, b) <= datetime.timedelta(minutes=1)
+
         self_keys = set(self.clips.keys())
         oth_keys = set(other.clips.keys())
         missing_in_self = oth_keys - self_keys      # I Don't Have
@@ -939,6 +947,7 @@ class ClipCollection(Serializable):
             oth_clip = other[key]
             c = self_clip
             if self_clip != oth_clip:
+                assert dt_in_range(self_clip.datetime, oth_clip.datetime)
                 self_p, oth_p = self_clip.parse_data, oth_clip.parse_data
                 self_p.check(oth_p)
                 oth_p.check(self_p)
