@@ -17,8 +17,8 @@ from .rss_parser import ParseError, ParseErrorType, GUID, FeedItem
 ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet'
 ]
-AgendaStatus = str #Literal[...]
-MinutesStatus = str #Literal[...]
+AgendaStatus = Literal['Final', 'Draft', 'Not Viewable by the Public']
+MinutesStatus = Literal['Final', 'Draft']
 
 
 ELEM_ID_PREFIX = 'ctl00_ContentPlaceHolder1_'
