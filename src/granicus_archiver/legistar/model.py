@@ -10,8 +10,8 @@ import json
 from pyquery.pyquery import PyQuery
 from yarl import URL
 
-from ..model import CLIP_ID, Serializable, ClipCollection
-from .rss_parser import ParseError, ParseErrorType, GUID, FeedItem
+from ..model import CLIP_ID, Serializable
+from .rss_parser import GUID, FeedItem
 
 
 class IncompleteItemError(Exception):
@@ -24,10 +24,13 @@ class IncompleteItemError(Exception):
 
 
 ElementKey = Literal[
-    'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet'
+    'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet',
+    'agenda', 'minutes', 'video',
 ]
 AgendaStatus = Literal['Final', 'Draft', 'Not Viewable by the Public']
 MinutesStatus = Literal['Final', 'Draft']
+AgendaStatusItems: list[AgendaStatus] = ['Final', 'Draft', 'Not Viewable by the Public']
+MinutesStatusItems: list[MinutesStatus] = ['Final', 'Draft']
 
 
 ELEM_ID_PREFIX = 'ctl00_ContentPlaceHolder1_'
@@ -35,6 +38,9 @@ ELEM_IDS: dict[ElementKey, str] = {
     'title': 'hypName',
     'date': 'lblDate',
     'time': 'lblTime',
+    'agenda': 'hypAgenda',
+    'minutes': 'hypMinutes',
+    'video': 'hypVideo',
     'agenda_status': 'lblAgendaStatus',
     'minutes_status': 'lblMinutesStatus',
     'agenda_packet': 'hypAgendaPacket',
@@ -51,10 +57,17 @@ def get_elem_text(doc: PyQuery, key: ElementKey) -> str:
     assert isinstance(txt, str)
     return txt
 
-def get_elem_href(doc: PyQuery, key: ElementKey) -> URL|None:
+def get_elem_attr(doc: PyQuery, key: ElementKey, attr: str) -> str|None:
     elem_id = build_elem_id(key)
     elem = doc(f'#{elem_id}').eq(0)
-    href = elem.attr('href')
+    value = elem.attr(attr)
+    if value is None:
+        return None
+    assert isinstance(value, str)
+    return value
+
+def get_elem_href(doc: PyQuery, key: ElementKey) -> URL|None:
+    href = get_elem_attr(doc, key, 'href')
     if href is None:
         return None
     assert isinstance(href, str)
@@ -66,35 +79,99 @@ def url_with_origin(origin_url: URL, path_url: URL) -> URL:
 
 
 @dataclass
+class DetailPageLinks(Serializable):
+    """Links gathered from a meeting detail page
+    """
+    agenda: URL|None        #: Agenda URL
+    minutes: URL|None       #: Minutes URL
+    agenda_packet: URL|None #: Agenda Packet URL
+    video: URL|None         #: Video player URL
+
+    @classmethod
+    def from_html(cls, doc: PyQuery, feed_item: FeedItem) -> Self:
+        def parse_href(key: ElementKey) -> URL|None:
+            href = get_elem_href(doc, key)
+            if href is not None and not href.is_absolute():
+                href = url_with_origin(feed_item.link, href)
+            return href
+        keys: list[ElementKey] = ['agenda', 'minutes', 'agenda_packet']
+        kw = {key: parse_href(key) for key in keys}
+        vid_onclick = get_elem_attr(doc, 'video', 'onclick')
+        if vid_onclick is None:
+            vid_href = None
+        else:
+            # window.open('Video.aspx?Mode=Granicus&ID1=2203&Mode2=Video','video');return false;
+            assert vid_onclick.startswith("window.open('")
+            vid_href = vid_onclick.split("window.open('")[1].split("'")[0]
+            vid_href = URL(vid_href)
+            if not vid_href.is_absolute():
+                vid_href = url_with_origin(feed_item.link, vid_href)
+        kw['video'] = vid_href
+        return cls(**kw)
+
+    def get_clip_id_from_video(self) -> CLIP_ID|None:
+        """Parse the :attr:`clip_id <.model.Clip.id>` from the :attr:`video`
+        url (if it exists)
+        """
+        if self.video is None:
+            return None
+        clip_id = self.video.query.get('ID1')
+        if clip_id is not None:
+            clip_id = CLIP_ID(clip_id)
+        return clip_id
+
+    def serialize(self) -> dict[str, Any]:
+        data = dataclasses.asdict(self)
+        for key, val in data.items():
+            if isinstance(val, URL):
+                data[key] = str(val)
+        return data
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        kw = data.copy()
+        for key, val in kw.items():
+            if val is None:
+                continue
+            kw[key] = URL(val)
+        return cls(**kw)
+
+
+@dataclass
 class DetailPageResult(Serializable):
     """Data gathered from a meeting detail (``/MeetingDetail.aspx``) page
     """
-    clip_id: CLIP_ID
-    """The :attr:`.model.Clip.id` associated with the meeting"""
     page_url: URL
     """The detail page url (from :attr:`.rss_parser.FeedItem.link`)"""
     feed_guid: GUID
     """The :attr:`.rss_parser.FeedItem.guid`"""
-    # agenda_status: AgendaStatus
-    # """Agenda status"""
-    # minutes_status: MinutesStatus
-    # """Minutes status"""
-    agenda_packet_url: URL|None
-    """URL of the agenda packet (if it exists)"""
+    links: DetailPageLinks
+    """URL data"""
+    agenda_status: AgendaStatus
+    """Agenda status"""
+    minutes_status: MinutesStatus
+    """Minutes status"""
+
+    @property
+    def clip_id(self) -> CLIP_ID|None:
+        """The :attr:`clip_id <.model.Clip.id>` parsed from
+        :meth:`DetailPageLinks.get_clip_id_from_video`
+        """
+        return self.links.get_clip_id_from_video()
 
     @classmethod
     def from_html(
         cls,
         html_str: str|bytes,
-        clip_id: CLIP_ID,
         feed_item: FeedItem
     ) -> Self:
         """Create an instance from the raw html from :attr:`page_url`
         """
         doc = PyQuery(html_str)
         dt_fmt = '%m/%d/%Y - %I:%M %p'
-        agenda_status = get_elem_text(doc, 'agenda_status')
-        if agenda_status.strip(' ') == 'Not Viewable by the Public':
+        agenda_status = get_elem_text(doc, 'agenda_status').strip(' ')
+        assert agenda_status in AgendaStatusItems
+        if agenda_status == 'Not Viewable by the Public':
             raise IncompleteItemError()
         date_str, time_str = get_elem_text(doc, 'date'), get_elem_text(doc, 'time')
         if len(date_str.strip(' ')) and not len(time_str.strip(' ')):
@@ -106,44 +183,40 @@ class DetailPageResult(Serializable):
         assert dt == feed_item.meeting_date
         assert get_elem_text(doc, 'title') == feed_item.title
 
-        agenda_packet_url = get_elem_href(doc, 'agenda_packet')
-        if agenda_packet_url is not None and not agenda_packet_url.is_absolute():
-            agenda_packet_url = url_with_origin(feed_item.link, agenda_packet_url)
+        links = DetailPageLinks.from_html(doc, feed_item)
+        minutes_status = get_elem_text(doc, 'minutes_status')
+        assert minutes_status in MinutesStatusItems
         return cls(
-            clip_id=clip_id,
             page_url=feed_item.link,
             feed_guid=feed_item.guid,
-            # agenda_status=get_elem_text(doc, 'agenda_status'),
-            # minutes_status=get_elem_text(doc, 'minutes_status'),
-            agenda_packet_url=agenda_packet_url,
+            links=links,
+            agenda_status=agenda_status,
+            minutes_status=minutes_status,
         )
 
     def serialize(self) -> dict[str, Any]:
-        d = dataclasses.asdict(self)
-        for key, val in d.copy().items():
-            if isinstance(val, URL):
-                val = str(val)
-                d[key] = val
-        return d
+        return dict(
+            page_url=str(self.page_url),
+            feed_guid=self.feed_guid,
+            links=self.links.serialize(),
+            agenda_status=self.agenda_status,
+            minutes_status=self.minutes_status,
+        )
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         kw = data.copy()
-        for key in ['page_url', 'agenda_packet_url']:
-            val = kw[key]
-            if val is not None:
-                val = URL(val)
-            kw[key] = val
-        return cls(**kw)
+        kw['page_url'] = URL(kw['page_url'])
+        kw['links'] = DetailPageLinks.deserialize(kw['links'])
+        obj = cls(**kw)
+        assert isinstance(obj.links, DetailPageLinks)
+        return obj
 
 
 @dataclass
 class LegistarData(Serializable):
     """Container for data gathered from Legistar
     """
-    clips: ClipCollection
-    """:class:`.model.ClipCollection` instance"""
-
     feed_url: URL
     """URL used to parse the :class:`.rss_parser.Feed`"""
 
@@ -151,76 +224,82 @@ class LegistarData(Serializable):
     """:attr:`Clips <.model.Clip.id>` that have been matched to
     :attr:`FeedItems <.rss_parser.FeedItem.guid>`
     """
-
-    matched_clips: dict[CLIP_ID, DetailPageResult] = field(default_factory=dict)
+    detail_results: dict[GUID, DetailPageResult] = field(default_factory=dict)
     """Mapping of parsed :class:`DetailPageResult` items with their
-    :attr:`~DetailPageResult.clip_id` as keys
+    :attr:`~DetailPageResult.feed_guid` as keys
+    """
+    items_by_clip_id: dict[CLIP_ID, DetailPageResult] = field(default_factory=dict)
+    """Mapping of items in :attr:`detail_results` with a valid
+    :attr:`~DetailPageResult.clip_id`
     """
 
-    parse_error_clips: dict[CLIP_ID, ParseErrorType] = field(default_factory=dict)
-    """Errors encountered when attempting to match clips to FeedItems.
-    Values are :obj:`~.rss_parser.ParseErrorType`, using the clip ids as keys
-    """
+    def __post_init__(self) -> None:
+        for item in self.detail_results.values():
+            clip_id = item.clip_id
+            if clip_id is None:
+                continue
+            assert clip_id not in self.items_by_clip_id
+            self.items_by_clip_id[clip_id] = item
+
+    def find_match_for_clip_id(self, clip_id: CLIP_ID) -> DetailPageResult|None:
+        """Find a :class:`DetailPageResult` match for the given *clip_id*
+        """
+        return self.items_by_clip_id.get(clip_id)
 
     def add_guid_match(self, clip_id: CLIP_ID, guid: GUID) -> None:
-        """Add a ``Clip.id -> FeedItem`` match
+        """Add a ``Clip.id -> FeedItem`` match to :attr:`matched_guids`
+
+        This may seem redunant considering the :meth:`find_match_for_clip_id`
+        method, but is intended for adding matches for items without a
+        :attr:`~DetailPageLinks.video` url to parse.
         """
+        assert guid not in self.matched_guids.values()
         if clip_id in self.matched_guids:
             assert self.matched_guids[clip_id] == guid
             return
         self.matched_guids[clip_id] = guid
 
-    def add_match(self, item: DetailPageResult) -> None:
-        """Add a parsed :class:`DetailPageResult` to :attr:`matched_clips`
+    def add_detail_result(self, item: DetailPageResult) -> None:
+        """Add a parsed :class:`DetailPageResult` to :attr:`detail_results`
         """
-        assert item.clip_id not in self
-        self.matched_clips[item.clip_id] = item
-        if item.clip_id in self.parse_error_clips:
-            del self.parse_error_clips[item.clip_id]
+        assert item.feed_guid not in self.detail_results
+        self.detail_results[item.feed_guid] = item
+        clip_id = item.links.get_clip_id_from_video()
+        if clip_id is not None:
+            self.items_by_clip_id[clip_id] = item
 
-    def get_unmatched_clips(self) -> Iterator[CLIP_ID]:
-        """Iterate over all clip ids that have not been added to
-        :attr:`matched_clips`
+    def iter_guid_matches(self) -> Iterator[tuple[CLIP_ID, DetailPageResult]]:
+        """Iterate over items added by the :meth:`add_guid_match` method as
+        :obj:`CLIP_ID` and :class:`DetailPageResult` pairs
         """
-        matched = set(self.matched_clips.keys())
-        all_clip_ids = set(self.clips.clips.keys())
-        yield from all_clip_ids - matched
-
-    def get_unmatched_clips_with_guids(self) -> Iterator[tuple[CLIP_ID, GUID]]:
-        """Get all clip ids which have been matched to FeedItems, but have
-        not yet been parsed into :attr:`matched_clips`
-        """
-        for clip_id in self.get_unmatched_clips():
-            if clip_id in self.matched_guids:
-                yield clip_id, self.matched_guids[clip_id]
-
-    def add_parse_error(self, exc: ParseError) -> None:
-        """Store error information encountered during parsing
-        """
-        self.parse_error_clips[exc.clip_id] = exc.error_type
+        for clip_id, guid in self.matched_guids.items():
+            yield clip_id, self.detail_results[guid]
 
     def __len__(self):
-        return len(self.matched_clips)
+        return len(self.detail_results)
 
     def __iter__(self):
-        yield from self.matched_clips.values()
+        yield from self.detail_results.values()
 
-    def __contains__(self, key: CLIP_ID|DetailPageResult):
+    def __contains__(self, key: GUID|DetailPageResult):
         if isinstance(key, DetailPageResult):
-            key = key.clip_id
-        return key in self.matched_clips
+            key = key.feed_guid
+        return key in self.detail_results
 
-    def __getitem__(self, key: CLIP_ID) -> DetailPageResult:
-        return self.matched_clips[key]
+    def __getitem__(self, key: GUID) -> DetailPageResult:
+        return self.detail_results[key]
+
+    def get(self, key: GUID) -> DetailPageResult|None:
+        return self.detail_results.get(key)
 
     @classmethod
-    def load(cls, filename: PathLike, clips: ClipCollection) -> Self:
+    def load(cls, filename: PathLike) -> Self:
         """Loads an instance from previously saved data
         """
         if not isinstance(filename, Path):
             filename = Path(filename)
         data = json.loads(filename.read_text())
-        return cls.deserialize(data, clips)
+        return cls.deserialize(data)
 
     def save(self, filename: PathLike, indent: int|None = 2) -> None:
         """Saves all clip data as JSON to the given filename
@@ -231,24 +310,19 @@ class LegistarData(Serializable):
         filename.write_text(json.dumps(data, indent=indent))
 
     def serialize(self) -> dict[str, Any]:
-        d = {k:v.serialize() for k,v in self.matched_clips.items()}
         return dict(
             feed_url=str(self.feed_url),
             matched_guids=self.matched_guids,
-            matched_clips=d,
-            parse_error_clips=self.parse_error_clips,
+            detail_results={k:v.serialize() for k,v in self.detail_results.items()},
         )
 
     @classmethod
-    def deserialize(cls, data: dict[str, Any], clips: ClipCollection) -> Self:
-        matched_clips = data['matched_clips']
+    def deserialize(cls, data: dict[str, Any]) -> Self:
         return cls(
-            clips=clips,
             feed_url=URL(data['feed_url']),
             matched_guids=data['matched_guids'],
-            matched_clips={
+            detail_results={
                 k:DetailPageResult.deserialize(v)
-                for k,v in matched_clips.items()
+                for k,v in data['detail_results'].items()
             },
-            parse_error_clips=data['parse_error_clips'],
         )

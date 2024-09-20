@@ -302,6 +302,9 @@ class Feed(Serializable):
     def __len__(self):
         return len(self.items)
 
+    def __iter__(self):
+        yield from self.items.values()
+
     def serialize(self) -> dict[str, Any]:
         return {'item_list': [item.serialize() for item in self.item_list]}
 
