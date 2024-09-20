@@ -285,7 +285,7 @@ class Feed(Serializable):
         if min_delta not in deltas:
             min_delta = -min_delta
         dt_key = deltas[min_delta]
-        if min_delta > datetime.timedelta(hours=4):
+        if abs(min_delta) > datetime.timedelta(hours=4):
             _dt_key = dt_key.astimezone(clip.datetime.tzinfo)
             raise DatetimeError(clip.id, f'No datetime in range: {clip.name=}, {clip.datetime=}, {_dt_key=}')
             # raise ValueError('No datetime in range')
