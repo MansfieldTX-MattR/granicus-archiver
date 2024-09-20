@@ -14,6 +14,15 @@ from ..model import CLIP_ID, Serializable, ClipCollection
 from .rss_parser import ParseError, ParseErrorType, GUID, FeedItem
 
 
+class IncompleteItemError(Exception):
+    """Raised if a detail page is in an incomplete state
+
+    This can be the case if the agenda status is not public or if no
+    meeting time has been set.
+    """
+
+
+
 ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet'
 ]
@@ -84,10 +93,14 @@ class DetailPageResult(Serializable):
         """
         doc = PyQuery(html_str)
         dt_fmt = '%m/%d/%Y - %I:%M %p'
-        dt_str = ' - '.join([
-            get_elem_text(doc, 'date'),
-            get_elem_text(doc, 'time'),
-        ])
+        agenda_status = get_elem_text(doc, 'agenda_status')
+        if agenda_status.strip(' ') == 'Not Viewable by the Public':
+            raise IncompleteItemError()
+        date_str, time_str = get_elem_text(doc, 'date'), get_elem_text(doc, 'time')
+        if len(date_str.strip(' ')) and not len(time_str.strip(' ')):
+            raise IncompleteItemError()
+        dt_str = ' - '.join([date_str, time_str])
+
         dt = datetime.datetime.strptime(dt_str, dt_fmt)
         dt = dt.replace(tzinfo=feed_item.get_timezone())
         assert dt == feed_item.meeting_date
