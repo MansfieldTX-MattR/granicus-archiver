@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Self, Iterator, Iterable, Any, Literal, ClassVar
+from typing import NewType, Self, Iterator, Iterable, Any, Literal, ClassVar
 
 import dataclasses
 from dataclasses import dataclass
@@ -12,7 +12,7 @@ from pyquery.pyquery import PyQuery
 
 from ..model import Serializable, Clip, CLIP_ID
 
-GUID = str
+GUID = NewType('GUID', str)
 Category = str
 ItemDict = dict[GUID, 'FeedItem']
 
@@ -152,7 +152,7 @@ class FeedItem(Serializable):
         return cls(
             title=title,
             link=URL(get_elem_text(elem, 'link')),
-            guid=get_elem_text(elem, 'guid'),
+            guid=GUID(get_elem_text(elem, 'guid')),
             category=get_elem_text(elem, 'category'),
             meeting_date=dt,
             pub_date=parse_pubdate(get_elem_text(elem, 'pubDate')),

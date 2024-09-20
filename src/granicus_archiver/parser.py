@@ -104,7 +104,7 @@ def parse_clip_row(elem: PyQuery, scheme: str, use_dt_str: bool) -> ParseClipDat
         'URL':URL,
     }
 
-    clip_id: CLIP_ID = elem_attr(elem, 'data-clip-id')
+    clip_id = CLIP_ID(elem_attr(elem, 'data-clip-id'))
     kw = {}
     link_kw = {}
     for td in elem.find('td').items():

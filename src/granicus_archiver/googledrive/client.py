@@ -189,7 +189,7 @@ async def find_folder(
         async for page in res:
             for f in page['files']:
                 # logger.debug(f'{parent_id=}, {f.get("id")=}, {f.get("name")=}')
-                f_id: FileId = f.get('id')
+                f_id = f.get('id')
                 assert isinstance(f_id, str)
                 found_fids.append(f_id)
                 found_parts.append(folder_part)
@@ -389,7 +389,7 @@ async def _stream_upload_file(
     local_file: Path,
     upload_filename: Path,
     check_exists: bool = True,
-    folder_id: str|None = None
+    folder_id: FileId|None = None
 ) -> FileMetaFull|None:
     chunk_size = 64*1024
 
@@ -438,13 +438,13 @@ async def upload_clip(
     """
     waiter = JobWaiters[bool](scheduler=get_scheduler('uploads'))
     num_jobs = 0
-    drive_folder_id: str|None = None
+    drive_folder_id: FileId|None = None
 
     async def _do_upload(
         key: ClipFileUploadKey,
         filename: Path,
         upload_filename: Path,
-        folder_id: str|None
+        folder_id: FileId|None
     ) -> bool:
         meta = await _stream_upload_file(
             aiogoogle, drive_v3, filename, upload_filename, folder_id=folder_id,

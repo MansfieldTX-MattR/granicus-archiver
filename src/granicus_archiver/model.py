@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Self, ClassVar, Literal, Iterator, Any, overload
+from typing import NewType, Self, ClassVar, Literal, Iterator, Any, overload
 from abc import ABC, abstractmethod
 
 from os import PathLike
@@ -27,7 +27,7 @@ from .utils import seconds_to_time_str
 
 UTC = datetime.timezone.utc
 
-CLIP_ID = str
+CLIP_ID = NewType('CLIP_ID', str)
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
 ClipFileUploadKey = ClipFileKey | Literal['chapters', 'agenda_packet']
 
@@ -845,7 +845,7 @@ class ClipCollection(Serializable):
         result: dict[datetime.datetime, list[CLIP_ID]] = {}
         keys = [int(key) for key in self.clips.keys()]
         for int_key in sorted(keys):
-            key = str(int_key)
+            key = CLIP_ID(str(int_key))
             clip = self.clips[key]
             l = result.setdefault(clip.datetime, [])
             l.append(clip.id)

@@ -1,5 +1,8 @@
 from __future__ import annotations
-from typing import TypeVar, Generic, TypedDict, NotRequired, AsyncGenerator, Iterable
+from typing import (
+    NewType, TypeVar, Generic, TypedDict, NotRequired,
+    AsyncGenerator, Iterable,
+)
 
 from aiogoogle.client import Aiogoogle
 from aiogoogle.resource import GoogleAPI, Resource
@@ -12,11 +15,11 @@ __all__ = (
 
 T = TypeVar('T')
 
-FileId = str
+FileId = NewType('FileId', str)
 
 class FileMeta(TypedDict):
     name: str
-    id: NotRequired[str]
+    id: NotRequired[FileId]
     mimeType: NotRequired[str]
     parents: NotRequired[list[FileId]]
     size: NotRequired[str]
@@ -25,7 +28,7 @@ class FileMeta(TypedDict):
 
 class FileMetaFull(TypedDict):
     name: str
-    id: str
+    id: FileId
     mimeType: str
     parents: list[FileId]
     size: str
@@ -33,7 +36,7 @@ class FileMetaFull(TypedDict):
     webContentLink: str
 
 class FileUploadResponse(TypedDict):
-    id: str
+    id: FileId
 
 class FilePageResponse(TypedDict, Generic[T]):
     files: Iterable[T]
