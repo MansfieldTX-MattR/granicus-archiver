@@ -27,18 +27,18 @@ class Client:
     def __init__(
         self,
         clips: ClipCollection,
-        feed_url: URL,
+        feed_urls: dict[str, URL],
         legistar_category_maps: dict[str, Category],
         data_filename: Path,
     ) -> None:
         self.clips = clips
         self.data_filename = data_filename
-        self.feed_url = feed_url
+        self.feed_urls = feed_urls
         self.legistar_category_maps = legistar_category_maps
         if self.data_filename.exists():
             self.legistar_data = LegistarData.load(self.data_filename)
         else:
-            self.legistar_data = LegistarData(feed_url=feed_url)
+            self.legistar_data = LegistarData()
 
     async def open(self) -> None:
         self.session = ClientSession()
@@ -59,9 +59,8 @@ class Client:
     async def __aexit__(self, *args):
         await self.close()
 
-    async def parse_feed(self) -> Feed:
-        logger.info('parsing legistar feed')
-        async with self.session.get(self.feed_url) as resp:
+    async def parse_feed(self, feed_url: URL) -> Feed:
+        async with self.session.get(feed_url) as resp:
             if not resp.ok:
                 resp.raise_for_status()
             content = await resp.text()
@@ -70,6 +69,7 @@ class Client:
         for feed_item in feed.item_list:
             assert feed_item.guid in feed.items
             assert feed_item.guid in feed
+        logger.debug(f'{len(feed)=}')
         return feed
 
     async def parse_detail_page(self, feed_item: FeedItem) -> DetailPageResult:
@@ -84,7 +84,7 @@ class Client:
         )
 
     async def parse_detail_pages(self, feed: Feed):
-        logger.info('parsing detail pages')
+        logger.debug('parsing detail pages')
         for feed_item in feed:
             parsed_item = self.legistar_data.get(feed_item.guid)
             if parsed_item is not None:
@@ -95,7 +95,7 @@ class Client:
                 logger.warning(f'incomplete item: {feed_item.guid=}, {feed_item.category=}, {feed_item.title=}')
                 continue
             self.legistar_data.add_detail_result(result)
-        logger.success('detail wait complete')
+        logger.debug('detail wait complete')
 
     def match_clips_to_feed(self):
         for clip in self.clips:
@@ -106,10 +106,16 @@ class Client:
                 continue
             self.legistar_data.add_guid_match(clip.id, item.feed_guid)
 
+    async def parse_feeds(self):
+        for name, feed_url in self.feed_urls.items():
+            logger.info(f'parsing feed "{name}"')
+            feed = await self.parse_feed(feed_url)
+            await self.parse_detail_pages(feed)
+            self.legistar_data.save(self.data_filename)
+            logger.success(f'feed parse complete for "{name}"')
+
     async def parse_all(self):
-        feed = await self.parse_feed()
-        self.legistar_data.save(self.data_filename)
-        await self.parse_detail_pages(feed)
+        await self.parse_feeds()
         self.match_clips_to_feed()
         self.legistar_data.save(self.data_filename)
 
@@ -179,7 +185,7 @@ class Client:
 async def amain(
     data_file: Path,
     legistar_data_file: Path,
-    legistar_feed_url: URL,
+    legistar_feed_urls: dict[str, URL],
     legistar_category_maps: dict[str, Category],
     max_clips: int = 0,
     check_only: bool = False
@@ -188,7 +194,7 @@ async def amain(
     client = Client(
         clips=clips,
         data_filename=legistar_data_file,
-        feed_url=legistar_feed_url,
+        feed_urls=legistar_feed_urls,
         legistar_category_maps=legistar_category_maps,
     )
     client.check_files()

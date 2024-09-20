@@ -230,6 +230,9 @@ class Feed(Serializable):
             category_maps = {}
         self.item_list = [item for item in items]
         self.items = {item.guid: item for item in self.item_list}
+        assert len(self.items) == len(self.item_list)
+        if len(self.items) == 100:
+            logger.warning(f'Feed item count is exactly 100.  This may be missing items because Legistar thinks they can paginate RSS feeds!!!')
         self.items_by_category = self._get_items_by_category()
         self.category_maps = category_maps
 

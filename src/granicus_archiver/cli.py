@@ -51,11 +51,6 @@ class BaseContext:
     help='Filename to store legistar information. Defaults to "<out-dir>/legistar-data.json"',
 )
 @click.option(
-    '--legistar-feed-url',
-    type=str, required=False,
-    help='RSS Feed URL for Legistar calendar events',
-)
-@click.option(
     '--timestamp-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
@@ -69,16 +64,16 @@ def cli(
     data_file: Path|None,
     local_timezone: str|None,
     legistar_data_file: Path|None,
-    legistar_feed_url: str|None,
     timestamp_file: Path|None
 ):
-    feed_url = None if legistar_feed_url is None else URL(legistar_feed_url)
     conf_kw = dict(
         out_dir=out_dir,
         data_file=data_file,
         local_timezone_name=local_timezone,
-        legistar_data_file=legistar_data_file,
-        legistar_feed_url=feed_url,
+        legistar=dict(
+            out_dir=out_dir,
+            data_file=legistar_data_file,
+        ),
         timestamp_file=timestamp_file,
     )
     conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
@@ -94,17 +89,28 @@ def cli(
         assert len(tzname)
         config.update(local_timezone_name=tzname)
         config.save(config_file)
-    if config.legistar_feed_url is None:
-        feed_url = click.prompt('Please enter the Legistar RSS Feed URL', type=str)
-        feed_url = URL(feed_url)
-        config.update(legistar_feed_url=feed_url)
-        config.save(config_file)
 
     ctx.obj = BaseContext(
         config=config,
         config_file=config_file,
     )
     set_local_timezone(config.local_timezone)
+
+
+@cli.command
+@click.option('--name', type=str, prompt=True)
+@click.option('--url', type=str, prompt=True)
+@click.pass_obj
+def add_feed_url(obj: BaseContext, name: str, url: str):
+    """Add a legistar calendar RSS feed url
+    """
+    conf = obj.config.legistar
+    if name in conf.feed_urls:
+        if not click.confirm(f'URL exists for name "{name}".  Overwrite?'):
+            return
+    changed = conf.update(feed_urls={name: URL(url)})
+    if changed:
+        obj.config.save(obj.config_file)
 
 
 @cli.command
@@ -131,14 +137,11 @@ def check(obj: BaseContext):
     clips = ClipCollection.load(obj.config.data_file)
     client.check_all_clip_files(clips)
 
-    feed_url = obj.config.legistar_feed_url
-    if feed_url is None:
-        return
     asyncio.run(legistar_client.amain(
         data_file=obj.config.data_file,
-        legistar_data_file=obj.config.legistar_data_file,
-        legistar_feed_url=feed_url,
-        legistar_category_maps=obj.config.legistar_category_maps,
+        legistar_data_file=obj.config.legistar.data_file,
+        legistar_feed_urls=obj.config.legistar.feed_urls,
+        legistar_category_maps=obj.config.legistar.category_maps,
         max_clips=0,
         check_only=True,
     ))
@@ -211,18 +214,11 @@ def add_legistar_category_map(obj: BaseContext, granicus_folder: str, legistar_c
 )
 @click.pass_obj
 def parse_legistar(obj: BaseContext, max_clips: int):
-    # if obj.config.legistar_feed_url
-    feed_url = obj.config.legistar_feed_url
-    if feed_url is None:
-        feed_url = click.prompt('Please enter the Legistar RSS Feed URL', type=str)
-        feed_url = URL(feed_url)
-        obj.config.update(legistar_feed_url=feed_url)
-        obj.config.save(obj.config_file)
     asyncio.run(legistar_client.amain(
         data_file=obj.config.data_file,
-        legistar_data_file=obj.config.legistar_data_file,
-        legistar_feed_url=feed_url,
-        legistar_category_maps=obj.config.legistar_category_maps,
+        legistar_data_file=obj.config.legistar.data_file,
+        legistar_feed_urls=obj.config.legistar.feed_urls,
+        legistar_category_maps=obj.config.legistar.category_maps,
         max_clips=max_clips,
     ))
 

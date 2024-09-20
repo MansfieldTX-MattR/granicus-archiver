@@ -217,8 +217,6 @@ class DetailPageResult(Serializable):
 class LegistarData(Serializable):
     """Container for data gathered from Legistar
     """
-    feed_url: URL
-    """URL used to parse the :class:`.rss_parser.Feed`"""
 
     matched_guids: dict[CLIP_ID, GUID] = field(default_factory=dict)
     """:attr:`Clips <.model.Clip.id>` that have been matched to
@@ -311,7 +309,6 @@ class LegistarData(Serializable):
 
     def serialize(self) -> dict[str, Any]:
         return dict(
-            feed_url=str(self.feed_url),
             matched_guids=self.matched_guids,
             detail_results={k:v.serialize() for k,v in self.detail_results.items()},
         )
@@ -319,7 +316,6 @@ class LegistarData(Serializable):
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         return cls(
-            feed_url=URL(data['feed_url']),
             matched_guids=data['matched_guids'],
             detail_results={
                 k:DetailPageResult.deserialize(v)
