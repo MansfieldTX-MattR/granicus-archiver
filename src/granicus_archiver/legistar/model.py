@@ -27,10 +27,10 @@ ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet',
     'agenda', 'minutes', 'video',
 ]
-AgendaStatus = Literal['Final', 'Draft', 'Not Viewable by the Public']
-MinutesStatus = Literal['Final', 'Draft']
-AgendaStatusItems: list[AgendaStatus] = ['Final', 'Draft', 'Not Viewable by the Public']
-MinutesStatusItems: list[MinutesStatus] = ['Final', 'Draft']
+AgendaStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+AgendaStatusItems: list[AgendaStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+MinutesStatusItems: list[MinutesStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 
 
 ELEM_ID_PREFIX = 'ctl00_ContentPlaceHolder1_'
