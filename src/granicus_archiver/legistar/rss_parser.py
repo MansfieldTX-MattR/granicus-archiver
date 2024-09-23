@@ -164,13 +164,24 @@ class FeedItem(Serializable):
         # they put the meeting date and time in the title string like this:
         # "{RealMeetingTitle} - MM/DD/YYYY - HH:MM AM"
         # I mean, why not?  Cities just give them money regardless, right?
+        dt_fmt = '%m/%d/%Y - %I:%M %p'
+        tz = cls.get_timezone()
         title_spl = title.split(' - ')
+        if len(title_spl) == 2:
+            # This is for another stupid case where no meeting time was set
+            # smh... I'm just chasing down years of incompetent programming
+            #
+            # Check to make sure there's at least a valid date string
+            maybe_date_str = title_spl[1]
+            assert len(maybe_date_str.split('/')) == 3
+            maybe_date_str = f'{maybe_date_str} - 12:00 PM'
+            maybe_datetime = datetime.datetime.strptime(maybe_date_str, dt_fmt).replace(tzinfo=cls.get_timezone())
+            title_spl = [title_spl[0]]
+            title_spl.extend(maybe_datetime.strftime(dt_fmt).split(' - '))
         assert len(title_spl) >= 3
         real_title = ' - '.join(title_spl[:-2])
         dt_str = ' - '.join(title_spl[-2:])
-        dt_fmt = '%m/%d/%Y - %I:%M %p'
         dt = datetime.datetime.strptime(dt_str, dt_fmt)
-        tz = cls.get_timezone()
         dt = dt.replace(tzinfo=tz).astimezone(UTC)
         return real_title, dt
 
