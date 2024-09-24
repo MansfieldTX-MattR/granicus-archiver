@@ -11,7 +11,7 @@ from pyquery.pyquery import PyQuery
 from yarl import URL
 
 from ..model import CLIP_ID, Serializable
-from .rss_parser import GUID, FeedItem
+from .rss_parser import GUID, REAL_GUID, FeedItem, get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info
 
 
 class IncompleteItemError(Exception):
@@ -159,6 +159,10 @@ class DetailPageResult(Serializable):
         """
         return self.links.get_clip_id_from_video()
 
+    @property
+    def real_guid(self) -> REAL_GUID:
+        return get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(self.feed_guid)
+
     @classmethod
     def from_html(
         cls,
@@ -239,6 +243,9 @@ class LegistarData(Serializable):
             assert clip_id not in self.items_by_clip_id
             self.items_by_clip_id[clip_id] = item
 
+    def get_real_guids(self) -> set[REAL_GUID]:
+        return set([item.real_guid for item in self])
+
     def find_match_for_clip_id(self, clip_id: CLIP_ID) -> DetailPageResult|None:
         """Find a :class:`DetailPageResult` match for the given *clip_id*
         """
@@ -261,6 +268,7 @@ class LegistarData(Serializable):
         """Add a parsed :class:`DetailPageResult` to :attr:`detail_results`
         """
         assert item.feed_guid not in self.detail_results
+        assert item.real_guid not in self.get_real_guids()
         self.detail_results[item.feed_guid] = item
         clip_id = item.links.get_clip_id_from_video()
         if clip_id is not None:

@@ -13,6 +13,7 @@ from pyquery.pyquery import PyQuery
 from ..model import Serializable, Clip, CLIP_ID
 
 GUID = NewType('GUID', str)
+REAL_GUID = NewType('REAL_GUID', str)
 Category = str
 ItemDict = dict[GUID, 'FeedItem']
 
@@ -69,6 +70,15 @@ def get_elem_text(elem: PyQuery, selector: str|None = None) -> str:
     txt = elem.text()
     assert isinstance(txt, str)
     return txt.strip(' ')
+
+def get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid: GUID) -> REAL_GUID:
+    segment_lengths = [8, 4, 4, 4, 12]
+    num_segments = 5
+    segments = guid.split('-')[:num_segments]
+    for segment, seg_len in zip(segments, segment_lengths):
+        assert len(segment) == seg_len
+    # rg = '-'.join(guid.split('-')[:num_segments])
+    return REAL_GUID('-'.join(segments))
 
 
 @dataclass
@@ -157,6 +167,14 @@ class FeedItem(Serializable):
             meeting_date=dt,
             pub_date=parse_pubdate(get_elem_text(elem, 'pubDate')),
         )
+
+    @property
+    def real_guid(self) -> REAL_GUID:
+        """The portion of :attr:`guid` that IS ACTUALLY A GUID
+        (With the ridiculous date-time portion of it removed.. really, I'm not making this up)
+        """
+        return get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(self.guid)
+
 
     @classmethod
     def parse_dt_from_title_because_granicus_is_lazy_and_doesnt_include_the_event_datetime_in_their_rss_feeds(cls, title: str) -> tuple[str, datetime.datetime]:
