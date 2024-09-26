@@ -149,6 +149,10 @@ def check(obj: BaseContext):
         max_clips=0,
         check_only=True,
     ))
+    leg_items = leg_client_obj.get_item_count()
+    leg_files = leg_client_obj.get_file_count()
+    click.echo('Check complete')
+    click.echo(f'Legistar: item_count={leg_items}, file_count={leg_files}')
 
 @cli.command
 @click.pass_obj
@@ -212,15 +216,17 @@ def add_legistar_category_map(obj: BaseContext, granicus_folder: str, legistar_c
     click.echo('category map added')
 
 @cli.command
+@click.option('--allow-updates/--no-allow-updates', default=False)
 @click.option(
     '--max-clips', type=int, required=False, default=0, show_default=True,
     help='Maximum number of clips to download agenda packets for. If zero, downloads are disabled',
 )
 @click.pass_obj
-def parse_legistar(obj: BaseContext, max_clips: int):
+def parse_legistar(obj: BaseContext, allow_updates: bool, max_clips: int):
     asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=max_clips,
+        allow_updates=allow_updates,
     ))
 
 
