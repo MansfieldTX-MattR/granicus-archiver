@@ -13,8 +13,11 @@ from pyquery.pyquery import PyQuery
 from ..model import Serializable, Clip, CLIP_ID
 
 GUID = NewType('GUID', str)
+"""Globally-Unique ID (but not really in this case)"""
 REAL_GUID = NewType('REAL_GUID', str)
+"""The part of a :obj:`GUID` that is actually a GUID"""
 Category = NewType('Category', str)
+"""Feed category"""
 ItemDict = dict[GUID, 'FeedItem']
 
 UTC = ZoneInfo('UTC')
