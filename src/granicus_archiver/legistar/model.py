@@ -11,7 +11,7 @@ from pyquery.pyquery import PyQuery
 from yarl import URL
 
 from ..model import CLIP_ID, Serializable
-from .rss_parser import GUID, REAL_GUID, FeedItem, get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info
+from .rss_parser import GUID, REAL_GUID, FeedItem
 
 
 class IncompleteItemError(Exception):
@@ -154,6 +154,8 @@ class DetailPageResult(Serializable):
     """Agenda status"""
     minutes_status: MinutesStatus
     """Minutes status"""
+    feed_item: FeedItem
+    """The :class:`~.rss_parser.FeedItem` associated with this instance"""
 
     @property
     def clip_id(self) -> CLIP_ID|None:
@@ -163,8 +165,32 @@ class DetailPageResult(Serializable):
         return self.links.get_clip_id_from_video()
 
     @property
+    def is_final(self) -> bool:
+        """``True`` if :attr:`agenda_status` and :attr:`minutes_status` are
+        final
+        """
+        agenda = self.agenda_status == 'Final' or self.agenda_status == 'Final-Addendum'
+        minutes = self.minutes_status == 'Final' or self.minutes_status == 'Final-Addendum'
+        return agenda and minutes
+
+    @property
+    def is_draft(self) -> bool:
+        """``True`` if :attr:`agenda_status` or :attr:`minutes_status` are set
+        to "Draft"
+        """
+        return self.agenda_status == 'Draft' or self.minutes_status == 'Draft'
+
+    @property
+    def is_future(self) -> bool:
+        """Alias for :attr:`.rss_parser.FeedItem.is_future`
+        """
+        return self.feed_item.is_future
+
+    @property
     def real_guid(self) -> REAL_GUID:
-        return get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(self.feed_guid)
+        """Alias for :attr:`.rss_parser.FeedItem.real_guid`
+        """
+        return self.feed_item.real_guid
 
     @classmethod
     def from_html(
@@ -200,6 +226,7 @@ class DetailPageResult(Serializable):
             links=links,
             agenda_status=agenda_status,
             minutes_status=minutes_status,
+            feed_item=feed_item,
         )
 
     def serialize(self) -> dict[str, Any]:
@@ -210,6 +237,7 @@ class DetailPageResult(Serializable):
             links=self.links.serialize(),
             agenda_status=self.agenda_status,
             minutes_status=self.minutes_status,
+            feed_item=self.feed_item.serialize(),
         )
 
     @classmethod
@@ -217,6 +245,7 @@ class DetailPageResult(Serializable):
         kw = data.copy()
         kw['page_url'] = URL(kw['page_url'])
         kw['links'] = DetailPageLinks.deserialize(kw['links'])
+        kw['feed_item'] = FeedItem.deserialize(kw['feed_item'])
         obj = cls(**kw)
         assert isinstance(obj.links, DetailPageLinks)
         return obj
@@ -248,6 +277,22 @@ class LegistarData(Serializable):
             assert clip_id not in self.items_by_clip_id
             self.items_by_clip_id[clip_id] = item
 
+    def get_future_items(self) -> Iterator[DetailPageResult]:
+        """Iterate over any items in :attr:`detail_results` that are in the
+        :attr:`future <.rss_parser.FeedItem.is_future>`
+        """
+        for item in self:
+            if item.is_future:
+                yield item
+
+    def ensure_no_future_items(self) -> None:
+        """Ensure there are no items in :attr:`detail_results` that are in the
+        :attr:`future <.rss_parser.FeedItem.is_future>`
+        """
+        for item in self:
+            if item.is_future:
+                raise ValueError(f'item is in the future: {item.feed_guid=}')
+
     def get_real_guids(self) -> set[REAL_GUID]:
         return set([item.real_guid for item in self])
 
@@ -272,8 +317,12 @@ class LegistarData(Serializable):
     def add_detail_result(self, item: DetailPageResult) -> None:
         """Add a parsed :class:`DetailPageResult` to :attr:`detail_results`
         """
+        assert not item.is_future
         assert item.feed_guid not in self.detail_results
-        assert item.real_guid not in self.get_real_guids()
+        if item.real_guid in self.get_real_guids():
+            d = {item.real_guid: item.feed_guid for item in self}
+            oth_guid = d[item.real_guid]
+            raise KeyError(f'real_guid exists: {item.feed_guid=}, {oth_guid=}')
         self.detail_results[item.feed_guid] = item
         clip_id = item.links.get_clip_id_from_video()
         if clip_id is not None:
