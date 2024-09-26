@@ -227,9 +227,12 @@ class JobWaiters(
 
 
         """
-        done, pending = await self.wait(return_when=asyncio.FIRST_COMPLETED)
-        for job in done:
-            yield job
+        while True:
+            done, pending = await self.wait(return_when=asyncio.FIRST_COMPLETED)
+            for job in done:
+                yield job
+            if not len(pending):
+                break
 
     def __aiter__(self):
         return self.as_completed()
@@ -249,6 +252,8 @@ class JobWaiters(
 
         """
         waiters = set(self.waiters.values())
+        if not len(waiters):
+            return []
         result = await asyncio.gather(*waiters)
         for waiter in waiters:
             self.discard(waiter)
