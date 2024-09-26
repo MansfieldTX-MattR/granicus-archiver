@@ -338,7 +338,10 @@ class Feed(Serializable):
             # raise ValueError('No datetime in range')
 
 
-        return items_by_dt[dt_key]
+        item = items_by_dt[dt_key]
+        assert item.meeting_date == dt_key
+        assert abs(clip_dt - item.meeting_date) <= datetime.timedelta(hours=4)
+        return item
 
     def __getitem__(self, key: GUID) -> FeedItem:
         return self.items[key]
