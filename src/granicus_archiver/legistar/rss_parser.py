@@ -14,7 +14,7 @@ from ..model import Serializable, Clip, CLIP_ID
 
 GUID = NewType('GUID', str)
 REAL_GUID = NewType('REAL_GUID', str)
-Category = str
+Category = NewType('Category', str)
 ItemDict = dict[GUID, 'FeedItem']
 
 UTC = ZoneInfo('UTC')
@@ -175,7 +175,7 @@ class FeedItem(Serializable):
             title=title,
             link=URL(get_elem_text(elem, 'link')),
             guid=GUID(get_elem_text(elem, 'guid')),
-            category=get_elem_text(elem, 'category'),
+            category=Category(get_elem_text(elem, 'category')),
             meeting_date=dt,
             pub_date=parse_pubdate(get_elem_text(elem, 'pubDate')),
         )
@@ -315,7 +315,7 @@ class Feed(Serializable):
             DatetimeError: If a match could not be found for clip's the datetime
 
         """
-        cat: Category = clip.location
+        cat = clip.location
         if cat in self.category_maps:
             cat = self.category_maps[cat]
         if cat not in self.items_by_category:

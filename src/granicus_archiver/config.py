@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar, Any, Self
+from typing import ClassVar, Any, Self, TYPE_CHECKING
 from abc import ABC, abstractmethod
 from pathlib import Path
 from os import PathLike
@@ -16,6 +16,8 @@ from yaml import (
 )
 
 from .model import Serializable
+if TYPE_CHECKING:
+    from .legistar.rss_parser import Category
 
 
 
@@ -98,7 +100,7 @@ class LegistarConfig(BaseConfig):
     feed_urls: dict[str, URL] = field(default_factory=dict)
     """Mapping of calendar RSS feed urls with user-defined names as keys
     """
-    category_maps: dict[str, str] = field(default_factory=dict)
+    category_maps: dict[str, Category] = field(default_factory=dict)
     """A :class:`dict` of any custom mappings to match the
     :attr:`Clip.location <.model.Clip.location>` fields to their appropriate
     :attr:`.legistar.rss_parser.FeedItem.category`
