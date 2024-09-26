@@ -689,16 +689,24 @@ class Clip(Serializable):
     _chapters_filename: ClassVar[str] = 'chapters.vtt'
 
     @property
-    def id(self) -> CLIP_ID: return self.parse_data.id
+    def id(self) -> CLIP_ID:
+        """Alias for :attr:`ParseClipData.id`"""
+        return self.parse_data.id
 
     @property
-    def name(self) -> str: return self.parse_data.name
+    def name(self) -> str:
+        """Alias for :attr:`ParseClipData.name`"""
+        return self.parse_data.name
 
     @property
-    def unique_name(self) -> str: return self.parse_data.unique_name
+    def unique_name(self) -> str:
+        """Alias for :attr:`ParseClipData.unique_name`"""
+        return self.parse_data.unique_name
 
     @property
-    def location(self) -> str: return self.parse_data.location
+    def location(self) -> str:
+        """Alias for :attr:`ParseClipData.location`"""
+        return self.parse_data.location
 
     @property
     def datetime(self) -> datetime.datetime:
