@@ -478,9 +478,7 @@ class DetailPageResult(Serializable):
         """``True`` if :attr:`agenda_status` and :attr:`minutes_status` are
         final
         """
-        agenda = self.agenda_status == 'Final' or self.agenda_status == 'Final-Addendum'
-        minutes = self.minutes_status == 'Final' or self.minutes_status == 'Final-Addendum'
-        return agenda and minutes
+        return self.agenda_status == 'Final' or self.agenda_status == 'Final-Addendum'
 
     @property
     def is_draft(self) -> bool:
