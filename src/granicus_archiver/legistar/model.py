@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Self, Any, Iterator, Literal
+from typing import NewType, Self, Any, Iterator, Literal
 from pathlib import Path
 from os import PathLike
 import datetime
@@ -25,12 +25,17 @@ class IncompleteItemError(Exception):
 
 ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet',
-    'agenda', 'minutes', 'video', 'location',
+    'agenda', 'minutes', 'video', 'location', 'attachments',
 ]
 AgendaStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 AgendaStatusItems: list[AgendaStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 MinutesStatusItems: list[MinutesStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+
+AttachmentName = NewType('AttachmentName', str)
+"""Type variable to associate keys in :attr:`DetailPageLinks.attachments` with
+:attr:`AttachmentFile.name`
+"""
 
 
 ELEM_ID_PREFIX = 'ctl00_ContentPlaceHolder1_'
@@ -41,6 +46,7 @@ ELEM_IDS: dict[ElementKey, str] = {
     'agenda': 'hypAgenda',
     'minutes': 'hypMinutes',
     'video': 'hypVideo',
+    'attachments': 'ucAttachments_lblAttachments',
     'agenda_status': 'lblAgendaStatus',
     'minutes_status': 'lblMinutesStatus',
     'agenda_packet': 'hypAgendaPacket',
@@ -67,7 +73,37 @@ def get_elem_attr(doc: PyQuery, key: ElementKey, attr: str) -> str|None:
     assert isinstance(value, str)
     return value
 
+
+def get_attachments_hrefs(doc: PyQuery, origin_url: URL|None = None) -> dict[AttachmentName, URL]:
+    elem_id = build_elem_id('attachments')
+    elem = doc(f'#{elem_id}')
+    if not elem.length:
+        return {}
+    elem = elem.eq(0)
+    anchors = elem('a')
+    if not len(anchors):
+        return {}
+    results: dict[AttachmentName, URL] = {}
+    for anchor in anchors.items():
+        href = anchor.attr('href')
+        if href is None:
+            continue
+        assert isinstance(href, str)
+        href = URL(href)
+        if origin_url is not None and not href.is_absolute():
+            href = url_with_origin(origin_url, href)
+        lbl = anchor.text()
+        assert isinstance(lbl, str)
+        key = AttachmentName(lbl)
+        assert key not in results
+        assert href not in results.values()
+        results[key] = href
+    return results
+
+
 def get_elem_href(doc: PyQuery, key: ElementKey) -> URL|None:
+    if key == 'attachments':
+        raise RuntimeError('cannot parse attachments here')
     href = get_elem_attr(doc, key, 'href')
     if href is None:
         return None
@@ -87,6 +123,8 @@ class DetailPageLinks(Serializable):
     minutes: URL|None       #: Minutes URL
     agenda_packet: URL|None #: Agenda Packet URL
     video: URL|None         #: Video player URL
+    attachments: dict[AttachmentName, URL] = field(default_factory=dict)
+    """Attachment URLs"""
 
     @classmethod
     def from_html(cls, doc: PyQuery, feed_item: FeedItem) -> Self:
@@ -96,7 +134,8 @@ class DetailPageLinks(Serializable):
                 href = url_with_origin(feed_item.link, href)
             return href
         keys: list[ElementKey] = ['agenda', 'minutes', 'agenda_packet']
-        kw = {key: parse_href(key) for key in keys}
+        url_kw = {key: parse_href(key) for key in keys}
+        attachments = get_attachments_hrefs(doc, origin_url=feed_item.link)
         vid_onclick = get_elem_attr(doc, 'video', 'onclick')
         if vid_onclick is None:
             vid_href = None
@@ -107,8 +146,7 @@ class DetailPageLinks(Serializable):
             vid_href = URL(vid_href)
             if not vid_href.is_absolute():
                 vid_href = url_with_origin(feed_item.link, vid_href)
-        kw['video'] = vid_href
-        return cls(**kw)
+        return cls(video=vid_href, attachments=attachments, **url_kw)
 
     def get_clip_id_from_video(self) -> CLIP_ID|None:
         """Parse the :attr:`clip_id <.model.Clip.id>` from the :attr:`video`
@@ -124,7 +162,10 @@ class DetailPageLinks(Serializable):
     def serialize(self) -> dict[str, Any]:
         data = dataclasses.asdict(self)
         for key, val in data.items():
-            if isinstance(val, URL):
+            if key == 'attachments':
+                val = {k:str(v) for k,v in val.items()}
+                data[key] = val
+            elif isinstance(val, URL):
                 data[key] = str(val)
         return data
 
@@ -132,7 +173,14 @@ class DetailPageLinks(Serializable):
     def deserialize(cls, data: dict[str, Any]) -> Self:
         kw = data.copy()
         for key, val in kw.items():
-            if val is None:
+            if key == 'attachments':
+                val = {
+                    AttachmentName(k): URL(v)
+                    for k, v in data.get('attachments', {}).items()
+                }
+                kw[key] = val
+                continue
+            elif val is None:
                 continue
             kw[key] = URL(val)
         return cls(**kw)
