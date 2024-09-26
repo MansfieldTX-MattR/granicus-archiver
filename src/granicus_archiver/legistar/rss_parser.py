@@ -245,7 +245,18 @@ class Feed(Serializable):
     """An representation of Legistar's calendar RSS feed
 
     The URL for this should have the options configured to show "All Years" and
-    "All Departments" on the main ``/Calendar.aspx`` page.
+    "All Departments" on the main ``/Calendar.aspx`` page.  That is, unless
+    there are more than 100 meetings in your agenda history (which is *very*
+    likely to be the case).
+
+    The RSS feed that legistar generates, with all of their years of wisdom,
+    limits the number of results to 100 items making it almost completely
+    useless for archival purposes.
+
+    The only known method to get around this is to parse separate feeds by
+    choosing the "Departments" and sometimes each year individually.  This
+    seems (and is!) a horribly laborious process, but it's definitely easier
+    than manually downloading and naming over 4000 files for around 2000 meetings!
     """
     item_list: list[FeedItem]
     """The feed items as :class:`FeedItem` instances"""
