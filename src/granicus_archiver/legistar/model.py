@@ -25,7 +25,7 @@ class IncompleteItemError(Exception):
 
 ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet',
-    'agenda', 'minutes', 'video',
+    'agenda', 'minutes', 'video', 'location',
 ]
 AgendaStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
@@ -44,6 +44,7 @@ ELEM_IDS: dict[ElementKey, str] = {
     'agenda_status': 'lblAgendaStatus',
     'minutes_status': 'lblMinutesStatus',
     'agenda_packet': 'hypAgendaPacket',
+    'location': 'lblLocation',
 }
 
 def build_elem_id(key: ElementKey) -> str:
@@ -145,6 +146,8 @@ class DetailPageResult(Serializable):
     """The detail page url (from :attr:`.rss_parser.FeedItem.link`)"""
     feed_guid: GUID
     """The :attr:`.rss_parser.FeedItem.guid`"""
+    location: str
+    """The meeting's location (where it takes place)"""
     links: DetailPageLinks
     """URL data"""
     agenda_status: AgendaStatus
@@ -193,6 +196,7 @@ class DetailPageResult(Serializable):
         return cls(
             page_url=feed_item.link,
             feed_guid=feed_item.guid,
+            location=get_elem_text(doc, 'location'),
             links=links,
             agenda_status=agenda_status,
             minutes_status=minutes_status,
@@ -202,6 +206,7 @@ class DetailPageResult(Serializable):
         return dict(
             page_url=str(self.page_url),
             feed_guid=self.feed_guid,
+            location=self.location,
             links=self.links.serialize(),
             agenda_status=self.agenda_status,
             minutes_status=self.minutes_status,
