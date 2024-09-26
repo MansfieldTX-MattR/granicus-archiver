@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar, Self
+from typing import ClassVar, Self, TYPE_CHECKING
 from pathlib import Path
 import tempfile
 
@@ -9,6 +9,8 @@ import aiofile
 from yarl import URL
 from loguru import logger
 
+if TYPE_CHECKING:
+    from ..config import Config
 from ..client import DownloadError
 from ..utils import JobWaiters
 from ..model import CLIP_ID, ClipCollection, FileMeta
@@ -27,18 +29,17 @@ class Client:
     def __init__(
         self,
         clips: ClipCollection,
-        feed_urls: dict[str, URL],
-        legistar_category_maps: dict[str, Category],
-        data_filename: Path,
+        config: Config,
     ) -> None:
         self.clips = clips
-        self.data_filename = data_filename
-        self.feed_urls = feed_urls
-        self.legistar_category_maps = legistar_category_maps
+        self.data_filename = config.legistar.data_file
+        self.feed_urls = config.legistar.feed_urls
+        self.legistar_category_maps = config.legistar.category_maps
+        root_dir = config.legistar.out_dir
         if self.data_filename.exists():
-            self.legistar_data = LegistarData.load(self.data_filename)
+            self.legistar_data = LegistarData.load(self.data_filename, root_dir=root_dir)
         else:
-            self.legistar_data = LegistarData()
+            self.legistar_data = LegistarData(root_dir=root_dir)
 
     async def open(self) -> None:
         self.session = ClientSession()
@@ -183,19 +184,14 @@ class Client:
 
 @logger.catch
 async def amain(
-    data_file: Path,
-    legistar_data_file: Path,
-    legistar_feed_urls: dict[str, URL],
-    legistar_category_maps: dict[str, Category],
+    config: Config,
     max_clips: int = 0,
     check_only: bool = False
 ):
-    clips = ClipCollection.load(data_file)
+    clips = ClipCollection.load(config.data_file)
     client = Client(
         clips=clips,
-        data_filename=legistar_data_file,
-        feed_urls=legistar_feed_urls,
-        legistar_category_maps=legistar_category_maps,
+        config=config,
     )
     client.check_files()
     if check_only:

@@ -87,7 +87,7 @@ class LegistarConfig(BaseConfig):
     """
     out_dir: Path
     """Root directory to store downloaded files (relatve to the current
-    working directory)
+    working directory).  Defaults to ``data/legistar``
     """
     out_dir_abs: Path
     """Root directory to store downloaded files (absolute path)
@@ -138,12 +138,12 @@ class LegistarConfig(BaseConfig):
 
     @classmethod
     def build_defaults(cls, **kwargs) -> Self:
-        out_dir = Path('data')
+        out_dir = Path('data') / 'legistar'
         out_dir_abs = out_dir.resolve()
         default_kw = dict(
             out_dir=out_dir,
             out_dir_abs=out_dir_abs,
-            data_file=out_dir / 'legistar-data.json',
+            data_file=out_dir / 'data.json',
             feed_urls={},
             category_maps={},
         )
@@ -198,6 +198,12 @@ class Config(BaseConfig):
 
     local_timezone_name: str|None
     default_filename: ClassVar[Path] = Path.home() / '.granicus.conf.yaml'
+
+    def __post_init__(self) -> None:
+        assert self.out_dir != self.legistar.out_dir
+        assert self.out_dir_abs != self.legistar.out_dir_abs
+        assert self.data_file != self.legistar.data_file
+        assert self.data_file.resolve() != self.legistar.data_file.resolve()
 
     @property
     def local_timezone(self) -> ZoneInfo:

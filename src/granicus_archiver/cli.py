@@ -45,10 +45,16 @@ class BaseContext:
     '--local-timezone', type=str, required=False,
 )
 @click.option(
+    '--legistar-out-dir',
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    required=False,
+    help='Root directory to store downloaded legistar files',
+)
+@click.option(
     '--legistar-data-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
-    help='Filename to store legistar information. Defaults to "<out-dir>/legistar-data.json"',
+    help='Filename to store legistar information. Defaults to "<legistar-out-dir>/legistar-data.json"',
 )
 @click.option(
     '--timestamp-file',
@@ -63,6 +69,7 @@ def cli(
     out_dir: Path,
     data_file: Path|None,
     local_timezone: str|None,
+    legistar_out_dir: Path|None,
     legistar_data_file: Path|None,
     timestamp_file: Path|None
 ):
@@ -71,7 +78,7 @@ def cli(
         data_file=data_file,
         local_timezone_name=local_timezone,
         legistar=dict(
-            out_dir=out_dir,
+            out_dir=legistar_out_dir,
             data_file=legistar_data_file,
         ),
         timestamp_file=timestamp_file,
@@ -137,11 +144,8 @@ def check(obj: BaseContext):
     clips = ClipCollection.load(obj.config.data_file)
     client.check_all_clip_files(clips)
 
-    asyncio.run(legistar_client.amain(
-        data_file=obj.config.data_file,
-        legistar_data_file=obj.config.legistar.data_file,
-        legistar_feed_urls=obj.config.legistar.feed_urls,
-        legistar_category_maps=obj.config.legistar.category_maps,
+    leg_client_obj = asyncio.run(legistar_client.amain(
+        config=obj.config,
         max_clips=0,
         check_only=True,
     ))
@@ -203,7 +207,7 @@ def download(
 @click.option('--legistar-category', type=str, prompt=True)
 @click.pass_obj
 def add_legistar_category_map(obj: BaseContext, granicus_folder: str, legistar_category: str):
-    obj.config.update(legistar_category_maps={granicus_folder: legistar_category})
+    obj.config.legistar.update(category_maps={granicus_folder: legistar_category})
     obj.config.save(obj.config_file)
     click.echo('category map added')
 
@@ -215,10 +219,7 @@ def add_legistar_category_map(obj: BaseContext, granicus_folder: str, legistar_c
 @click.pass_obj
 def parse_legistar(obj: BaseContext, max_clips: int):
     asyncio.run(legistar_client.amain(
-        data_file=obj.config.data_file,
-        legistar_data_file=obj.config.legistar.data_file,
-        legistar_feed_urls=obj.config.legistar.feed_urls,
-        legistar_category_maps=obj.config.legistar.category_maps,
+        config=obj.config,
         max_clips=max_clips,
     ))
 

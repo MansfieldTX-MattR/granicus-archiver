@@ -255,6 +255,8 @@ class DetailPageResult(Serializable):
 class LegistarData(Serializable):
     """Container for data gathered from Legistar
     """
+    root_dir: Path
+    """Root filesystem path for downloading assets"""
 
     matched_guids: dict[CLIP_ID, GUID] = field(default_factory=dict)
     """:attr:`Clips <.model.Clip.id>` that have been matched to
@@ -353,12 +355,23 @@ class LegistarData(Serializable):
         return self.detail_results.get(key)
 
     @classmethod
-    def load(cls, filename: PathLike) -> Self:
+    def load(
+        cls,
+        filename: PathLike,
+        root_dir: Path|None = None,
+    ) -> Self:
         """Loads an instance from previously saved data
         """
         if not isinstance(filename, Path):
             filename = Path(filename)
         data = json.loads(filename.read_text())
+        if root_dir is not None:
+            assert not root_dir.is_absolute()
+            data_root = data.get('root_dir')
+            if data_root is not None:
+                assert Path(data_root) == root_dir
+            else:
+                data['root_dir'] = str(root_dir)
         return cls.deserialize(data)
 
     def save(self, filename: PathLike, indent: int|None = 2) -> None:
@@ -371,6 +384,7 @@ class LegistarData(Serializable):
 
     def serialize(self) -> dict[str, Any]:
         return dict(
+            root_dir=str(self.root_dir),
             matched_guids=self.matched_guids,
             detail_results={k:v.serialize() for k,v in self.detail_results.items()},
         )
@@ -378,6 +392,7 @@ class LegistarData(Serializable):
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         return cls(
+            root_dir=Path(data['root_dir']),
             matched_guids=data['matched_guids'],
             detail_results={
                 k:DetailPageResult.deserialize(v)
