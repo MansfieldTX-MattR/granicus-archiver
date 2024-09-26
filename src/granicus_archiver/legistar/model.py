@@ -1,16 +1,20 @@
 from __future__ import annotations
-from typing import NewType, Self, Any, Iterator, Literal
+from typing import (
+    TypeVar, NewType, Generic, NamedTuple, Self, Any,
+    Iterator, Literal, Collection,
+)
 from pathlib import Path
 from os import PathLike
 import datetime
 import dataclasses
 from dataclasses import dataclass, field
 import json
+from loguru import logger
 
 from pyquery.pyquery import PyQuery
 from yarl import URL
 
-from ..model import CLIP_ID, Serializable
+from ..model import CLIP_ID, Serializable, FileMeta
 from .rss_parser import GUID, REAL_GUID, FeedItem
 
 
@@ -22,6 +26,10 @@ class IncompleteItemError(Exception):
     """
 
 
+LegistarFileKey = Literal['agenda', 'minutes', 'agenda_packet', 'video']
+"""Key name for legistar files"""
+
+LegistarFileKeys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet', 'video']
 
 ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet',
@@ -32,10 +40,39 @@ MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the
 AgendaStatusItems: list[AgendaStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 MinutesStatusItems: list[MinutesStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 
+KT = TypeVar('KT')
 AttachmentName = NewType('AttachmentName', str)
 """Type variable to associate keys in :attr:`DetailPageLinks.attachments` with
 :attr:`AttachmentFile.name`
 """
+
+
+class FilePathURL(NamedTuple, Generic[KT]):
+    """
+    """
+    key: KT             # The file key
+    filename: Path      # The local file path
+    url: URL            # URL for download
+
+
+class FilePathURLComplete(NamedTuple, Generic[KT]):
+    """
+    """
+    key: KT             # The file key
+    filename: Path      # The local file path
+    url: URL            # URL for download
+    complete: bool      # Whether the file has been downloaded
+
+
+class UpdateResult(NamedTuple):
+    """
+    """
+    changed: bool
+    """Whether any changes were made"""
+    link_keys: list[LegistarFileKey]
+    """Any URL attributes from :class:`DetailPageLinks` that changed"""
+    attachment_keys: list[AttachmentName]
+    """Any keys in :attr:`DetailPageLinks.attachments` that changed"""
 
 
 ELEM_ID_PREFIX = 'ctl00_ContentPlaceHolder1_'
@@ -115,6 +152,179 @@ def url_with_origin(origin_url: URL, path_url: URL) -> URL:
     return origin_url.origin().with_path(path_url.path).with_query(path_url.query)
 
 
+
+@dataclass
+class AttachmentFile(Serializable):
+    """Information for a downloaded attachment within
+    :attr:`LegistarFiles.attachments`
+    """
+    name: AttachmentName    #: The attachment name
+    filename: Path          #: Local file path for the file
+    metadata: FileMeta      #: The file's metadata
+
+    def serialize(self) -> dict[str, Any]:
+        return {
+            'name': self.name,
+            'filename': str(self.filename),
+            'metadata': self.metadata.serialize(),
+        }
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        return cls(
+            name=AttachmentName(data['name']),
+            filename=Path(data['filename']),
+            metadata=FileMeta.deserialize(data['metadata']),
+        )
+
+
+@dataclass
+class LegistarFiles(Serializable):
+    """Collection of files for a :class:`DetailPageResult`
+    """
+    guid: GUID                  #: The guid of the :class:`DetailPageResult`
+    agenda: Path|None           #: Agenda file
+    minutes: Path|None          #: Minutes file
+    agenda_packet: Path|None    #: Agenda Packet file
+    video: Path|None            #: Video file
+
+    attachments: dict[AttachmentName, AttachmentFile|None] = field(default_factory=dict)
+    """Additional file attachments"""
+
+    metadata: dict[LegistarFileKey, FileMeta] = field(default_factory=dict)
+    """Mapping of :class:`FileMeta` for downloaded file members (excluding
+    :attr:`attachments`)
+    """
+
+    @classmethod
+    def build_filename(cls, key: LegistarFileKey) -> Path:
+        ext = 'mp4' if key == 'video' else 'pdf'
+        return Path(f'{key}.{ext}')
+
+    def get_is_complete(
+        self,
+        legistar_data: LegistarData,
+        keys: Collection[LegistarFileKey] = LegistarFileKeys
+    ) -> bool:
+        for key, _, _ in self.iter_incomplete(legistar_data):
+            if key in keys:
+                return False
+        for t in self.iter_attachments(legistar_data):
+            if not t.complete:
+                return False
+        return True
+
+    def build_attachment_filename(self, name: AttachmentName) -> Path:
+        return Path('attachments') / f'{name}.pdf'
+
+    def get_metadata(self, key: LegistarFileKey) -> FileMeta|None:
+        return self.metadata.get(key)
+
+    def set_metadata(self, key: LegistarFileKey, meta: FileMeta) -> None:
+        self.metadata[key] = meta
+
+    def iter_incomplete(
+        self,
+        legistar_data: LegistarData,
+    ) -> Iterator[FilePathURL[LegistarFileKey]]:
+        for t in self.iter_url_paths(legistar_data):
+            if t.complete:
+                continue
+            yield FilePathURL(t.key, t.filename, t.url)
+
+    def iter_existing_url_paths(
+        self,
+        legistar_data: LegistarData
+    ) -> Iterator[FilePathURL[LegistarFileKey]]:
+        for t in self.iter_url_paths(legistar_data):
+            if t.complete:
+                yield FilePathURL(t.key, t.filename, t.url)
+
+    def iter_url_paths(
+        self,
+        legistar_data: LegistarData,
+    ) -> Iterator[FilePathURLComplete[LegistarFileKey]]:
+        detail_item = legistar_data[self.guid]
+        for key, url in detail_item.links:
+            if url is None:
+                continue
+            filename = legistar_data.get_file_path(self.guid, key)
+            is_complete = key in self and filename.exists()
+            yield FilePathURLComplete(key, filename, url, is_complete)
+
+    def iter_attachments(
+        self,
+        legistar_data: LegistarData
+    ) -> Iterator[FilePathURLComplete[AttachmentName]]:
+        detail_item = legistar_data[self.guid]
+        for key, url in detail_item.links.attachments.items():
+            filename = legistar_data.get_attachment_path(self.guid, key)
+            a = self.attachments.get(key)
+            is_complete = a is not None and filename.exists()
+            yield FilePathURLComplete(key, filename, url, is_complete)
+
+    def set_attachment(
+        self,
+        name: AttachmentName,
+        filename: Path,
+        meta: FileMeta
+    ) -> AttachmentFile:
+        assert self.attachments.get(name) is None
+        a = AttachmentFile(
+            name=name,
+            filename=filename,
+            metadata=meta,
+        )
+        self.attachments[name] = a
+        return a
+
+    def __getitem__(self, key: LegistarFileKey) -> Path|None:
+        return getattr(self, key, None)
+
+    def __setitem__(self, key: LegistarFileKey, value: Path|None) -> None:
+        if value is not None:
+            assert not value.is_absolute()
+        setattr(self, key, value)
+
+    def __contains__(self, key: LegistarFileKey):
+        return self[key] is not None
+
+    def __iter__(self) -> Iterator[tuple[LegistarFileKey, Path|None]]:
+        for key in LegistarFileKeys:
+            yield key, self[key]
+
+    def serialize(self) -> dict[str, Any]:
+        d: dict[str, object] = {k: None if v is None else str(v) or None for k,v in self}
+        d['guid'] = self.guid
+        d['metadata'] = {k: None if v is None else v.serialize() for k,v in self.metadata.items()}
+        d['attachments'] = {
+            k: None if v is None else v.serialize()
+            for k, v in self.attachments.items()
+        }
+        return d
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        paths: dict[LegistarFileKey, Path|None] = {
+            k: None if data[k] is None else Path(data[k])
+            for k in LegistarFileKeys
+        }
+        meta: dict[LegistarFileKey, FileMeta] = {
+            k: FileMeta.deserialize(v)
+            for k,v in data['metadata'].items()
+        }
+        attachments: dict[AttachmentName, AttachmentFile|None] = {
+            AttachmentName(k): None if v is None else AttachmentFile.deserialize(v)
+            for k, v in data.get('attachments', {}).items()
+        }
+        return cls(
+            guid=GUID(data['guid']),
+            metadata=meta,
+            attachments=attachments,
+            **paths
+        )
+
+
 @dataclass
 class DetailPageLinks(Serializable):
     """Links gathered from a meeting detail page
@@ -158,6 +368,47 @@ class DetailPageLinks(Serializable):
         if clip_id is not None:
             clip_id = CLIP_ID(clip_id)
         return clip_id
+
+    def __iter__(self) -> Iterator[tuple[LegistarFileKey, URL|None]]:
+        for key in LegistarFileKeys:
+            yield key, self[key]
+
+    def __getitem__(self, key: LegistarFileKey) -> URL|None:
+        return getattr(self, key)
+
+    def __contains__(self, key: LegistarFileKey):
+        return self[key] is not None
+
+    def update(self, other: Self) -> UpdateResult:
+        """Update *self* with any changes from *other*
+        """
+        changed = False
+        changed_keys: list[LegistarFileKey] = []
+        for key, val in self:
+            oth_val = other[key]
+            if oth_val == val:
+                continue
+            assert oth_val is not None
+            # logger.debug(f'{key=}, {val=}, {oth_val=}')
+            changed_keys.append(key)
+            setattr(self, key, oth_val)
+            changed = True
+        changed_attachments: list[AttachmentName] = []
+        if self.attachments != other.attachments:
+            for att_key, att_val in self.attachments.items():
+                oth_att_val = other.attachments.get(att_key)
+                if oth_att_val == att_val:
+                    continue
+                changed_attachments.append(att_key)
+            for oth_att_key, oth_att_val in other.attachments.items():
+                self_att_val = self.attachments.get(oth_att_key)
+                if self_att_val == oth_att_val:
+                    continue
+                changed_attachments.append(oth_att_key)
+            self.attachments = other.attachments
+            # logger.debug('link attachments updated')
+            changed = True
+        return UpdateResult(changed, changed_keys, changed_attachments)
 
     def serialize(self) -> dict[str, Any]:
         data = dataclasses.asdict(self)
@@ -240,6 +491,30 @@ class DetailPageResult(Serializable):
         """
         return self.feed_item.real_guid
 
+    def get_unique_folder(self) -> Path:
+        """Get a local path to store files for this item
+
+        The structure will be:
+
+        ``<category>/<year>/<title>``
+
+        Where ``<category>`` is the :attr:`~.rss_parser.FeedItem.category` of
+        the :attr:`feed_item`, ``<year>`` is the 4-digit year of the
+        :attr:`~.rss_parser.FeedItem.meeting_date` and ``<title>`` is a
+        combination of the date, :attr:`~.rss_parser.FeedItem.title` and
+        :attr:`location`.  This combination was chosen to ensure uniqueness.
+        """
+        item = self.feed_item
+        dt = item.meeting_date.astimezone(item.get_timezone())
+        dtstr = dt.strftime('%Y%m%d-%H%M')
+
+        # location often has newlines and its length can cause issues with
+        # directory name limitations.  Strip newlines and limit to 80 chars
+        loc = self.location.replace('\n', ' ')[:80]
+        title_str = f'{dtstr} - {item.title} - {loc}'
+        p = Path(item.category) / dt.strftime('%Y') / title_str
+        return p
+
     @classmethod
     def from_html(
         cls,
@@ -298,6 +573,24 @@ class DetailPageResult(Serializable):
         assert isinstance(obj.links, DetailPageLinks)
         return obj
 
+    def update(self, other: Self) -> UpdateResult:
+        """Update *self* with changed attributes in *other*
+        """
+        assert other.real_guid == self.real_guid
+        assert other.page_url == self.page_url
+        changed = False
+        attrs = ['agenda_status', 'minutes_status', 'location']
+        for attr in attrs:
+            self_val = getattr(self, attr)
+            oth_val = getattr(other, attr)
+            if self_val == oth_val:
+                continue
+            logger.debug(f'{attr=}, {self_val=}, {oth_val=}')
+            setattr(self, attr, oth_val)
+            changed = True
+        links_changed, file_keys, attachment_keys = self.links.update(other.links)
+        return UpdateResult(changed or links_changed, file_keys, attachment_keys)
+
 
 @dataclass
 class LegistarData(Serializable):
@@ -317,6 +610,11 @@ class LegistarData(Serializable):
     items_by_clip_id: dict[CLIP_ID, DetailPageResult] = field(default_factory=dict)
     """Mapping of items in :attr:`detail_results` with a valid
     :attr:`~DetailPageResult.clip_id`
+    """
+
+    files: dict[GUID, LegistarFiles] = field(default_factory=dict)
+    """Mapping of downloaded :class:`LegistarFiles` with their
+    :attr:`~LegistarFiles.guid` as keys
     """
 
     def __post_init__(self) -> None:
@@ -343,8 +641,32 @@ class LegistarData(Serializable):
             if item.is_future:
                 raise ValueError(f'item is in the future: {item.feed_guid=}')
 
+    def ensure_unique_item_folders(self) -> None:
+        """Unsure paths generated by :meth:`DetailPageResult.get_folder_for_item`
+        are unique among all items in :attr:`detail_results`
+        """
+        item_paths = [self.get_folder_for_item(item) for item in self]
+        s = set()
+        for p in item_paths:
+            if p in s:
+                raise ValueError(f'folder collision for "{p}"')
+            s.add(p)
+        assert len(item_paths) == len(set(item_paths))
+
     def get_real_guids(self) -> set[REAL_GUID]:
         return set([item.real_guid for item in self])
+
+    def get_by_real_guid(self, real_guid: REAL_GUID) -> DetailPageResult|None:
+        """Get the :class:`DetailPageResult` matching the given
+        :attr:`~.rss_parser.FeedItem.real_guid`
+
+        If no match is found, ``None`` is returned.
+        """
+        d = {item.real_guid: item.feed_guid for item in self}
+        if real_guid not in d:
+            return None
+        guid = d[real_guid]
+        return self[guid]
 
     def find_match_for_clip_id(self, clip_id: CLIP_ID) -> DetailPageResult|None:
         """Find a :class:`DetailPageResult` match for the given *clip_id*
@@ -385,6 +707,154 @@ class LegistarData(Serializable):
         for clip_id, guid in self.matched_guids.items():
             yield clip_id, self.detail_results[guid]
 
+    def get_folder_for_item(self, item: GUID|DetailPageResult) -> Path:
+        """Get a local path to store files for a :class:`DetailPageResult`
+
+        See :meth:`DetailPageResult.get_folder_for_item` for more details.
+        """
+        if not isinstance(item, DetailPageResult):
+            item = self[item]
+        return self.root_dir / item.get_unique_folder()
+
+    def get_or_create_files(self, guid: GUID) -> LegistarFiles:
+        """Get a :class:`LegistarFiles` instance for *guid*, creating one if
+        it does not exist
+        """
+        if guid in self.files:
+            return self.files[guid]
+        files = LegistarFiles(
+            guid=guid,
+            agenda=None,
+            minutes=None,
+            agenda_packet=None,
+            video=None,
+        )
+        self.files[guid] = files
+        return files
+
+    def get_file_path(
+        self,
+        guid: GUID,
+        key: LegistarFileKey
+    ) -> Path:
+        """Get the local path for the :class:`LegistarFiles` object matching
+        the given :attr:`guid <LegistarFiles.guid>` and :obj:`file key <LegistarFileKey>`
+        """
+        files = self.get_or_create_files(guid)
+        base_dir = self.get_folder_for_item(guid)
+        return base_dir / files.build_filename(key)
+
+    def set_file_complete(
+        self,
+        guid: GUID,
+        key: LegistarFileKey,
+        meta: FileMeta
+    ) -> None:
+        """Set the file for the given parameters as "complete"
+        (after successful download)
+
+        Arguments:
+            guid: The :attr:`guid <LegistarFiles.guid>` of the :class:`LegistarFiles`
+                object
+            key: The :obj:`file key <LegistarFileKey>`
+            meta: Metadata from the download
+        """
+        files = self.get_or_create_files(guid)
+        assert key not in files
+        filename = self.get_file_path(guid, key)
+        assert filename.exists()
+        assert filename.stat().st_size == meta.content_length
+        files[key] = filename
+        files.set_metadata(key, meta)
+
+    def get_attachment_path(self, guid: GUID, name: AttachmentName) -> Path:
+        """Get the local path for an item in :attr:`LegistarFiles.attachments`
+        """
+        files = self.get_or_create_files(guid)
+        base_dir = self.get_folder_for_item(guid)
+        fn = base_dir / files.build_attachment_filename(name)
+        att = files.attachments.get(name)
+        if att is not None:
+            assert att.filename == fn
+        return fn
+
+    def set_attachment_complete(
+        self,
+        guid: GUID,
+        name: AttachmentName,
+        meta: FileMeta
+    ) -> AttachmentFile:
+        """Set an item in :attr:`LegistarFiles.attachments` as "complete"
+        (after successful download)
+
+        Arguments:
+            guid: The :attr:`guid <LegistarFiles.guid>` of the :class:`LegistarFiles`
+                object
+            name: The :obj:`AttachmentName` (key within
+                :attr:`LegistarFiles.attachments`)
+            meta: Metadata from the download
+        """
+        files = self.get_or_create_files(guid)
+        assert files.attachments.get(name) is None
+        detail_item = self[guid]
+        assert name in detail_item.links.attachments
+        filename = self.get_attachment_path(guid, name)
+        assert filename.exists()
+        assert filename.stat().st_size == meta.content_length
+        return files.set_attachment(name, filename, meta)
+
+    def iter_attachments(
+        self,
+        guid: GUID
+    ) -> Iterator[FilePathURLComplete[AttachmentName]]:
+        """Iterate over any :attr:`LegistarFiles.attachments` for the given
+        *guid* (as :class:`FilePathURLComplete` tuples)
+        """
+        files = self.get_or_create_files(guid)
+        yield from files.iter_attachments(self)
+
+    def iter_incomplete_attachments(
+        self,
+        guid: GUID
+    ) -> Iterator[FilePathURL[AttachmentName]]:
+        """Iterate over :attr:`LegistarFiles.attachments` which have not been
+        downloaded (as :class:`FilePathURL` tuples)
+        """
+        for t in self.iter_attachments(guid):
+            if t.complete:
+                continue
+            yield FilePathURL(t.key, t.filename, t.url)
+
+    def iter_url_paths(
+        self,
+        guid: GUID
+    ) -> Iterator[FilePathURLComplete[LegistarFileKey]]:
+        """Iterate over items in a :class:`LegistarFiles` instance (as
+        :class:`FilePathURLComplete` tuples)
+        """
+        files = self.get_or_create_files(guid)
+        yield from files.iter_url_paths(self)
+
+    def iter_incomplete_url_paths(
+        self,
+        guid: GUID
+    ) -> Iterator[FilePathURL[LegistarFileKey]]:
+        """Iterate over items in a :class:`LegistarFiles` instance which have
+        not been downloaded (as :class:`FilePathURL` tuples)
+        """
+        files = self.get_or_create_files(guid)
+        yield from files.iter_incomplete(self)
+
+    def iter_existing_url_paths(
+        self,
+        guid: GUID
+    ) -> Iterator[FilePathURL[LegistarFileKey]]:
+        """Iterate over items in a :class:`LegistarFiles` instance which have
+        been successfully downloaded (as :class:`FilePathURL` tuples)
+        """
+        files = self.get_or_create_files(guid)
+        yield from files.iter_existing_url_paths(self)
+
     def __len__(self):
         return len(self.detail_results)
 
@@ -401,6 +871,9 @@ class LegistarData(Serializable):
 
     def get(self, key: GUID) -> DetailPageResult|None:
         return self.detail_results.get(key)
+
+    def keys(self) -> Iterator[GUID]:
+        yield from self.detail_results.keys()
 
     @classmethod
     def load(
@@ -435,6 +908,7 @@ class LegistarData(Serializable):
             root_dir=str(self.root_dir),
             matched_guids=self.matched_guids,
             detail_results={k:v.serialize() for k,v in self.detail_results.items()},
+            files={k:v.serialize() for k,v in self.files.items()},
         )
 
     @classmethod
@@ -446,4 +920,5 @@ class LegistarData(Serializable):
                 k:DetailPageResult.deserialize(v)
                 for k,v in data['detail_results'].items()
             },
+            files={k:LegistarFiles.deserialize(v) for k,v in data['files'].items()},
         )
