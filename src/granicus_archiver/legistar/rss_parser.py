@@ -22,6 +22,10 @@ UTC = ZoneInfo('UTC')
 
 # Fri, 30 Aug 2024 15:22:36 GMT
 PUBDATE_FMT = '%a, %d %b %Y %H:%M:%S GMT'
+FUTURE_TIMEDELTA = datetime.timedelta(days=1)
+"""Amount of time after a :attr:`~Item.meeting_date` that must pass before
+it is no longer considered a future item
+"""
 
 ParseErrorType = Literal['unknown', 'category', 'datetime']
 """Parse error names"""
@@ -151,6 +155,14 @@ class FeedItem(Serializable):
     def get_timezone(cls) -> ZoneInfo:
         assert cls._TZ is not None
         return cls._TZ
+
+    @property
+    def is_future(self) -> bool:
+        """Whether the item is in the future
+        """
+        now = datetime.datetime.now(UTC)
+        dt = self.meeting_date + FUTURE_TIMEDELTA
+        return dt >= now
 
     @classmethod
     def from_rss(cls, elem: PyQuery) -> Self:
