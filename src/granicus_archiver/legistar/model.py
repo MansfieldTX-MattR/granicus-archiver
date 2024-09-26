@@ -18,6 +18,16 @@ from ..model import CLIP_ID, Serializable, FileMeta
 from .rss_parser import GUID, REAL_GUID, FeedItem
 
 
+class ThisShouldBeA500ErrorButItsNot(Exception):
+    """Raised when a detail page request returns a ``200 - OK`` response,
+    but with error information in the HTML content
+
+    Yes, that really happens
+    """
+    def __str__(self):
+        return "Yes, they really do that. Isn't it lovely?"
+
+
 class IncompleteItemError(Exception):
     """Raised if a detail page is in an incomplete state
 
@@ -524,9 +534,14 @@ class DetailPageResult(Serializable):
         """Create an instance from the raw html from :attr:`page_url`
         """
         doc = PyQuery(html_str)
+        if not isinstance(html_str, str):
+            html_str = html_str.decode()    # type: ignore
+        doc_title = html_str.split('<title>')[1].split('</title>')[0]
+        if 'Error' in doc_title:
+            raise ThisShouldBeA500ErrorButItsNot()
         dt_fmt = '%m/%d/%Y - %I:%M %p'
         agenda_status = get_elem_text(doc, 'agenda_status').strip(' ')
-        assert agenda_status in AgendaStatusItems
+        assert agenda_status in AgendaStatusItems, f'{agenda_status=}'
         if agenda_status == 'Not Viewable by the Public':
             raise IncompleteItemError()
         date_str, time_str = get_elem_text(doc, 'date'), get_elem_text(doc, 'time')
