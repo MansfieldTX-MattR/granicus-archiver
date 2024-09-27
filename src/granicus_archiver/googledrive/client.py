@@ -25,20 +25,6 @@ _Rt = TypeVar('_Rt')
 
 FOLDER_MTYPE = 'application/vnd.google-apps.folder'
 
-FOLDER_CACHE: dict[Path, FileId] = {}
-"""A cache of Drive folders and their id
-"""
-
-
-META_CACHE: dict[CLIP_ID, dict[ClipFileUploadKey, FileMetaFull]] = {}
-"""Cache for uploaded file metadata
-"""
-
-CACHE_LOCK = asyncio.Lock()
-CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
-META_CACHE_FILE = Path(__file__).resolve().parent / 'meta-cache.json'
-
-
 UPLOAD_CHECK_LIMIT = 4
 
 class SchedulersTD(TypedDict):
@@ -71,86 +57,6 @@ def get_scheduler(key: SchedulerKey) -> aiojobs.Scheduler:
 
 
 
-def load_cache():
-    if CACHE_FILE.exists():
-        d = json.loads(CACHE_FILE.read_text())
-        d = {Path(k): v for k,v in d.items()}
-        FOLDER_CACHE.update(d)
-    if META_CACHE_FILE.exists():
-        d = json.loads(META_CACHE_FILE.read_text())
-        META_CACHE.update(d)
-
-def save_cache():
-    d = {str(k):v for k,v in FOLDER_CACHE.items()}
-    CACHE_FILE.write_text(json.dumps(d, indent=2))
-
-    META_CACHE_FILE.write_text(json.dumps(META_CACHE, indent=2))
-
-
-def find_folder_cache(folder: Path) -> tuple[list[FileId], Path]|None:
-    """Search for cached Drive folders previously found by :func:`find_folder`
-
-    Returns the longest matching path and id (similar to :func:`find_folder`)
-    """
-    assert not folder.is_absolute()
-    f_ids = []
-    parts = folder.parts
-    p: Path|None = None
-    # async with CACHE_LOCK:
-    for i in range(len(parts)):
-        _p = Path('/'.join(parts[:i+1]))
-        if _p not in FOLDER_CACHE:
-            break
-        p = _p
-        f_ids.append(FOLDER_CACHE[p])
-    if p is not None and len(f_ids):
-        assert len(f_ids) == len(p.parts)
-        return f_ids, p
-
-def cache_folder_parts(*parts_and_ids: tuple[str, FileId]):
-    """Store Drive folder ids in the :attr:`FOLDER_CACHE`
-
-    Each argument should be a tuple of the folder name and its id
-    (for each folder level)
-    """
-    p = None
-    for part, f_id in parts_and_ids:
-        if p is None:
-            p = Path(part)
-        else:
-            p = p / part
-        FOLDER_CACHE[p] = f_id
-
-def cache_single_folder(folder: Path, f_id: FileId):
-    FOLDER_CACHE[folder] = f_id
-
-
-def find_cached_file_meta(
-    clip_id: CLIP_ID,
-    key: ClipFileUploadKey
-) -> FileMetaFull|None:
-    """Search the cache for metadata by :attr:`.model.Clip.id` and file type
-    """
-    d = META_CACHE.get(clip_id)
-    if d is None:
-        return None
-    meta = d.get(key)
-    if meta is None or 'size' not in meta:
-        return None
-    return meta
-
-
-def set_cached_file_meta(
-    clip_id: CLIP_ID,
-    key: ClipFileUploadKey,
-    meta: FileMetaFull
-) -> None:
-    """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
-    """
-    d = META_CACHE.setdefault(clip_id, {})
-    d[key] = meta
-
-
 def get_client(root_conf: Config) -> Aiogoogle:
     client_creds = config.OAuthClientConf.load_from_env()._asdict()
     user_creds = config.UserCredentials.load(root_conf=root_conf)._asdict()
@@ -163,10 +69,25 @@ class GoogleClient:
     """
     aiogoogle: Aiogoogle        #: The actual google client
     drive_v3: DriveResource     #: Drive resource
+
+    folder_cache: dict[Path, FileId]
+    """A cache of Drive folders and their id
+    """
+
+    meta_cache: dict[CLIP_ID, dict[ClipFileUploadKey, FileMetaFull]]
+    """Cache for uploaded file metadata
+    """
+    CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
+    META_CACHE_FILE = Path(__file__).resolve().parent / 'meta-cache.json'
+
     def __init__(self, root_conf: Config) -> None:
         self.root_conf = root_conf
+        self.folder_cache = {}
+        self.meta_cache = {}
+        self.load_cache()
 
     async def __aenter__(self) -> Self:
+        self.cache_lock = asyncio.Lock()
         self.aiogoogle = get_client(root_conf=self.root_conf)
         await self.aiogoogle.__aenter__()
         drive_v3 = await self.aiogoogle.discover("drive", "v3")
@@ -175,6 +96,87 @@ class GoogleClient:
 
     async def __aexit__(self, *args) -> None:
         await self.aiogoogle.__aexit__(*args)
+
+    def load_cache(self):
+        if self.CACHE_FILE.exists():
+            d = json.loads(self.CACHE_FILE.read_text())
+            d = {Path(k): v for k,v in d.items()}
+            self.folder_cache.update(d)
+        if self.META_CACHE_FILE.exists():
+            d = json.loads(self.META_CACHE_FILE.read_text())
+            self.meta_cache.update(d)
+
+    def save_cache(self):
+        """Save :attr:`folder_cache` and :attr:`meta_cache` to disk
+        """
+        d = {str(k):v for k,v in self.folder_cache.items()}
+        self.CACHE_FILE.write_text(json.dumps(d, indent=2))
+        self.META_CACHE_FILE.write_text(json.dumps(self.meta_cache, indent=2))
+
+    def find_folder_cache(self, folder: Path) -> tuple[list[FileId], Path]|None:
+        """Search for cached Drive folders previously found by :meth:`find_folder`
+
+        Returns the longest matching path and id (similar to :meth:`find_folder`)
+        """
+        assert not folder.is_absolute()
+        f_ids = []
+        parts = folder.parts
+        p: Path|None = None
+        for i in range(len(parts)):
+            _p = Path('/'.join(parts[:i+1]))
+            if _p not in self.folder_cache:
+                break
+            p = _p
+            f_ids.append(self.folder_cache[p])
+        if p is not None and len(f_ids):
+            assert len(f_ids) == len(p.parts)
+            return f_ids, p
+
+    def cache_folder_parts(self, *parts_and_ids: tuple[str, FileId]):
+        """Store Drive folder ids in the :attr:`folder_cache`
+
+        Each argument should be a tuple of the folder name and its id
+        (for each folder level)
+        """
+        p = None
+        for part, f_id in parts_and_ids:
+            if p is None:
+                p = Path(part)
+            else:
+                p = p / part
+            self.folder_cache[p] = f_id
+
+    def cache_single_folder(self, folder: Path, f_id: FileId):
+        """Store a single Drive folder id in the :attr:`folder_cache`
+        """
+        self.folder_cache[folder] = f_id
+
+
+    def find_cached_file_meta(
+        self,
+        clip_id: CLIP_ID,
+        key: ClipFileUploadKey
+    ) -> FileMetaFull|None:
+        """Search the cache for metadata by :attr:`.model.Clip.id` and file type
+        """
+        d = self.meta_cache.get(clip_id)
+        if d is None:
+            return None
+        meta = d.get(key)
+        if meta is None or 'size' not in meta:
+            return None
+        return meta
+
+    def set_cached_file_meta(
+        self,
+        clip_id: CLIP_ID,
+        key: ClipFileUploadKey,
+        meta: FileMetaFull
+    ) -> None:
+        """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
+        """
+        d = self.meta_cache.setdefault(clip_id, {})
+        d[key] = meta
 
     async def as_user(self, *requests, resp_type: type[_Rt], full_res: bool = False) -> _Rt:
         """Send requests using :meth:`aiogoogle.client.Aiogoogle.as_user`
@@ -249,7 +251,7 @@ class GoogleClient:
 
         parts = folder.parts
         folder_ids: list[FileId]|None = None
-        cached = find_folder_cache(folder)
+        cached = self.find_folder_cache(folder)
         if cached is not None:
             cached_ids, cached_folder = cached
             # logger.debug(f'cache hit: {cached_folder=}')
@@ -267,7 +269,7 @@ class GoogleClient:
         if folder_ids is not None:
             # logger.info(f'{folder_ids=}')
             found_parts = parts[:len(folder_ids)]
-            cache_folder_parts(*zip(found_parts, folder_ids))
+            self.cache_folder_parts(*zip(found_parts, folder_ids))
             # if len(folder_ids) == len(parts):
             #     return folder_ids[-1]
             result_p = Path('/'.join(found_parts))
@@ -316,7 +318,7 @@ class GoogleClient:
             *parts: The folder name for each directory level
             parent: The id of the folder to create the nested folders in
             parent_path: The root path to use if *use_cache* is True
-            use_cache: If True, stores the results in the :attr:`FOLDER_CACHE`.
+            use_cache: If True, stores the results in the :attr:`folder_cache`.
                 *parent_path* must be provided to accurately store the results
 
         """
@@ -326,7 +328,7 @@ class GoogleClient:
             prev_parent = await self.create_folder(part, prev_parent)
             if use_cache and full_path is not None:
                 full_path = full_path / part
-                cache_single_folder(full_path, prev_parent)
+                self.cache_single_folder(full_path, prev_parent)
         assert prev_parent is not None
         return prev_parent
 
@@ -337,7 +339,7 @@ class GoogleClient:
     ) -> FileId:
         """Find or create a (possibly nested) Drive folder with the given path
         """
-        async with CACHE_LOCK:
+        async with self.cache_lock:
             find_result = await self.find_folder(folder)
             logger.debug(f'{find_result=}')
             if find_result is not None:
@@ -475,7 +477,7 @@ class ClipGoogleClient(GoogleClient):
                 filename, upload_filename, folder_id=folder_id,
             )
             if meta is not None:
-                set_cached_file_meta(clip.id, key, meta)
+                self.set_cached_file_meta(clip.id, key, meta)
                 return True
             return False
 
@@ -509,7 +511,7 @@ class ClipGoogleClient(GoogleClient):
         """Check if the given clip has any assets that need to be uploaded
         """
         async def do_check(key: ClipFileUploadKey, filename: Path) -> bool:
-            upload_meta = find_cached_file_meta(clip.id, key)
+            upload_meta = self.find_cached_file_meta(clip.id, key)
             if upload_meta is None:
                 rel_filename = clip.get_file_path(key, absolute=False)
                 upload_filename = upload_dir / rel_filename
@@ -543,7 +545,6 @@ async def upload_clips(
     scheduler_limit: int,
 ) -> None:
     upload_dir = root_conf.google.drive_folder
-    load_cache()
     schedulers = get_schedulers(scheduler_limit)
     upload_check_waiters = JobWaiters(scheduler=get_scheduler('upload_checks'))
     upload_clip_waiters = JobWaiters[bool](scheduler=get_scheduler('general'))
@@ -580,14 +581,13 @@ async def upload_clips(
         logger.info('closing schedulers..')
         scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
         await asyncio.gather(*[sch.close() for sch in scheduler_list])
-    save_cache()
+    client.save_cache()
 
 
 @logger.catch
 async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> None:
     upload_dir = root_conf.google.drive_folder
     logger.info('Updating clip metadata from Drive...')
-    load_cache()
     schedulers = get_schedulers(limit=8)
     scheduler = schedulers['general']
     waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
@@ -600,7 +600,7 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
             meta = await client.get_file_meta(upload_filename)
             if meta is not None:
                 logger.debug(f'got meta for {clip.id}, {key}')
-                set_cached_file_meta(clip.id, key, meta)
+                client.set_cached_file_meta(clip.id, key, meta)
                 return True
             return False
 
@@ -609,7 +609,7 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
                 local_meta = clip.files.get_metadata(key)
                 if local_meta is None:
                     continue
-                meta = find_cached_file_meta(clip.id, key)
+                meta = client.find_cached_file_meta(clip.id, key)
                 if meta is not None:
                     continue
                 await waiters.spawn(get_meta(clip, key))
@@ -619,13 +619,14 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
         await scheduler.close()
     if changed:
         logger.info(f'Meta changed, saving cache file')
-        save_cache()
+        client.save_cache()
 
 async def build_html(clips: ClipCollection, html_dir: Path, root_conf: Config) -> str:
     await get_all_clip_file_meta(clips, root_conf=root_conf)
+    client = ClipGoogleClient(root_conf=root_conf)
 
     def link_callback(clip: Clip, key: ClipFileKey) -> str|None:
-        meta = find_cached_file_meta(clip.id, key)
+        meta = client.find_cached_file_meta(clip.id, key)
         if meta is None:
             return None
         return meta.get('webViewLink')
