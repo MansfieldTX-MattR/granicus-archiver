@@ -211,9 +211,9 @@ class GoogleClient:
     ) -> AsyncGenerator[FileMeta|FileMetaFull]:
         """List files using the given query string
 
-        The result will be an :term:`asyncronous generator` of
-        :class:`FileMeta` (if *full_res* is ``False``) or
-        :class:`FileMetaFull` (if *full_res* is ``True``).
+        The result will be an :term:`asynchronous generator` of
+        :class:`~.types.FileMeta` (if *full_res* is ``False``) or
+        :class:`~.types.FileMetaFull` (if *full_res* is ``True``).
         """
         req = self.drive_v3.files.list(q=q, spaces=spaces, fields=fields)
         if full_res:
