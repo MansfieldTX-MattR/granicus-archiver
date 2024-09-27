@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, Self, Coroutine, TypedDict, Literal, Any, cast, TYPE_CHECKING
+    TypeVar, Self, Coroutine, TypedDict, Literal, Any, AsyncGenerator,
+    overload, cast, TYPE_CHECKING
 )
 import mimetypes
 from pathlib import Path
@@ -185,23 +186,47 @@ class GoogleClient:
         response = await self.aiogoogle.as_user(*requests, full_res=full_res)
         return cast(_Rt, response)
 
-    async def get_file_list(self, *requests) -> FileListResponse[FileMeta]:
-        """Get a :obj:`~.types.FileListResponse` containing
-        :class:`~.types.FileMeta`
-        """
-        return await self.as_user(
-            *requests,
-            resp_type=FileListResponse[FileMeta],
-        )
+    @overload
+    async def list_files(
+        self,
+        q: str,
+        spaces: str = 'drive',
+        fields: list[str]|str|None = ...,
+        full_res: bool = True
+    ) -> AsyncGenerator[FileMetaFull]: ...
+    @overload
+    async def list_files(
+        self,
+        q: str,
+        spaces: str = 'drive',
+        fields: list[str]|str|None = ...,
+        full_res: bool = False
+    ) -> AsyncGenerator[FileMeta]: ...
+    async def list_files(
+        self,
+        q: str,
+        spaces: str = 'drive',
+        fields: list[str]|str|None = None,
+        full_res: bool = False
+    ) -> AsyncGenerator[FileMeta|FileMetaFull]:
+        """List files using the given query string
 
-    async def get_file_list_full(self, *requests) -> FileListResponse[FileMetaFull]:
-        """Get a :obj:`~.types.FileListResponse` containing
-        :class:`~.types.FileMetaFull`
+        The result will be an :term:`asyncronous generator` of
+        :class:`FileMeta` (if *full_res* is ``False``) or
+        :class:`FileMetaFull` (if *full_res* is ``True``).
         """
-        return await self.as_user(
-            *requests,
-            resp_type=FileListResponse[FileMetaFull], full_res=True,
-        )
+        req = self.drive_v3.files.list(q=q, spaces=spaces, fields=fields)
+        if full_res:
+            res = await self.as_user(
+                req, resp_type=FileListResponse[FileMetaFull], full_res=True,
+            )
+        else:
+            res = await self.as_user(
+                req, resp_type=FileListResponse[FileMeta], full_res=False,
+            )
+        async for page in res:
+            for f in page['files']:
+                yield f
 
     async def find_folder(self, folder: Path) -> tuple[FileId, Path]|None:
         """Find a (possibly nested) Drive folder
@@ -223,27 +248,18 @@ class GoogleClient:
             if parent_id is not None:
                 q = f"{q} and '{parent_id}' in parents"
             # logger.debug(f'{q=}')
-            req = self.drive_v3.files.list(
-                q=q,
-                spaces='drive',
-            )
             found_fids: list[FileId] = []
             found_parts: list[str] = []
-            res = await self.get_file_list_full(req)
-
-            async for page in res:
-                for f in page['files']:
-                    # logger.debug(f'{parent_id=}, {f.get("id")=}, {f.get("name")=}')
-                    f_id = f.get('id')
-                    assert isinstance(f_id, str)
-                    found_fids.append(f_id)
-                    found_parts.append(folder_part)
-                    if not len(folders_remain):
-                        break
-                    sub_fid = await find_part(*folders_remain, parent_id=f_id)
-                    if sub_fid is not None:
-                        found_fids.extend(sub_fid)
+            async for f in self.list_files(q, full_res=True):
+                f_id = f.get('id')
+                assert isinstance(f_id, str)
+                found_fids.append(f_id)
+                found_parts.append(folder_part)
+                if not len(folders_remain):
                     break
+                sub_fid = await find_part(*folders_remain, parent_id=f_id)
+                if sub_fid is not None:
+                    found_fids.extend(sub_fid)
                 break
             if len(found_fids):
                 return found_fids
@@ -374,14 +390,8 @@ class GoogleClient:
         if parent_id is not None:
             q = f"{q} and '{parent_id}' in parents"
         # logger.debug(f'{q=}')
-        req = self.drive_v3.files.list(
-            q=q,
-            spaces='drive',
-        )
-        res = await self.get_file_list_full(req)
-        async for page in res:
-            for f in page['files']:
-                return True
+        async for f in self.list_files(q, full_res=True):
+            return True
         return False
 
     async def get_file_meta(
@@ -400,16 +410,8 @@ class GoogleClient:
         q = f"trashed = false and mimeType != '{FOLDER_MTYPE}' and name = '{filename.name}'"
         q = f"{q} and '{folder_id}' in parents"
         # logger.debug(f'{q=}')
-        req = self.drive_v3.files.list(
-            q=q,
-            spaces='drive',
-            fields='*',
-            # fields=['id', 'size', 'name'],
-        )
-        res = await self.get_file_list_full(req)
-        async for page in res:
-            for f in page['files']:
-                return f
+        async for f in self.list_files(q, fields='*', full_res=True):
+            return f
 
     async def stream_upload_file(
         self,
