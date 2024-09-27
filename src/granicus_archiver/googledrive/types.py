@@ -40,6 +40,9 @@ class FileMetaFull(TypedDict):
     size: str                           #: Size in bytes
     webViewLink: str                    #: Sharable link to the item
     webContentLink: str                 #: Download link
+    md5Checksum: str                    #: MD5 Checksum
+    sha1Checksum: str                   #: SHA1 Checksum
+    sha256Checksum: str                 #: SHA256 Checksum
 
 
 class FileUploadResponse(TypedDict):

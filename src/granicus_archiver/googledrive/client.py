@@ -16,7 +16,7 @@ import aiofile
 from .types import *
 from . import config
 from ..model import ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID
-from ..utils import JobWaiters
+from ..utils import JobWaiters, get_file_hash_async
 from .. import html_builder
 
 if TYPE_CHECKING:
@@ -27,6 +27,11 @@ _Rt = TypeVar('_Rt')
 FOLDER_MTYPE = 'application/vnd.google-apps.folder'
 
 UPLOAD_CHECK_LIMIT = 4
+
+class UploadError(Exception):
+    """Exception raised for errors during upload
+    """
+
 
 class SchedulersTD(TypedDict):
     general: aiojobs.Scheduler
@@ -418,8 +423,31 @@ class GoogleClient:
         local_file: Path,
         upload_filename: Path,
         check_exists: bool = True,
-        folder_id: FileId|None = None
+        folder_id: FileId|None = None,
+        check_hash: bool = True
     ) -> FileMetaFull|None:
+        """Upload a file to Drive
+
+        Arguments:
+            local_file: The local filename
+            upload_filename: Relative path for the uploaded file
+            check_exists: Whether to check if *upload_filename* already exists
+                in Drive
+            folder_id: If given, the parent folder's :obj:`id <FileId>`.  If
+                not provided, the parent folder(s) will be searched for and
+                created if necessary.
+            check_hash: If ``True``, the hash of the local file will be checked
+                against the hash from the uploaded :class:`metadata <.types.FileMetaFull>`
+
+        Returns:
+            The metadata for the uploaded file.
+            If *check_exists* is True and the file exists in Drive,
+            ``None`` is returned.
+
+        Raises:
+            UploadError: If *check_hash* is True and the content hashes
+                do not match
+        """
         chunk_size = 64*1024
 
         if folder_id is not None:
@@ -453,6 +481,13 @@ class GoogleClient:
             logger.debug(f"Upload complete for {upload_filename}. File ID: {upload_res['id']}")
         uploaded_meta = await self.get_file_meta(upload_filename)
         assert uploaded_meta is not None
+        if check_hash:
+            local_hash = await get_file_hash_async(local_file, 'sha1')
+            remote_hash = uploaded_meta['sha1Checksum']
+            matched = local_hash == remote_hash
+            logger.debug(f'Checking hashes for "{local_file}": {matched=}')
+            if not matched:
+                raise UploadError(f'Uploaded file hash mismatch for "{local_file}"')
         return uploaded_meta
 
 

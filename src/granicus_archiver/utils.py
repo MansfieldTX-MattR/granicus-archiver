@@ -3,10 +3,12 @@ from typing import (
     TypeVar, Generic, Coroutine, Iterator, Generator, Sized, Iterable,
     Container, Awaitable, AsyncIterable, AsyncGenerator, Literal, Any,
 )
+import hashlib
 from pathlib import Path
 
 import asyncio
 import aiojobs
+import aiofile
 
 T = TypeVar('T')
 
@@ -291,6 +293,25 @@ def find_mount_point(p: Path) -> Path:
 
 def is_same_filesystem(a: Path, b: Path) -> bool:
     return find_mount_point(a) == find_mount_point(b)
+
+
+HashType = Literal['md5', 'sha1', 'sha256']
+
+def get_file_hash(p: Path, hash_type: HashType) -> str:
+    assert p.is_file()
+    h = hashlib.new(hash_type)
+    h.update(p.read_bytes())
+    return h.hexdigest()
+
+async def get_file_hash_async(p: Path, hash_type: HashType) -> str:
+    assert p.is_file()
+    chunk_size = 65536
+    h = hashlib.new(hash_type)
+    async with aiofile.async_open(p, 'rb') as fp:
+        async for _b in fp.iter_chunked(chunk_size=chunk_size):
+            assert type(_b) is bytes
+            h.update(_b)
+    return h.hexdigest()
 
 
 def seconds_to_time_str(seconds: int) -> str:
