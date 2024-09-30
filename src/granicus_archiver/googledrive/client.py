@@ -15,7 +15,10 @@ import aiofile
 
 from .types import *
 from . import config
-from ..model import ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID
+from ..model import (
+    ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID,
+    FileMeta as ClipFileMeta,
+)
 from ..utils import JobWaiters, get_file_hash_async
 from .. import html_builder
 
@@ -528,6 +531,39 @@ class ClipGoogleClient(GoogleClient):
         await asyncio.gather(*[sch.close() for sch in scheduler_list])
         return await super().__aexit__(*args)
 
+    def get_clip_file_upload_path(self, clip: Clip, key: ClipFileUploadKey) -> Path:
+        """Get the uploaded filename for a clip asset (relative to :attr:`upload_dir`)
+        """
+        rel_filename = clip.get_file_path(key, absolute=False)
+        return self.upload_dir / rel_filename
+
+    async def get_clip_file_meta(
+        self,
+        clip: Clip,
+        key: ClipFileUploadKey
+    ) -> tuple[FileMetaFull|None, bool]:
+        """Get metadata for the given clip file (if it exists)
+
+        The local :attr:`~.GoogleClient.meta_cache` will first be checked.
+        If not found, it will be requested using :meth:`~.GoogleClient.get_file_meta`
+        and stored in the cache (if successful).
+
+        Returns:
+            (tuple):
+                - **metadata** (:class:`.types.FileMetaFull`, *optional*): The
+                  metadata for the file, or ``None`` if it does not exist in Drive
+                - **is_cached** (:class:`bool`): Whether the metadata was retrieved from the
+                  :attr:`~.GoogleClient.meta_cache`
+        """
+        meta = self.find_cached_file_meta(clip.id, key)
+        is_cached = meta is not None
+        if meta is None:
+            upload_filename = self.get_clip_file_upload_path(clip, key)
+            meta = await self.get_file_meta(upload_filename)
+            if meta is not None:
+                self.set_cached_file_meta(clip.id, key, meta)
+        return meta, is_cached
+
     async def upload_clip(
         self,
         clip: Clip,
@@ -555,8 +591,7 @@ class ClipGoogleClient(GoogleClient):
         for key, filename in clip.iter_paths(for_download=False):
             if not filename.exists():
                 continue
-            rel_filename = clip.get_file_path(key, absolute=False)
-            upload_filename = self.upload_dir / rel_filename
+            upload_filename = self.get_clip_file_upload_path(clip, key)
             if drive_folder_id is None:
                 drive_folder_id = await self.create_folder_from_path(
                     upload_filename.parent
@@ -581,18 +616,14 @@ class ClipGoogleClient(GoogleClient):
         """Check if the given clip has any assets that need to be uploaded
         """
         async def do_check(key: ClipFileUploadKey, filename: Path) -> bool:
-            upload_meta = self.find_cached_file_meta(clip.id, key)
-            if upload_meta is None:
-                rel_filename = clip.get_file_path(key, absolute=False)
-                upload_filename = self.upload_dir / rel_filename
-                upload_meta = await self.get_file_meta(upload_filename)
+            upload_meta, _ = await self.get_clip_file_meta(clip, key)
             if upload_meta is None:
                 return True
             assert 'size' in upload_meta
             local_size = filename.stat().st_size
             upload_size = int(upload_meta['size'])
             if upload_size != local_size:
-                logger.warning(f'size mismatch for "{upload_filename}", {local_size=}, {upload_size=}')
+                logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
             return False
 
         coros: set[Coroutine[Any, Any, bool]] = set()
@@ -656,7 +687,6 @@ async def upload_clips(
 
 @logger.catch
 async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> None:
-    upload_dir = root_conf.google.drive_folder
     logger.info('Updating clip metadata from Drive...')
 
     async with ClipGoogleClient(root_conf=root_conf, max_clips=0) as client:
@@ -664,34 +694,31 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
         scheduler = schedulers['general']
         waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
 
-        async def get_meta(clip: Clip, key: ClipFileKey) -> bool:
-            rel_filename = clip.get_file_path(key, absolute=False)
-            upload_filename = upload_dir / rel_filename
-            logger.debug(f'getting meta for {clip.id}, {key}')
-            meta = await client.get_file_meta(upload_filename)
-            if meta is not None:
+        async def get_and_check_meta(clip: Clip, key: ClipFileKey, local_meta: ClipFileMeta) -> bool:
+            meta, is_cached = await client.get_clip_file_meta(clip, key)
+            if meta is None:
+                return False
+            if not is_cached:
                 logger.debug(f'got meta for {clip.id}, {key}')
-                client.set_cached_file_meta(clip.id, key, meta)
-                return True
-            return False
+            filename = clip.get_file_path(key, absolute=True)
+            assert filename.exists(), f'{filename=}'
+            return not is_cached
 
         for clip in clips:
             for key in clip.files.path_attrs:
                 local_meta = clip.files.get_metadata(key)
                 if local_meta is None:
                     continue
-                meta = client.find_cached_file_meta(clip.id, key)
-                if meta is not None:
-                    filename = clip.get_file_path(key, absolute=True)
-                    assert filename.exists(), f'{filename=}'
-                    continue
-                await waiters.spawn(get_meta(clip, key))
+                await waiters.spawn(get_and_check_meta(clip, key, local_meta))
 
         results = await waiters
         changed = any(results)
     if changed:
         logger.info(f'Meta changed, saving cache file')
         client.save_cache()
+    else:
+        logger.info('No changes detected')
+
 
 async def build_html(clips: ClipCollection, html_dir: Path, root_conf: Config) -> str:
     await get_all_clip_file_meta(clips, root_conf=root_conf)
