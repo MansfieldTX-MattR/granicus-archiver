@@ -492,11 +492,45 @@ class GoogleClient:
 
 
 class ClipGoogleClient(GoogleClient):
+    """Client to upload items from a :class:`.model.ClipCollection`
+    """
+    max_clips: int
+    """Maximum number of :class:`Clips <.model.Clip>` to upload"""
+    def __init__(
+        self,
+        root_conf: Config,
+        max_clips: int = 8,
+        scheduler_limit: int = 8
+    ) -> None:
+        super().__init__(root_conf)
+        self.max_clips = max_clips
+        self.scheduler_limit = scheduler_limit
+        self.num_uploaded = 0
+
+    @property
+    def upload_dir(self) -> Path:
+        """Root folder name to upload within Drive
+        (alias for :attr:`.config.GoogleConfig.drive_folder`)
+        """
+        return self.root_conf.google.drive_folder
+
+    async def __aenter__(self) -> Self:
+        self.schedulers = get_schedulers(self.scheduler_limit)
+        self.upload_check_waiters = JobWaiters(scheduler=self.schedulers['upload_checks'])
+        self.upload_clip_waiters = JobWaiters[bool](scheduler=self.schedulers['uploads'])
+        return await super().__aenter__()
+
+    async def __aexit__(self, *args) -> None:
+        logger.info('closing schedulers..')
+        scheduler_list: list[aiojobs.Scheduler] = [
+            self.schedulers[key] for key in self.schedulers.keys()
+        ]
+        await asyncio.gather(*[sch.close() for sch in scheduler_list])
+        return await super().__aexit__(*args)
 
     async def upload_clip(
         self,
         clip: Clip,
-        upload_dir: Path
     ) -> bool:
         """Upload all assets for the given clip
         """
@@ -522,7 +556,7 @@ class ClipGoogleClient(GoogleClient):
             if not filename.exists():
                 continue
             rel_filename = clip.get_file_path(key, absolute=False)
-            upload_filename = upload_dir / rel_filename
+            upload_filename = self.upload_dir / rel_filename
             if drive_folder_id is None:
                 drive_folder_id = await self.create_folder_from_path(
                     upload_filename.parent
@@ -542,8 +576,7 @@ class ClipGoogleClient(GoogleClient):
 
     async def check_clip_needs_upload(
         self,
-        clip: Clip,
-        upload_dir: Path
+        clip: Clip
     ) -> bool:
         """Check if the given clip has any assets that need to be uploaded
         """
@@ -551,7 +584,7 @@ class ClipGoogleClient(GoogleClient):
             upload_meta = self.find_cached_file_meta(clip.id, key)
             if upload_meta is None:
                 rel_filename = clip.get_file_path(key, absolute=False)
-                upload_filename = upload_dir / rel_filename
+                upload_filename = self.upload_dir / rel_filename
                 upload_meta = await self.get_file_meta(upload_filename)
             if upload_meta is None:
                 return True
@@ -573,6 +606,35 @@ class ClipGoogleClient(GoogleClient):
                 return True
         return False
 
+    async def upload_clip_if_needed(self, clip: Clip) -> bool:
+        """Check assets for the given clip and upload if missing from Drive
+        """
+        if self.num_uploaded >= self.max_clips:
+            return False
+        needs_upload = await self.check_clip_needs_upload(clip)
+        if not needs_upload or self.num_uploaded >= self.max_clips:
+            return False
+        self.num_uploaded += 1
+        logger.info(f'Upload clip {clip.unique_name}')
+        await self.upload_clip_waiters.spawn(self.upload_clip(clip))
+        return needs_upload
+
+    async def upload_all(self, clips: ClipCollection) -> None:
+        """Upload assets for the given clips (up to by :attr:`max_clips`)
+        """
+        for clip in clips:
+            await self.upload_check_waiters.spawn(self.upload_clip_if_needed(clip))
+            if self.num_uploaded >= self.max_clips:
+                break
+
+        if len(self.upload_check_waiters):
+            logger.info(f'waiting for check_waiters ({len(self.upload_check_waiters)=})')
+            await self.upload_check_waiters
+
+        if len(self.upload_clip_waiters):
+            logger.info(f'waiting for waiters ({len(self.upload_clip_waiters)=})')
+            await self.upload_clip_waiters
+
 
 @logger.catch
 async def upload_clips(
@@ -581,43 +643,14 @@ async def upload_clips(
     max_clips: int,
     scheduler_limit: int,
 ) -> None:
-    upload_dir = root_conf.google.drive_folder
-    schedulers = get_schedulers(scheduler_limit)
-    upload_check_waiters = JobWaiters(scheduler=get_scheduler('upload_checks'))
-    upload_clip_waiters = JobWaiters[bool](scheduler=get_scheduler('general'))
+    client = ClipGoogleClient(
+        root_conf=root_conf,
+        max_clips=max_clips,
+        scheduler_limit=scheduler_limit,
+    )
+    async with client:
+        await client.upload_all(clips)
 
-    # Using a dict here for nested context mutability
-    tracking_vars = {'num_uploaded': 0}
-
-    async with ClipGoogleClient(root_conf=root_conf) as client:
-
-        async def upload_clip_if_needed(clip: Clip):
-            if tracking_vars['num_uploaded'] >= max_clips:
-                return False
-            needs_upload = await client.check_clip_needs_upload(clip, upload_dir)
-            if not needs_upload or tracking_vars['num_uploaded'] >= max_clips:
-                return False
-            tracking_vars['num_uploaded'] += 1
-            logger.info(f'Upload clip {clip.unique_name}')
-            await upload_clip_waiters.spawn(client.upload_clip(clip, upload_dir))
-            return needs_upload
-
-        for clip in clips:
-            await upload_check_waiters.spawn(upload_clip_if_needed(clip))
-            if tracking_vars['num_uploaded'] >= max_clips:
-                break
-
-        if len(upload_check_waiters):
-            logger.info(f'waiting for check_waiters ({len(upload_check_waiters)=})')
-            await upload_check_waiters
-
-        if len(upload_clip_waiters):
-            logger.info(f'waiting for waiters ({len(upload_clip_waiters)=})')
-            await upload_clip_waiters
-
-        logger.info('closing schedulers..')
-        scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
-        await asyncio.gather(*[sch.close() for sch in scheduler_list])
     client.save_cache()
 
 
@@ -625,10 +658,11 @@ async def upload_clips(
 async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> None:
     upload_dir = root_conf.google.drive_folder
     logger.info('Updating clip metadata from Drive...')
-    schedulers = get_schedulers(limit=8)
-    scheduler = schedulers['general']
-    waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
-    async with ClipGoogleClient(root_conf=root_conf) as client:
+
+    async with ClipGoogleClient(root_conf=root_conf, max_clips=0) as client:
+        schedulers = client.schedulers
+        scheduler = schedulers['general']
+        waiters: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
 
         async def get_meta(clip: Clip, key: ClipFileKey) -> bool:
             rel_filename = clip.get_file_path(key, absolute=False)
@@ -648,12 +682,13 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
                     continue
                 meta = client.find_cached_file_meta(clip.id, key)
                 if meta is not None:
+                    filename = clip.get_file_path(key, absolute=True)
+                    assert filename.exists(), f'{filename=}'
                     continue
                 await waiters.spawn(get_meta(clip, key))
 
         results = await waiters
         changed = any(results)
-        await scheduler.close()
     if changed:
         logger.info(f'Meta changed, saving cache file')
         client.save_cache()
