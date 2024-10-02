@@ -135,6 +135,28 @@ def drive(obj: BaseContext):
     """
     pass
 
+@cli.command
+@click.pass_obj
+def show_config(obj: BaseContext):
+    """Show the current configuration
+    """
+    from pprint import pformat
+    sub_keys = ['google', 'legistar']
+    ser = obj.config.serialize()
+    for key in sub_keys:
+        del ser[key]
+    click.echo('Root Config:')
+    click.echo(pformat(ser))
+    click.echo('')
+
+    for key in sub_keys:
+        cfg = getattr(obj.config, key)
+        ser = cfg.serialize()
+        click.echo(f'{key.title()} Config:')
+        click.echo(pformat(ser))
+        click.echo('')
+
+
 @legistar.command
 @click.option('--name', type=str, prompt=True)
 @click.option('--url', type=str, prompt=True)
@@ -149,6 +171,15 @@ def add_feed_url(obj: BaseContext, name: str, url: str):
     changed = conf.update(feed_urls={name: URL(url)})
     if changed:
         obj.config.save(obj.config_file)
+
+
+@legistar.command
+@click.pass_obj
+def list_feed_urls(obj: BaseContext):
+    """Show RSS feed urls in the current configuration
+    """
+    for name, url in obj.config.legistar.feed_urls.items():
+        click.echo(f'{name}\t{url}')
 
 
 @clips.command
@@ -338,6 +369,15 @@ def upload_clips(
     ))
 
 
+@clips.command(name='check-uploads')
+@click.pass_obj
+def check_clips_uploads(obj: BaseContext):
+    """Check uploaded metadata and verify content hashes
+    """
+    clips = ClipCollection.load(obj.config.data_file)
+    asyncio.run(googleclient.get_all_clip_file_meta(clips, root_conf=obj.config))
+
+
 @legistar.command(name='upload')
 @click.option(
     '--max-clips', type=int, default=0,
@@ -353,6 +393,20 @@ def upload_legistar(
     asyncio.run(googleclient.upload_legistar(
         root_conf=obj.config,
         max_clips=max_clips,
+    ))
+
+
+@legistar.command(name='check-uploads')
+@click.option(
+    '--check-hashes/--no-check-hashes', default=False,
+    help='If supplied, verify checksums of uploaded files',
+)
+@click.pass_obj
+def check_legistar_uploads(obj: BaseContext, check_hashes: bool):
+    """Check uploaded metadata and verify content hashes
+    """
+    asyncio.run(googleclient.check_legistar_meta(
+        root_conf=obj.config, check_hashes=check_hashes,
     ))
 
 
