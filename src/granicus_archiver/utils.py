@@ -192,6 +192,8 @@ class JobWaiters(
                 pending: A set of pending :class:`aiojobs.Job` instances
 
         """
+        if not len(self.waiter_tasks):
+            return [], set()
         _done, _pending = await asyncio.wait(self.waiter_tasks.keys(), return_when=return_when)
         pending: set[aiojobs.Job[T]] = set()
         done: list[JobResult[T]] = []
