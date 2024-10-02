@@ -668,6 +668,261 @@ class ClipGoogleClient(GoogleClient):
             await self.upload_clip_waiters
 
 
+class LegistarGoogleClient(GoogleClient):
+    """Client to upload items from :class:`~.legistar.model.LegistarData`
+    """
+    max_clips: int
+    """Maximum number of items to upload"""
+    legistar_data: LegistarData
+    """A :class:`~.legistar.model.LegistarData` instance"""
+    item_scheduler: aiojobs.Scheduler
+    check_scheduler: aiojobs.Scheduler
+    upload_scheduler: aiojobs.Scheduler
+    def __init__(
+        self,
+        root_conf: Config,
+        max_clips: int,
+        legistar_data: LegistarData|None = None
+    ) -> None:
+        super().__init__(root_conf)
+        self.max_clips = max_clips
+        if legistar_data is None:
+            legistar_data = LegistarData.load(self.root_conf.legistar.data_file)
+        self.legistar_data = legistar_data
+        self.num_uploaded = 0
+
+    @property
+    def upload_dir(self) -> Path:
+        """Root folder name to upload within Drive
+        (alias for :attr:`.config.GoogleConfig.legistar_drive_folder`)
+        """
+        return self.root_conf.google.legistar_drive_folder
+
+    async def __aenter__(self) -> Self:
+        self.item_scheduler = aiojobs.Scheduler(limit=32)
+        self.check_scheduler = aiojobs.Scheduler(limit=32, pending_limit=1)
+        self.upload_scheduler = aiojobs.Scheduler(limit=16)
+        return await super().__aenter__()
+
+    async def __aexit__(self, *args) -> None:
+        await self.upload_scheduler.close()
+        await self.item_scheduler.close()
+        return await super().__aexit__(*args)
+
+    def get_file_upload_path(self, guid: GUID, uid: LegistarFileUID) -> Path:
+        """Get the uploaded filename for a legistar asset (relative to :attr:`upload_dir`)
+        """
+        filename, _ = self.legistar_data.get_path_for_uid(guid, uid)
+        assert not filename.is_absolute()
+        filename = filename.relative_to(self.legistar_data.root_dir)
+        return self.upload_dir / filename
+
+    def get_local_meta(self, guid: GUID, uid: LegistarFileUID) -> ClipFileMeta|None:
+        """Get the local file metadata for the given *guid* and *uid*
+        """
+        _, meta = self.legistar_data.get_path_for_uid(guid, uid)
+        return meta
+
+    async def get_remote_meta(
+        self,
+        guid: GUID,
+        uid: LegistarFileUID
+    ) -> tuple[FileMetaFull|None, bool]:
+        """Get metadata for the filename matching *guid* and *uid* (if it exists)
+
+        The local :attr:`~.GoogleClient.meta_cache` will first be checked.
+        If not found, it will be requested using :meth:`~.GoogleClient.get_file_meta`
+        and stored in the cache (if successful).
+
+        Returns:
+            (tuple):
+                - **metadata** (:class:`~.types.FileMetaFull`, *optional*): The
+                  metadata for the file, or ``None`` if it does not exist in Drive
+                - **is_cached** (:class:`bool`): Whether the metadata was retrieved from the
+                  :attr:`~.GoogleClient.meta_cache`
+        """
+        meta_key = ('legistar', guid, uid)
+        meta = self.find_cached_file_meta(meta_key)
+        is_cached = meta is not None
+        if meta is None:
+            upload_filename = self.get_file_upload_path(guid, uid)
+            meta = await self.get_file_meta(upload_filename)
+            if meta is not None:
+                self.set_cached_file_meta(meta_key, meta)
+        return meta, is_cached
+
+    async def upload_legistar_file(
+        self,
+        guid: GUID,
+        uid: LegistarFileUID,
+        filename: Path,
+        upload_filename: Path,
+        folder_id: FileId
+    ) -> bool:
+        """Upload a single legistar file
+        """
+        meta = await self.stream_upload_file(
+            filename, upload_filename, folder_id=folder_id,
+        )
+        if meta is not None:
+            self.set_cached_file_meta(('legistar', guid, uid), meta)
+            return True
+        return False
+
+    async def upload_legistar_item(self, guid: GUID):
+        """Upload all files for the legistar item matching the given *guid*
+        """
+        waiters = JobWaiters[bool](scheduler=self.upload_scheduler)
+        folder_ids: list[FileId|None] = [None, None]
+        it = self.legistar_data.iter_files_for_upload(guid)
+        for uid, filename, local_meta, is_attachment in it:
+            upload_filename = self.get_file_upload_path(guid, uid)
+            f_id_index = 1 if is_attachment else 0
+            folder_id = folder_ids[f_id_index]
+            if folder_id is None:
+                folder_id = folder_ids[f_id_index] = await self.create_folder_from_path(
+                    upload_filename.parent
+                )
+            await waiters.spawn(self.upload_legistar_file(
+                guid, uid, filename, upload_filename, folder_id,
+            ))
+            # logger.warning(f'{sch.active_count=}, {len(sch)=}, {sch.pending_count=}, {len(waiters)=}')
+
+        if not len(waiters):
+            return True
+        results = await waiters
+        all_skipped = True not in results
+        logger.info(f'Upload complete for guid: {guid}')
+        return all_skipped
+
+    async def check_item_needs_upload(self, guid: GUID) -> bool:
+        """Check if the item matching *guid* has any local files that need to
+        be uploaded
+        """
+        async def do_check(uid: LegistarFileUID, filename: Path) -> bool:
+            upload_meta, _ = await self.get_remote_meta(guid, uid)
+            if upload_meta is None:
+                return True
+            assert 'size' in upload_meta
+            local_size = filename.stat().st_size
+            upload_size = int(upload_meta['size'])
+            if upload_size != local_size:
+                logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
+            return False
+
+        coros: set[Coroutine[Any, Any, bool]] = set()
+        it = self.legistar_data.iter_files_for_upload(guid)
+        for uid, filename, local_meta, is_attachment in it:
+            coros.add(do_check(uid, filename))
+
+        if len(coros):
+            results = await asyncio.gather(*coros)
+            if any(results):
+                return True
+        return False
+
+    async def upload_item_if_needed(self, guid: GUID, waiter: JobWaiters[bool]) -> bool:
+        """Check and upload any missing files for the item matching *guid*
+
+        If uploads are needed, a job is scheduled for :meth:`upload_legistar_item`
+        and added to the given :class:`~.utils.JobWaiters`.
+
+        Returns:
+            ``True`` if any file uploads were scheduled, ``False`` otherwise
+        """
+        needs_upload = await self.check_item_needs_upload(guid)
+        if not needs_upload or self.num_uploaded >= self.max_clips:
+            return False
+        logger.info(f'Upload item {guid}')
+        self.num_uploaded += 1
+        await waiter.spawn(self.upload_legistar_item(guid))
+        return True
+
+    async def upload_all(self):
+        """Upload files for all items in :attr:`legistar_data` (up to by :attr:`max_clips`)
+        """
+        check_waiters = JobWaiters[bool](scheduler=self.check_scheduler)
+        item_waiters = JobWaiters[bool](scheduler=self.item_scheduler)
+        if self.max_clips == 0:
+            return
+
+        for guid in self.legistar_data.keys():
+            await check_waiters.spawn(self.upload_item_if_needed(guid, item_waiters))
+            if self.num_uploaded >= self.max_clips:
+                break
+        logger.info(f'all jobs scheduled, waiting ({len(item_waiters)=}), {len(check_waiters)=}, {self.num_uploaded=}')
+        await check_waiters
+        await item_waiters
+        logger.success('all jobs completed')
+
+    @logger.catch
+    async def check_meta(self, enable_hashes: bool) -> bool:
+        """Check metadata for all available files stored on Drive
+
+        Arguments:
+            enable_hashes: If ``True``, the :attr:`~.types.FileMetaFull.sha1Checksum`
+                will be compared with the hash of the local file contents
+
+        Raises:
+            UploadError: If *enable_hashes* is True and the content hashes
+                do not match
+
+        Returns:
+            bool: Whether any changes to the :attr:`~GoogleClient.meta_cache` were made
+        """
+        async def check_hash(
+            filename: Path,
+            remote_meta: FileMetaFull,
+        ):
+            local_hash = await get_file_hash_async(filename, 'sha1')
+            remote_hash = remote_meta['sha1Checksum']
+            matched = local_hash == remote_hash
+            logger.debug(f'Checking hashes for "{filename}": {matched=}')
+            if not matched:
+                raise UploadError(f'Uploaded file hash mismatch for "{filename}"')
+
+        async def check_file(
+            guid: GUID,
+            uid: LegistarFileUID,
+            filename: Path
+        ) -> tuple[FileMetaFull|None, bool, Path]:
+            meta, is_cached = await self.get_remote_meta(guid, uid)
+            return meta, is_cached, filename
+
+        async def check_item(guid: GUID) -> bool:
+            changed = False
+            hash_waiters = JobWaiters(scheduler=self.upload_scheduler)
+            meta_waiters = JobWaiters[tuple[FileMetaFull|None, bool, Path]](scheduler=self.upload_scheduler)
+
+            it = self.legistar_data.iter_files_for_upload(guid)
+            for uid, filename, local_meta, is_attachment in it:
+                await meta_waiters.spawn(check_file(guid, uid, filename))
+
+            async for job in meta_waiters:
+                if job.exception is not None:
+                    raise job.exception
+                meta, is_cached, filename = job.result
+                if meta is None:
+                    continue
+                if not is_cached:
+                    changed = True
+                if enable_hashes:
+                    await hash_waiters.spawn(check_hash(filename, meta))
+            await hash_waiters
+            return changed
+
+        item_waiters = JobWaiters[bool](scheduler=self.check_scheduler)
+        for guid in self.legistar_data.keys():
+            logger.info(f'check_item: {guid}')
+            await item_waiters.spawn(check_item(guid))
+
+        logger.success('all items scheduled')
+        results = await item_waiters
+        changed = any(results)
+        return changed
+
+
+
 @logger.catch
 async def upload_clips(
     clips: ClipCollection,
@@ -731,3 +986,24 @@ async def build_html(clips: ClipCollection, html_dir: Path, root_conf: Config) -
             return None
         return meta.get('webViewLink')
     return html_builder.build_html(clips, html_dir, link_callback)
+
+
+async def upload_legistar(
+    root_conf: Config,
+    max_clips: int
+) -> None:
+    client = LegistarGoogleClient(root_conf=root_conf, max_clips=max_clips)
+    async with client:
+        await client.upload_all()
+    client.save_cache()
+
+async def check_legistar_meta(root_conf: Config, check_hashes: bool) -> None:
+    client = LegistarGoogleClient(root_conf=root_conf, max_clips=0)
+    async with client:
+        changed = await client.check_meta(enable_hashes=check_hashes)
+
+    if changed:
+        logger.info(f'Meta changed, saving cache file')
+        client.save_cache()
+    else:
+        logger.info('No changes detected')
