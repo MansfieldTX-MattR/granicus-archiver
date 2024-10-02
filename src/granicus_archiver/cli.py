@@ -192,29 +192,6 @@ def check_legistar(obj: BaseContext):
     click.echo('Check complete')
     click.echo(f'Legistar: item_count={leg_items}, file_count={leg_files}')
 
-@cli.command
-@click.pass_obj
-def fix_dts(obj: BaseContext):
-    out_dir, data_file = obj.config.out_dir, obj.config.data_file
-
-    async def do_fix():
-        local_clips: ClipCollection|None = None
-        if data_file.exists():
-            local_clips = ClipCollection.load(data_file)
-        async with ClientSession() as session:
-            clips = orig_clips = await client.get_main_data(session, out_dir)
-        if local_clips is not None:
-            local_keys = set(local_clips.clips.keys())
-            overlap = set(clips.clips.keys()) & local_keys
-            clips = clips.merge(local_clips)
-            assert len(overlap)
-            for key in overlap:
-                orig_clip = orig_clips.clips[key]
-                clip = clips[key]
-                clip.parse_data.date = orig_clip.parse_data.date
-            clips.save(data_file)
-
-    asyncio.run(do_fix())
 
 @clips.command(name='download')
 @click.option(
