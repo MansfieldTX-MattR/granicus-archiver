@@ -141,18 +141,17 @@ class FeedItem(Serializable):
     """Date and time the meeting was published (not the meeting date/time)
     """
 
-
-    _TZ: ClassVar[ZoneInfo|None] = None
+    TZ: ClassVar[ZoneInfo|None] = None
     """Local timezone used to parse :attr:`meeting_date`"""
 
     @classmethod
     def set_timezone(cls, tz: ZoneInfo) -> None:
-        cls._TZ = tz
+        cls.TZ = tz
 
     @classmethod
     def get_timezone(cls) -> ZoneInfo:
-        assert cls._TZ is not None
-        return cls._TZ
+        assert cls.TZ is not None
+        return cls.TZ
 
     @property
     def is_future(self) -> bool:
