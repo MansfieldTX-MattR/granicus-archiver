@@ -21,6 +21,7 @@ from .model import (
 )
 
 
+class StupidZeroContentLengthError(Exception): ...
 
 class DownloadRequest(TypedDict):
     url: URL
@@ -69,6 +70,8 @@ class FileDowload:
 
     async def __call__(self) -> Self:
         async with self.session.get(self.url) as resp:
+            if resp.headers.get('Content-Length') in ['0', 0]:
+                raise StupidZeroContentLengthError(f'Content-Length 0 for {self.url}')
             meta = self._meta = FileMeta.from_headers(resp.headers)
             total_bytes = meta.content_length
             bytes_recv = 0
@@ -346,6 +349,9 @@ class Client:
                     temp_filename.unlink()
                 logger.exception(exc)
                 return
+            except StupidZeroContentLengthError as exc:
+                logger.warning(str(exc))
+                return
             logger.debug(f'download complete for "{url}"')
             temp_filename.rename(abs_filename)
             self.legistar_data.set_file_complete(guid, key, dl.meta)
@@ -364,6 +370,9 @@ class Client:
                 if temp_filename.exists():
                     temp_filename.unlink()
                 logger.exception(exc)
+                return
+            except StupidZeroContentLengthError as exc:
+                logger.warning(str(exc))
                 return
             logger.debug(f'download complete for attachment "{url}"')
             temp_filename.rename(abs_filename)
