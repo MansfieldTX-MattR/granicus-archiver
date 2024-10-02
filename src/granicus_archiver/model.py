@@ -361,10 +361,11 @@ class ClipFiles(Serializable):
         """
         return self.metadata.get(key)
 
-    def set_metadata(self, key: ClipFileUploadKey, headers: Headers) -> FileMeta:
+    def set_metadata(self, key: ClipFileUploadKey, meta: FileMeta|Headers) -> FileMeta:
         """Set the :class:`FileMeta` for the given file type from request headers
         """
-        meta = FileMeta.from_headers(headers)
+        if not isinstance(meta, FileMeta):
+            meta = FileMeta.from_headers(meta)
         self.metadata[key] = meta
         return meta
 
