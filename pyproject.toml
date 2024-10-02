@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tests = ["pytest", "pytest-asyncio"]
+docs = ["sphinx", "furo"]
 
 
 [tool.setuptools.packages.find]
