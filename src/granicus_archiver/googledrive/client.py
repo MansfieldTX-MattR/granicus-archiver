@@ -109,6 +109,16 @@ class GoogleClient:
     async def __aexit__(self, *args) -> None:
         await self.aiogoogle.__aexit__(*args)
 
+    def escape_filename(self, filename: str|Path) -> str:
+        """Escape filenames for use within quoted portions of api queries
+        """
+        if isinstance(filename, Path):
+            filename = str(filename)
+        # Prepend a forward-slash before all single quotes (enforcing an escape)
+        if "'" in filename:
+            filename = filename.replace("'", "\\'")
+        return filename
+
     def load_cache(self):
         if self.CACHE_FILE.exists():
             d = json.loads(self.CACHE_FILE.read_text())
@@ -252,7 +262,8 @@ class GoogleClient:
         ) -> list[FileId]|None:
             folder_part = folder_parts[0]
             folders_remain = folder_parts[1:]
-            q = f"trashed = false and mimeType = '{FOLDER_MTYPE}' and name = '{folder_part}'"
+            folder_part_cleaned = self.escape_filename(folder_part)
+            q = f"trashed = false and mimeType = '{FOLDER_MTYPE}' and name = '{folder_part_cleaned}'"
             if parent_id is not None:
                 q = f"{q} and '{parent_id}' in parents"
             # logger.debug(f'{q=}')
@@ -394,7 +405,8 @@ class GoogleClient:
         filename: str,
         parent_id: FileId|None
     ) -> bool:
-        q = f"trashed = false and mimeType != '{FOLDER_MTYPE}' and name = '{filename}'"
+        filename_cleaned = self.escape_filename(filename)
+        q = f"trashed = false and mimeType != '{FOLDER_MTYPE}' and name = '{filename_cleaned}'"
         if parent_id is not None:
             q = f"{q} and '{parent_id}' in parents"
         # logger.debug(f'{q=}')
