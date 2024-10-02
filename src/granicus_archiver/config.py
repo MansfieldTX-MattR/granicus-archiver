@@ -47,6 +47,9 @@ class GoogleConfig(BaseConfig):
     drive_folder: Path
     """Root folder name to upload within Drive"""
 
+    legistar_drive_folder: Path
+    """Root folder name to upload legistar items within Drive"""
+
     def update(self, **kwargs) -> bool:
         changed = False
         for key in ['user_credentials_filename', 'drive_folder']:
@@ -65,6 +68,7 @@ class GoogleConfig(BaseConfig):
         default_kw = dict(
             user_credentials_filename=Path.home() / '.granicus-oauth-user.json',
             drive_folder=Path('granicus-archive/data'),
+            legistar_drive_folder=Path('granicus-archive/data/legistar'),
         )
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
@@ -73,7 +77,8 @@ class GoogleConfig(BaseConfig):
     def serialize(self) -> dict[str, Any]:
         return dict(
             user_credentials_filename=str(self.user_credentials_filename),
-            drive_folder=str(self.drive_folder)
+            drive_folder=str(self.drive_folder),
+            legistar_drive_folder=str(self.legistar_drive_folder),
         )
 
     @classmethod
@@ -81,6 +86,7 @@ class GoogleConfig(BaseConfig):
         return cls(
             user_credentials_filename=Path(data['user_credentials_filename']),
             drive_folder=Path(data['drive_folder']),
+            legistar_drive_folder=Path(data['legistar_drive_folder']),
         )
 
 @dataclass

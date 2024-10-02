@@ -57,6 +57,13 @@ class BaseContext:
     help='Filename to store legistar information. Defaults to "<legistar-out-dir>/legistar-data.json"',
 )
 @click.option(
+    '--legistar-drive-folder',
+    type=click.Path(path_type=Path),
+    default=Path('granicus-archive/data/legistar'),
+    show_default=True,
+    help='Name of the root folder to upload legistar items to',
+)
+@click.option(
     '--timestamp-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
@@ -71,6 +78,7 @@ def cli(
     local_timezone: str|None,
     legistar_out_dir: Path|None,
     legistar_data_file: Path|None,
+    legistar_drive_folder: Path|None,
     timestamp_file: Path|None
 ):
     conf_kw = dict(
@@ -80,6 +88,9 @@ def cli(
         legistar=dict(
             out_dir=legistar_out_dir,
             data_file=legistar_data_file,
+        ),
+        google=dict(
+            legistar_drive_folder=legistar_drive_folder,
         ),
         timestamp_file=timestamp_file,
     )
