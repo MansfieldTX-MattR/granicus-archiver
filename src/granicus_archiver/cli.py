@@ -360,6 +360,25 @@ def upload_clips(
         scheduler_limit=io_job_limit,
     ))
 
+
+@legistar.command(name='upload')
+@click.option(
+    '--max-clips', type=int, default=0,
+    help='Maximum number of clips to upload',
+)
+@click.pass_obj
+def upload_legistar(
+    obj: BaseContext,
+    max_clips: int
+):
+    """Upload all local content to Google Drive
+    """
+    asyncio.run(googleclient.upload_legistar(
+        root_conf=obj.config,
+        max_clips=max_clips,
+    ))
+
+
 @clips.command
 @click.option(
     '--index-root',
