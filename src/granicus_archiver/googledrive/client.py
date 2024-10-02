@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, Self, Coroutine, TypedDict, Literal, Any, AsyncGenerator,
+    TypeVar, Generic, Self, Coroutine, TypedDict, Literal, Any, AsyncGenerator,
     overload, cast, TYPE_CHECKING
 )
 import mimetypes
@@ -14,11 +14,14 @@ import aiojobs
 import aiofile
 
 from .types import *
+from .cache import FileCache, MetaCacheKey
 from . import config
 from ..model import (
-    ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID,
+    ClipCollection, Clip, ClipFileKey, ClipFileUploadKey,
     FileMeta as ClipFileMeta,
 )
+from ..legistar.types import GUID, LegistarFileUID
+from ..legistar.model import LegistarData
 from ..utils import JobWaiters, get_file_hash_async
 from .. import html_builder
 
@@ -83,7 +86,7 @@ class GoogleClient:
     """A cache of Drive folders and their id
     """
 
-    meta_cache: dict[CLIP_ID, dict[ClipFileUploadKey, FileMetaFull]]
+    meta_cache: FileCache
     """Cache for uploaded file metadata
     """
     CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
@@ -92,7 +95,7 @@ class GoogleClient:
     def __init__(self, root_conf: Config) -> None:
         self.root_conf = root_conf
         self.folder_cache = {}
-        self.meta_cache = {}
+        self.meta_cache = FileCache()
         self.load_cache()
 
     async def __aenter__(self) -> Self:
@@ -113,14 +116,17 @@ class GoogleClient:
             self.folder_cache.update(d)
         if self.META_CACHE_FILE.exists():
             d = json.loads(self.META_CACHE_FILE.read_text())
-            self.meta_cache.update(d)
+            meta_cache = FileCache.deserialize(d)
+            self.meta_cache.update(meta_cache)
 
     def save_cache(self):
         """Save :attr:`folder_cache` and :attr:`meta_cache` to disk
         """
         d = {str(k):v for k,v in self.folder_cache.items()}
         self.CACHE_FILE.write_text(json.dumps(d, indent=2))
-        self.META_CACHE_FILE.write_text(json.dumps(self.meta_cache, indent=2))
+        self.META_CACHE_FILE.write_text(
+            json.dumps(self.meta_cache.serialize(), indent=2)
+        )
 
     def find_folder_cache(self, folder: Path) -> tuple[list[FileId], Path]|None:
         """Search for cached Drive folders previously found by :meth:`find_folder`
@@ -163,29 +169,23 @@ class GoogleClient:
 
     def find_cached_file_meta(
         self,
-        clip_id: CLIP_ID,
-        key: ClipFileUploadKey
+        key: MetaCacheKey
     ) -> FileMetaFull|None:
         """Search the cache for metadata by :attr:`.model.Clip.id` and file type
         """
-        d = self.meta_cache.get(clip_id)
-        if d is None:
-            return None
-        meta = d.get(key)
+        meta = self.meta_cache.get(key)
         if meta is None or 'size' not in meta:
             return None
         return meta
 
     def set_cached_file_meta(
         self,
-        clip_id: CLIP_ID,
-        key: ClipFileUploadKey,
+        key: MetaCacheKey,
         meta: FileMetaFull
     ) -> None:
         """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
         """
-        d = self.meta_cache.setdefault(clip_id, {})
-        d[key] = meta
+        self.meta_cache[key] = meta
 
     async def as_user(self, *requests, resp_type: type[_Rt], full_res: bool = False) -> _Rt:
         """Send requests using :meth:`aiogoogle.client.Aiogoogle.as_user`
@@ -555,13 +555,14 @@ class ClipGoogleClient(GoogleClient):
                 - **is_cached** (:class:`bool`): Whether the metadata was retrieved from the
                   :attr:`~.GoogleClient.meta_cache`
         """
-        meta = self.find_cached_file_meta(clip.id, key)
+        meta_key = ('clips', clip.id, key)
+        meta = self.find_cached_file_meta(meta_key)
         is_cached = meta is not None
         if meta is None:
             upload_filename = self.get_clip_file_upload_path(clip, key)
             meta = await self.get_file_meta(upload_filename)
             if meta is not None:
-                self.set_cached_file_meta(clip.id, key, meta)
+                self.set_cached_file_meta(meta_key, meta)
         return meta, is_cached
 
     async def upload_clip(
@@ -584,7 +585,7 @@ class ClipGoogleClient(GoogleClient):
                 filename, upload_filename, folder_id=folder_id,
             )
             if meta is not None:
-                self.set_cached_file_meta(clip.id, key, meta)
+                self.set_cached_file_meta(('clips', clip.id, key), meta)
                 return True
             return False
 
@@ -725,7 +726,7 @@ async def build_html(clips: ClipCollection, html_dir: Path, root_conf: Config) -
     client = ClipGoogleClient(root_conf=root_conf)
 
     def link_callback(clip: Clip, key: ClipFileKey) -> str|None:
-        meta = client.find_cached_file_meta(clip.id, key)
+        meta = client.find_cached_file_meta(('clips', clip.id, key))
         if meta is None:
             return None
         return meta.get('webViewLink')
