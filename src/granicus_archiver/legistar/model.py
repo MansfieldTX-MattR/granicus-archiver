@@ -536,6 +536,11 @@ class DetailPageResult(Serializable):
         combination of the date, :attr:`~.rss_parser.FeedItem.title` and
         :attr:`location`.  This combination was chosen to ensure uniqueness.
         """
+        def strip_bad_chars(s: str):
+            s = s.replace(' / ', ' - ').replace('\n', ' ')
+            for c in '/\\':
+                s = s.replace(c, '-')
+            return s
         item = self.feed_item
         dt = item.meeting_date.astimezone(item.get_timezone())
         dtstr = dt.strftime('%Y%m%d-%H%M')
@@ -544,7 +549,9 @@ class DetailPageResult(Serializable):
         # directory name limitations.  Strip newlines and limit to 80 chars
         loc = self.location.replace('\n', ' ')[:80]
         title_str = f'{dtstr} - {item.title} - {loc}'
-        p = Path(item.category) / dt.strftime('%Y') / title_str
+        parts = [item.category, dt.strftime('%Y'), title_str]
+        parts = [strip_bad_chars(part) for part in parts]
+        p = Path(*parts)
         return p
 
     @classmethod
