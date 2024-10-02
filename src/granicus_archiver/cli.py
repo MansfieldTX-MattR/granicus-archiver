@@ -114,8 +114,28 @@ def cli(
     )
     set_local_timezone(config.local_timezone)
 
+@cli.group()
+@click.pass_obj
+def clips(obj: BaseContext):
+    """Granicus clips sub-commands
+    """
+    pass
 
-@cli.command
+@cli.group()
+@click.pass_obj
+def legistar(obj: BaseContext):
+    """Legistar sub-commands
+    """
+    pass
+
+@cli.group()
+@click.pass_obj
+def drive(obj: BaseContext):
+    """Google Drive sub-commands
+    """
+    pass
+
+@legistar.command
 @click.option('--name', type=str, prompt=True)
 @click.option('--url', type=str, prompt=True)
 @click.pass_obj
@@ -131,7 +151,7 @@ def add_feed_url(obj: BaseContext, name: str, url: str):
         obj.config.save(obj.config_file)
 
 
-@cli.command
+@clips.command
 @click.pass_obj
 def build_vtt(obj: BaseContext):
     """Build vtt files with chapters from agenda timestamp data
@@ -147,14 +167,21 @@ def build_vtt(obj: BaseContext):
         clips.save(obj.config.data_file)
 
 
-@cli.command
+@clips.command(name='check')
 @click.pass_obj
-def check(obj: BaseContext):
+def check_clips(obj: BaseContext):
     """Check downloaded files using the stored metadata
     """
     clips = ClipCollection.load(obj.config.data_file)
     client.check_all_clip_files(clips)
+    click.echo('Check complete')
 
+
+@legistar.command(name='check')
+@click.pass_obj
+def check_legistar(obj: BaseContext):
+    """Check downloaded files using the stored metadata
+    """
     leg_client_obj = asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=0,
@@ -189,7 +216,7 @@ def fix_dts(obj: BaseContext):
 
     asyncio.run(do_fix())
 
-@cli.command
+@clips.command(name='download')
 @click.option(
     '--max-clips', type=int, required=False,
     help='Maximum number of clips to download. If not provided, there is no limit',
@@ -202,12 +229,14 @@ def fix_dts(obj: BaseContext):
     '--folder', type=str,
 )
 @click.pass_obj
-def download(
+def download_clips(
     obj: BaseContext,
     max_clips: int|None,
     io_job_limit: int,
     folder: str|None,
 ):
+    """Download files for Granicus clips
+    """
     clips = asyncio.run(client.amain(
         data_file=obj.config.data_file,
         timestamp_file=obj.config.timestamp_file,
@@ -217,23 +246,27 @@ def download(
         folder=folder,
     ))
 
-@cli.command
+@legistar.command(name='add-category-map')
 @click.option('--granicus-folder', type=str, prompt=True)
 @click.option('--legistar-category', type=str, prompt=True)
 @click.pass_obj
-def add_legistar_category_map(obj: BaseContext, granicus_folder: str, legistar_category: str):
+def add_category_map(obj: BaseContext, granicus_folder: str, legistar_category: str):
+    """Map a legistar category to its granicus folder
+    """
     obj.config.legistar.update(category_maps={granicus_folder: legistar_category})
     obj.config.save(obj.config_file)
     click.echo('category map added')
 
-@cli.command
+@legistar.command(name='download')
 @click.option('--allow-updates/--no-allow-updates', default=False)
 @click.option(
     '--max-clips', type=int, required=False, default=0, show_default=True,
     help='Maximum number of clips to download agenda packets for. If zero, downloads are disabled',
 )
 @click.pass_obj
-def parse_legistar(obj: BaseContext, allow_updates: bool, max_clips: int):
+def download_legistar(obj: BaseContext, allow_updates: bool, max_clips: int):
+    """Parse and download legistar files
+    """
     asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=max_clips,
@@ -241,7 +274,7 @@ def parse_legistar(obj: BaseContext, allow_updates: bool, max_clips: int):
     ))
 
 
-@cli.command
+@clips.command
 @click.argument(
     'html-filename',
     type=click.Path(dir_okay=False, file_okay=True, path_type=Path)
@@ -255,7 +288,7 @@ def build_html(obj: BaseContext, html_filename: Path):
     html = html_builder.build_html(clips, html_dir=html_filename.parent)
     html_filename.write_text(html)
 
-@cli.command
+@clips.command
 @click.argument(
     'html-filename',
     type=click.Path(dir_okay=False, file_okay=True, path_type=Path)
@@ -282,7 +315,7 @@ def build_drive_html(obj: BaseContext, html_filename: Path, drive_folder: Path):
     ))
     html_filename.write_text(html)
 
-@cli.command
+@drive.command
 @click.pass_obj
 def authorize(obj: BaseContext):
     """Launch a browser window to authorize uploads to Drive
@@ -290,7 +323,7 @@ def authorize(obj: BaseContext):
     asyncio.run(googleauth.run_app(root_conf=obj.config))
 
 
-@cli.command
+@clips.command(name='upload')
 @click.option(
     '--drive-folder',
     type=click.Path(path_type=Path),
@@ -307,7 +340,7 @@ def authorize(obj: BaseContext):
     help='Limit number of concurrent downloads to this amount'
 )
 @click.pass_obj
-def upload(
+def upload_clips(
     obj: BaseContext,
     max_clips: int,
     drive_folder: Path,
@@ -327,7 +360,7 @@ def upload(
         scheduler_limit=io_job_limit,
     ))
 
-@cli.command
+@clips.command
 @click.option(
     '--index-root',
     type=click.Path(dir_okay=True, file_okay=True, exists=True, path_type=Path),
