@@ -15,3 +15,6 @@ AttachmentName = NewType('AttachmentName', str)
 """Type variable to associate keys in :attr:`DetailPageLinks.attachments` with
 :attr:`AttachmentFile.name`
 """
+
+LegistarFileUID = NewType('LegistarFileUID', str)
+"""Unique ID for :obj:`LegistarFileKey` or :obj:`AttachmentName`"""
