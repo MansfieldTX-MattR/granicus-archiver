@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import NewType, Self, Iterator, Iterable, Any, Literal, ClassVar
+from typing import Self, Iterator, Iterable, Any, Literal, ClassVar
 
 import dataclasses
 from dataclasses import dataclass
@@ -11,13 +11,8 @@ from yarl import URL
 from pyquery.pyquery import PyQuery
 
 from ..model import Serializable, Clip, CLIP_ID
+from .types import GUID, REAL_GUID, Category
 
-GUID = NewType('GUID', str)
-"""Globally-Unique ID (but not really in this case)"""
-REAL_GUID = NewType('REAL_GUID', str)
-"""The part of a :obj:`GUID` that is actually a GUID"""
-Category = NewType('Category', str)
-"""Feed category"""
 ItemDict = dict[GUID, 'FeedItem']
 
 UTC = ZoneInfo('UTC')

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, NewType, Generic, NamedTuple, Self, Any,
+    TypeVar, Generic, NamedTuple, Self, Any,
     Iterator, Literal, Collection,
 )
 from pathlib import Path
@@ -15,7 +15,8 @@ from pyquery.pyquery import PyQuery
 from yarl import URL
 
 from ..model import CLIP_ID, Serializable, FileMeta
-from .rss_parser import GUID, REAL_GUID, FeedItem
+from .rss_parser import FeedItem
+from .types import GUID, REAL_GUID, LegistarFileKey, AttachmentName
 
 
 class ThisShouldBeA500ErrorButItsNot(Exception):
@@ -36,8 +37,7 @@ class IncompleteItemError(Exception):
     """
 
 
-LegistarFileKey = Literal['agenda', 'minutes', 'agenda_packet', 'video']
-"""Key name for legistar files"""
+
 
 LegistarFileKeys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet', 'video']
 
@@ -51,10 +51,7 @@ AgendaStatusItems: list[AgendaStatus] = ['Final', 'Final-Addendum', 'Draft', 'No
 MinutesStatusItems: list[MinutesStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 
 KT = TypeVar('KT')
-AttachmentName = NewType('AttachmentName', str)
-"""Type variable to associate keys in :attr:`DetailPageLinks.attachments` with
-:attr:`AttachmentFile.name`
-"""
+
 
 
 class FilePathURL(NamedTuple, Generic[KT]):

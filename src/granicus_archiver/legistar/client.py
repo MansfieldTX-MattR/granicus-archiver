@@ -14,10 +14,10 @@ if TYPE_CHECKING:
 from ..client import DownloadError
 from ..utils import JobWaiters
 from ..model import ClipCollection, Clip, FileMeta
-from .rss_parser import Feed, FeedItem, ParseError, GUID
+from .types import GUID, LegistarFileKey, AttachmentName
+from .rss_parser import Feed, FeedItem, ParseError
 from .model import (
-    LegistarFileKey, AttachmentName, LegistarData,
-    DetailPageResult, IncompleteItemError,
+    LegistarData, DetailPageResult, IncompleteItemError,
 )
 
 
