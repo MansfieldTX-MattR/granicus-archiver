@@ -9,6 +9,7 @@ from pathlib import Path
 import asyncio
 import aiojobs
 import aiofile
+from pypdf import PdfWriter
 
 T = TypeVar('T')
 
@@ -18,6 +19,17 @@ class NotSetType: ...
 
 NotSet = NotSetType()
 
+
+def remove_pdf_links(infile: Path, outfile: Path) -> None:
+    """Remove hyperlinks from a pdf file
+
+    Arguments:
+        infile: The input PDF file
+        outfile: Output filename
+    """
+    writer = PdfWriter(clone_from=infile)
+    writer.remove_links()
+    writer.write(outfile)
 
 
 class JobWaiter(Generic[T], Awaitable[T]):

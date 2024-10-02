@@ -615,6 +615,14 @@
             "markers": "python_version >= '3.8'",
             "version": "==0.4.1"
         },
+        "pypdf": {
+            "hashes": [
+                "sha256:a361c3c372b4a659f9c8dd438d5ce29a753c79c620dc6e1fd66977651f5547ea",
+                "sha256:ff8a32da6c7a63fea9c32fa4dd837cdd0db7966adf6c14f043e3f12592e992db"
+            ],
+            "markers": "python_version >= '3.8'",
+            "version": "==5.0.1"
+        },
         "pyquery": {
             "hashes": [
                 "sha256:0194bb2706b12d037db12c51928fe9ebb36b72d9e719565daba5a6c595322faf",

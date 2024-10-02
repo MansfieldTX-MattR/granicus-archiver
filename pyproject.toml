@@ -14,7 +14,8 @@ dependencies = [
     "pyquery",
     "click",
     "loguru",
-    "aiogoogle"
+    "aiogoogle",
+    "pypdf"
 ]
 
 [project.optional-dependencies]
