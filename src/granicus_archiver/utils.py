@@ -165,7 +165,7 @@ class JobWaiters(
         return job
 
     def discard(self, job_or_waiter: aiojobs.Job[T]|JobWaiter[T]) -> None:
-        """Remove a :class:`aiojobs.Job` (if it is currently being tracked)
+        """Remove a :class:`~aiojobs.Job` (if it is currently being tracked)
         """
         if isinstance(job_or_waiter, JobWaiter):
             job = job_or_waiter.job
@@ -198,10 +198,9 @@ class JobWaiters(
         difference in return type.
 
         Returns:
-            (tuple): a tuple of
-
-                done: A list of completed :class:`JobResult` instances
-                pending: A set of pending :class:`aiojobs.Job` instances
+            (tuple):
+                - **done**: A list of completed :class:`JobResult` instances
+                - **pending**: A :class:`set` of pending :class:`aiojobs.Job` instances
 
         """
         if not len(self.waiter_tasks):

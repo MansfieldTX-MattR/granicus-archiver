@@ -28,8 +28,11 @@ from .utils import seconds_to_time_str
 UTC = datetime.timezone.utc
 
 CLIP_ID = NewType('CLIP_ID', str)
+"""Unique id for a :class:`Clip`"""
 ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
+"""Key to for file types in :class:`ParseClipLinks` and :class:`ClipFiles`"""
 ClipFileUploadKey = ClipFileKey | Literal['chapters', 'agenda_packet']
+"""Key for file types in :class:`ClipFiles`"""
 
 Headers = MultiMapping[str]|dict[str, str]
 
@@ -480,12 +483,10 @@ class ClipFiles(Serializable):
                 locally-generated files will be included (such as :attr:`chapters`).
 
         Yields:
-            (tuple): a tuple of
-
-                key:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
+            :
+                - **key**:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
                     if *for_download* it True)
-
-                filename: The relative :class:`Path` for the file
+                - **filename**: The relative :class:`~pathlib.Path` for the file
 
         """
         for attr, p in self:
@@ -798,11 +799,10 @@ class Clip(Serializable):
                 :attr:`ClipFiles.chapters`).
 
         Yields:
-            (tuple): a tuple of
-
-                key:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
+            :
+                - **key**:  The file key as :obj:`ClipFileKey` (or :obj:`ClipFileUploadKey`
                     if *for_download* it True)
-                filename: The :class:`Path` for the file relative to the
+                - **filename**: The :class:`Path` for the file relative to the
                     :attr:`root_dir` (or :attr:`root_dir_abs` if *absolute* is True).
 
         """

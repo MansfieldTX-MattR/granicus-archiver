@@ -221,9 +221,10 @@ class LegistarFiles(Serializable):
     def resolve_file_uid(self, uid: LegistarFileUID) -> tuple[LegistarFileKey|AttachmentName, bool]:
         """Resolve the :obj:`~.types.LegistarFileUID` to its original form
 
-        Returns a tuple of:
-            - **key**: A :obj:`~.types.LegistarFileKey` or :obj:`~.types.AttachmentName`
-            - **is_attachment**: ``True`` if the key represents an :attr:`attachment <attachments>`
+        Returns:
+            (tuple):
+                - **key**: A :obj:`~.types.LegistarFileKey` or :obj:`~.types.AttachmentName`
+                - **is_attachment**: ``True`` if the key represents an :attr:`attachment <attachments>`
 
         """
         is_attachment = False
@@ -794,10 +795,11 @@ class LegistarData(Serializable):
         """Get filesystem path for the :obj:`~.types.GUID` and
         :obj:`~.types.LegistarFileUID`
 
-        Returns a tuple of:
-            - **filename** (:class:`~.pathlib.Path`): The local filename
-            - **meta** (:class:`~.model.FileMeta`, *optional*): The file's
-              metadata (if it exists)
+        Returns:
+            (tuple):
+                - **filename** (:class:`~.pathlib.Path`): The local filename
+                - **meta** (:class:`~.model.FileMeta`, *optional*): The file's
+                  metadata (if it exists)
 
         """
         files = self.get_or_create_files(guid)
@@ -817,15 +819,16 @@ class LegistarData(Serializable):
     ) -> Iterator[tuple[LegistarFileUID, Path, FileMeta, bool]]:
         """Iterate over files present locally for the given :obj:`~.types.GUID`
 
-        Yields results as tuples of:
-            - **uid** (:obj:`~.types.LegistarFileUID`): The uid for the file type
-            - **filename** (:class:`~pathlib.Path`): The local file path
-            - **meta** (:class:`~.model.FileMeta`): Local meta data for the file
-            - **is_attachment** (:class:`bool`): ``True`` if the *uid* refers to an
-              :attr:`attachment <LegistarFiles.attachments>`, ``False`` otherwise
+        Yields:
+            :
+                - **uid** (:obj:`~.types.LegistarFileUID`): The uid for the file type
+                - **filename** (:class:`~pathlib.Path`): The local file path
+                - **meta** (:class:`~.model.FileMeta`): Local meta data for the file
+                - **is_attachment** (:class:`bool`): ``True`` if the *uid* refers to an
+                  :attr:`attachment <LegistarFiles.attachments>`, ``False`` otherwise
 
         """
-        for key, filename, _ in self. iter_existing_url_paths(guid):
+        for key, filename, _ in self.iter_existing_url_paths(guid):
             assert filename.exists()
             uid = self.get_file_uid(guid, key)
             meta = self.files[guid].get_metadata(key)
