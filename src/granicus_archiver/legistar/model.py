@@ -3,6 +3,7 @@ from typing import (
     TypeVar, Generic, NamedTuple, Self, Any,
     Iterator, Literal, Collection,
 )
+from abc import ABC, abstractmethod
 from pathlib import Path
 from os import PathLike
 import datetime
@@ -37,6 +38,47 @@ class IncompleteItemError(Exception):
     """
 
 
+ATTACHMENT_UID_PREFIX = ':attachment:'
+
+def is_attachment_uid(uid: LegistarFileUID) -> bool:
+    """Returns ``True`` if the given *uid* is an attachment reference
+    """
+    return uid.startswith(ATTACHMENT_UID_PREFIX)
+
+def uid_to_attachment_name(uid: LegistarFileUID) -> AttachmentName:
+    """Convert the given :obj:`~.types.LegistarFileUID` to an
+    :obj:`~.types.AttachmentName`
+
+    Raises:
+        TypeError: If the *uid* is not an attachment reference
+    """
+    if not is_attachment_uid(uid):
+        raise TypeError(f'uid "{uid}" is not an AttachmentName')
+    name = uid.replace(ATTACHMENT_UID_PREFIX, '')
+    return AttachmentName(name)
+
+def attachment_name_to_uid(name: AttachmentName) -> LegistarFileUID:
+    """Convert the given :obj:`~.types.AttachmentName` to a
+    :obj:`~.types.LegistarFileUID`
+    """
+    return LegistarFileUID(f'{ATTACHMENT_UID_PREFIX}{name}')
+
+def uid_to_file_key(uid: LegistarFileUID) -> LegistarFileKey:
+    """Convert the given :obj:`~.types.LegistarFileUID` to a
+    :obj:`~.types.LegistarFileKey`
+
+    Raises:
+        TypeError: If the *uid* is not a valid key
+    """
+    if uid not in LegistarFileKeys:
+        raise TypeError(f'uid "{uid}" is not a LegistarFileKey')
+    return uid
+
+def file_key_to_uid(key: LegistarFileKey) -> LegistarFileUID:
+    """Convert the given :obj:`~.types.LegistarFileKey` to a
+    :obj:`~.types.LegistarFileUID`
+    """
+    return LegistarFileUID(key)
 
 
 LegistarFileKeys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet', 'video']
@@ -161,13 +203,17 @@ def url_with_origin(origin_url: URL, path_url: URL) -> URL:
 
 
 @dataclass
-class AttachmentFile(Serializable):
-    """Information for a downloaded attachment within
-    :attr:`LegistarFiles.attachments`
+class AbstractFile(Serializable, ABC, Generic[KT]):
+    """Abstract base class for file information
     """
-    name: AttachmentName    #: The attachment name
-    filename: Path          #: Local file path for the file
+    name: KT                #: File key
+    filename: Path          #: Local file path
     metadata: FileMeta      #: The file's metadata
+
+    @classmethod
+    @abstractmethod
+    def _build_key(cls, key_str: str) -> KT:
+        raise NotImplementedError
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -179,10 +225,31 @@ class AttachmentFile(Serializable):
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         return cls(
-            name=AttachmentName(data['name']),
+            name=cls._build_key(data['name']),
             filename=Path(data['filename']),
             metadata=FileMeta.deserialize(data['metadata']),
         )
+
+
+@dataclass
+class LegistarFile(AbstractFile[LegistarFileKey]):
+    """Information for a downloaded file within :attr:`LegistarFiles.files`
+    using :obj:`~.types.LegistarFileKey` for the :attr:`~AbstractFile.name` attribute
+    """
+    @classmethod
+    def _build_key(cls, key_str: str) -> LegistarFileKey:
+        assert key_str in LegistarFileKeys
+        return key_str
+
+@dataclass
+class AttachmentFile(AbstractFile[AttachmentName]):
+    """Information for a downloaded attachment within
+    :attr:`LegistarFiles.attachments` using :obj:`~.types.AttachmentName` for the
+    :attr:`~AbstractFile.name` attribute
+    """
+    @classmethod
+    def _build_key(cls, key_str: str) -> AttachmentName:
+        return AttachmentName(key_str)
 
 
 @dataclass
@@ -190,18 +257,11 @@ class LegistarFiles(Serializable):
     """Collection of files for a :class:`DetailPageResult`
     """
     guid: GUID                  #: The guid of the :class:`DetailPageResult`
-    agenda: Path|None           #: Agenda file
-    minutes: Path|None          #: Minutes file
-    agenda_packet: Path|None    #: Agenda Packet file
-    video: Path|None            #: Video file
+    files: dict[LegistarFileKey, LegistarFile] = field(default_factory=dict)
+    """Downloaded :class:`LegistarFile` information"""
 
     attachments: dict[AttachmentName, AttachmentFile|None] = field(default_factory=dict)
-    """Additional file attachments"""
-
-    metadata: dict[LegistarFileKey, FileMeta] = field(default_factory=dict)
-    """Mapping of :class:`~.model.FileMeta` for downloaded file members (excluding
-    :attr:`attachments`)
-    """
+    """Additional file attachments as :class:`AttachmentFile` objects"""
 
     @classmethod
     def build_filename(cls, key: LegistarFileKey) -> Path:
@@ -211,12 +271,12 @@ class LegistarFiles(Serializable):
     def get_file_uid(self, key: LegistarFileKey) -> LegistarFileUID:
         """Get a unique key for the given :obj:`~.types.LegistarFileKey`
         """
-        return LegistarFileUID(key)
+        return file_key_to_uid(key)
 
     def get_attachment_uid(self, name: AttachmentName) -> LegistarFileUID:
         """Get a unique key for the given :obj:`~.types.AttachmentName`
         """
-        return LegistarFileUID(f':attachment:{name}')
+        return attachment_name_to_uid(name)
 
     def resolve_file_uid(self, uid: LegistarFileUID) -> tuple[LegistarFileKey|AttachmentName, bool]:
         """Resolve the :obj:`~.types.LegistarFileUID` to its original form
@@ -227,13 +287,11 @@ class LegistarFiles(Serializable):
                 - **is_attachment**: ``True`` if the key represents an :attr:`attachment <attachments>`
 
         """
-        is_attachment = False
-        if uid.startswith(':attachment:'):
-            is_attachment = True
-            key = AttachmentName(uid.replace(':attachment:', ''))
+        is_attachment = is_attachment_uid(uid)
+        if is_attachment:
+            key = uid_to_attachment_name(uid)
         else:
-            key = uid
-            assert key in LegistarFileKeys
+            key = uid_to_file_key(uid)
         return key, is_attachment
 
     def get_is_complete(
@@ -253,10 +311,13 @@ class LegistarFiles(Serializable):
         return Path('attachments') / f'{name}.pdf'
 
     def get_metadata(self, key: LegistarFileKey) -> FileMeta|None:
-        return self.metadata.get(key)
+        if key not in self:
+            return None
+        return self.files[key].metadata
 
     def set_metadata(self, key: LegistarFileKey, meta: FileMeta) -> None:
-        self.metadata[key] = meta
+        assert key in self
+        self.files[key].metadata = meta
 
     def iter_incomplete(
         self,
@@ -313,50 +374,65 @@ class LegistarFiles(Serializable):
         self.attachments[name] = a
         return a
 
-    def __getitem__(self, key: LegistarFileKey) -> Path|None:
-        return getattr(self, key, None)
+    def __getitem__(self, key: LegistarFileKey) -> LegistarFile|None:
+        return self.files.get(key)
 
-    def __setitem__(self, key: LegistarFileKey, value: Path|None) -> None:
+    def __setitem__(self, key: LegistarFileKey, value: LegistarFile|None) -> None:
         if value is not None:
-            assert not value.is_absolute()
+            assert not value.filename.is_absolute()
         setattr(self, key, value)
 
     def __contains__(self, key: LegistarFileKey):
         return self[key] is not None
 
-    def __iter__(self) -> Iterator[tuple[LegistarFileKey, Path|None]]:
+    def __iter__(self) -> Iterator[tuple[LegistarFileKey, LegistarFile|None]]:
         for key in LegistarFileKeys:
             yield key, self[key]
 
     def serialize(self) -> dict[str, Any]:
-        d: dict[str, object] = {k: None if v is None else str(v) or None for k,v in self}
-        d['guid'] = self.guid
-        d['metadata'] = {k: None if v is None else v.serialize() for k,v in self.metadata.items()}
-        d['attachments'] = {
-            k: None if v is None else v.serialize()
-            for k, v in self.attachments.items()
-        }
-        return d
+        return dict(
+            guid=self.guid,
+            files={
+                k: None if v is None else v.serialize()
+                for k, v in self.files.items()
+            },
+            attachments={
+                k: None if v is None else v.serialize()
+                for k, v in self.attachments.items()
+            },
+        )
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
+        # Handle legacy storage format with flat input of
+        # `dict[LegistarFileKey, PathLike]` and
+        # `{'metadata': dict[LegistarFileKey, FileMeta]}`
         paths: dict[LegistarFileKey, Path|None] = {
-            k: None if data[k] is None else Path(data[k])
+            k: None if data.get(k) is None else Path(data[k])
             for k in LegistarFileKeys
         }
         meta: dict[LegistarFileKey, FileMeta] = {
             k: FileMeta.deserialize(v)
-            for k,v in data['metadata'].items()
+            for k,v in data.get('metadata', {}).items()
         }
+        files: dict[LegistarFileKey, LegistarFile] = {
+            k: LegistarFile.deserialize(v) for k,v in data.get('files', {}).items()
+        }
+        if not len(files):
+            for key, p in paths.items():
+                if p is None:
+                    continue
+                m = meta[key]
+                files[key] = LegistarFile(name=key, filename=p, metadata=m)
+
         attachments: dict[AttachmentName, AttachmentFile|None] = {
             AttachmentName(k): None if v is None else AttachmentFile.deserialize(v)
             for k, v in data.get('attachments', {}).items()
         }
         return cls(
             guid=GUID(data['guid']),
-            metadata=meta,
+            files=files,
             attachments=attachments,
-            **paths
         )
 
 
@@ -767,13 +843,7 @@ class LegistarData(Serializable):
         """
         if guid in self.files:
             return self.files[guid]
-        files = LegistarFiles(
-            guid=guid,
-            agenda=None,
-            minutes=None,
-            agenda_packet=None,
-            video=None,
-        )
+        files = LegistarFiles(guid=guid)
         self.files[guid] = files
         return files
 
@@ -810,7 +880,8 @@ class LegistarData(Serializable):
             meta = None if att is None else att.metadata
             return self.get_attachment_path(guid, key), meta
         assert key in LegistarFileKeys
-        meta = files.metadata.get(key)
+        file_obj = files[key]
+        meta = None if file_obj is None else file_obj.metadata
         return self.get_file_path(guid, key), meta
 
     def iter_files_for_upload(
@@ -875,8 +946,11 @@ class LegistarData(Serializable):
         filename = self.get_file_path(guid, key)
         assert filename.exists()
         assert filename.stat().st_size == meta.content_length
-        files[key] = filename
-        files.set_metadata(key, meta)
+        files[key] = LegistarFile(
+            name=key,
+            filename=filename,
+            metadata=meta,
+        )
 
     def get_attachment_path(self, guid: GUID, name: AttachmentName) -> Path:
         """Get the local path for an item in :attr:`LegistarFiles.attachments`

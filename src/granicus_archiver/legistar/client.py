@@ -224,9 +224,6 @@ class Client:
                     actions.append(f'rm {filename}')
                     # filename.unlink()
                     item_files[file_key] = None
-                    if file_key in item_files.metadata:
-                        actions.append(f'del metadata["{file_key}"]')
-                        # del item_files.metadata[file_key]
                 for att_name in attachment_keys:
                     attachment = item_files.attachments.get(att_name)
                     if attachment is None:
