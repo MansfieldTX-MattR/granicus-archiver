@@ -14,6 +14,7 @@ from . import html_builder
 from .googledrive import auth as googleauth
 from .googledrive import client as googleclient
 from .legistar import client as legistar_client
+from .legistar.model import LegistarData
 from . import set_local_timezone
 
 
@@ -280,6 +281,34 @@ def download_legistar(obj: BaseContext, allow_updates: bool, max_clips: int):
         max_clips=max_clips,
         allow_updates=allow_updates,
     ))
+
+
+@legistar.command
+@click.option('--max-items', type=int, default=100)
+@click.pass_obj
+def remove_pdf_links(obj: BaseContext, max_items: int):
+    """Strip embedded links from downloaded pdf files (in-place)
+    """
+    click.echo(f'{max_items=}')
+    legistar_data = LegistarData.load(obj.config.legistar.data_file)
+    i = 0
+    changed = False
+    for f in legistar_data.files.values():
+        _changed = f.remove_all_pdf_links()
+        if _changed:
+            changed = True
+        if i % 10 == 0 and changed:
+            # Avoid saving data every iteration since this is already
+            # IO intensive
+            click.echo(f'saving data... {i=}')
+            legistar_data.save(obj.config.legistar.data_file)
+            changed = False
+        if _changed:
+            # Only increment if the last item triggered a change
+            i += 1
+        if i >= max_items:
+            break
+    legistar_data.save(obj.config.legistar.data_file)
 
 
 @clips.command

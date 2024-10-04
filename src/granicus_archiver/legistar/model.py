@@ -10,6 +10,7 @@ import datetime
 import dataclasses
 from dataclasses import dataclass, field
 import json
+import tempfile
 from loguru import logger
 
 from pyquery.pyquery import PyQuery
@@ -18,6 +19,7 @@ from yarl import URL
 from ..model import CLIP_ID, Serializable, FileMeta
 from .rss_parser import FeedItem
 from .types import GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID
+from ..utils import remove_pdf_links
 
 
 class ThisShouldBeA500ErrorButItsNot(Exception):
@@ -209,6 +211,44 @@ class AbstractFile(Serializable, ABC, Generic[KT]):
     name: KT                #: File key
     filename: Path          #: Local file path
     metadata: FileMeta      #: The file's metadata
+    pdf_links_removed: bool = False
+    """Whether the embedded pdf links of the file have been removed"""
+
+    @property
+    def is_pdf(self) -> bool:
+        """``True`` if this is a pdf file
+        """
+        return self.filename.suffix.lower().endswith('pdf')
+
+    def remove_pdf_links(self) -> bool:
+        """Strip embedded links from the pdf file
+
+        If the file is not a pdf or if :attr:`pdf_links_removed` is already
+        set to ``True``, no alteration will be performed.
+
+        This removes URL from the hardcoded links only and does not reformat the text.
+        It will still appear as blue with an underline, but will no longer
+        be clickable or have a URL action.
+
+        The resulting file will have the same path and the :attr:`metadata`
+        will be updated with the new file size
+        (:attr:`.model.FileMeta.content_length`).
+
+        The :attr:`pdf_links_removed` flag will then be set to ``True``
+        """
+        if not self.is_pdf or self.pdf_links_removed:
+            return False
+        logger.debug(f'remove_pdf_links for {self.filename}')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir).resolve()
+            tmp_filename = tmpdir / self.filename.name
+            remove_pdf_links(self.filename, tmp_filename)
+            self.filename.unlink()
+            tmp_filename.rename(self.filename)
+            st = self.filename.stat()
+            self.metadata.content_length = st.st_size
+            self.pdf_links_removed = True
+            return True
 
     @classmethod
     @abstractmethod
@@ -220,6 +260,7 @@ class AbstractFile(Serializable, ABC, Generic[KT]):
             'name': self.name,
             'filename': str(self.filename),
             'metadata': self.metadata.serialize(),
+            'pdf_links_removed': self.pdf_links_removed,
         }
 
     @classmethod
@@ -228,6 +269,7 @@ class AbstractFile(Serializable, ABC, Generic[KT]):
             name=cls._build_key(data['name']),
             filename=Path(data['filename']),
             metadata=FileMeta.deserialize(data['metadata']),
+            pdf_links_removed=data.get('pdf_links_removed', False),
         )
 
 
@@ -267,6 +309,25 @@ class LegistarFiles(Serializable):
     def build_filename(cls, key: LegistarFileKey) -> Path:
         ext = 'mp4' if key == 'video' else 'pdf'
         return Path(f'{key}.{ext}')
+
+    def remove_all_pdf_links(self) -> bool:
+        """Call :meth:`~AbstractFile.remove_pdf_links` on all files and
+        attachments
+        """
+        changed = False
+        for f in self.files.values():
+            if not f.is_pdf or f.pdf_links_removed:
+                continue
+            _changed = f.remove_pdf_links()
+            if _changed:
+                changed = True
+        for f in self.attachments.values():
+            if f is None or not f.is_pdf or f.pdf_links_removed:
+                continue
+            _changed = f.remove_pdf_links()
+            if _changed:
+                changed = True
+        return changed
 
     def get_file_uid(self, key: LegistarFileKey) -> LegistarFileUID:
         """Get a unique key for the given :obj:`~.types.LegistarFileKey`
