@@ -14,10 +14,11 @@ if TYPE_CHECKING:
 from ..client import DownloadError
 from ..utils import JobWaiters
 from ..model import ClipCollection, Clip, FileMeta
-from .types import GUID, LegistarFileKey, AttachmentName
+from .types import GUID, LegistarFileKey, LegistarFileUID
 from .rss_parser import Feed, FeedItem, ParseError
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError,
+    is_attachment_uid, uid_to_file_key,
 )
 
 
@@ -333,8 +334,9 @@ class Client:
         chunk_size = 16384
 
         @logger.catch
-        async def do_download(key: LegistarFileKey, abs_filename: Path, url: URL):
+        async def do_download(uid: LegistarFileUID, abs_filename: Path, url: URL):
             temp_filename = temp_dir / abs_filename.name
+            temp_filename.parent.mkdir(exist_ok=True)
             logger.debug(f'downloading file "{url}"')
             try:
                 dl = await self.downloader.download(
@@ -351,44 +353,23 @@ class Client:
                 return
             logger.debug(f'download complete for "{url}"')
             temp_filename.rename(abs_filename)
-            self.legistar_data.set_file_complete(guid, key, dl.meta)
-
-        @logger.catch
-        async def download_attachment(name: AttachmentName, abs_filename: Path, url: URL):
-            temp_filename = temp_dir / 'attachments' / abs_filename.name
-            temp_filename.parent.mkdir(exist_ok=True)
-            logger.debug(f'downloading attachment "{url}"')
-            try:
-                dl = await self.downloader.download(
-                    url=url, filename=temp_filename, chunk_size=chunk_size,
-                    timeout=ClientTimeout(total=60*60, sock_connect=60, sock_read=60),
-                )
-            except ServerTimeoutError as exc:
-                if temp_filename.exists():
-                    temp_filename.unlink()
-                logger.exception(exc)
-                return
-            except StupidZeroContentLengthError as exc:
-                logger.warning(str(exc))
-                return
-            logger.debug(f'download complete for attachment "{url}"')
-            temp_filename.rename(abs_filename)
-            self.legistar_data.set_attachment_complete(guid, name, dl.meta)
+            self.legistar_data.set_uid_complete(guid, uid, dl.meta)
 
         detail_item = self.legistar_data[guid]
         p = self.legistar_data.get_folder_for_item(detail_item)
         logger.info(f'downloading files for {p.name}')
-        it = self.legistar_data.iter_incomplete_url_paths(guid)
-        for key, abs_filename, url in it:
-            if key == 'video':
+        it = self.legistar_data.iter_url_paths_uid(guid)
+        for uid, abs_filename, url, is_complete in it:
+            if is_complete:
                 continue
+            is_attachment = is_attachment_uid(uid)
+            if not is_attachment:
+                key = uid_to_file_key(uid)
+                if key == 'video':
+                    continue
             abs_filename.parent.mkdir(exist_ok=True, parents=True)
-            coro = do_download(key, abs_filename, url)
+            coro = do_download(uid, abs_filename, url)
             await waiters.spawn(coro)
-
-        for name, abs_filename, url in self.legistar_data.iter_incomplete_attachments(guid):
-            abs_filename.parent.mkdir(exist_ok=True, parents=True)
-            await waiters.spawn(download_attachment(name, abs_filename, url))
 
         try:
             await waiters
@@ -438,23 +419,17 @@ class Client:
 
         asset_paths: set[Path] = set()
         for files in self.legistar_data.files.values():
-            for t in files.iter_url_paths(self.legistar_data):
+            for t in files.iter_url_paths_uid(self.legistar_data):
                 if not t.complete:
+                    assert not t.filename.exists()
                     continue
-                meta = files.get_metadata(t.key)
-                assert meta is not None, f'{files.guid=}, {t.key=}'
+                file_obj = files.resolve_uid(t.key)
+                assert file_obj is not None
+                meta = file_obj.metadata
                 assert t.filename.exists()
                 assert t.filename.stat().st_size == meta.content_length
                 assert t.filename not in asset_paths
                 asset_paths.add(t.filename)
-            for t in files.iter_attachments(self.legistar_data):
-                if not t.complete:
-                    continue
-                attachment = files.attachments[t.key]
-                assert attachment is not None
-                assert attachment.filename.exists()
-                assert attachment.filename.stat().st_size == attachment.metadata.content_length
-                asset_paths.add(attachment.filename)
 
         root_dir = self.legistar_data.root_dir
         local_files: set[Path] = set()

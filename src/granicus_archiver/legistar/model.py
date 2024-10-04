@@ -294,6 +294,16 @@ class LegistarFiles(Serializable):
             key = uid_to_file_key(uid)
         return key, is_attachment
 
+    def resolve_uid(self, uid: LegistarFileUID) -> LegistarFile|AttachmentFile|None:
+        """Get the :class:`LegistarFile` or :class:`AttachmentFile` referenced
+        by the given *uid* (or ``None`` if it does not exist)
+        """
+        if is_attachment_uid(uid):
+            key = uid_to_attachment_name(uid)
+            return self.attachments[key]
+        key = uid_to_file_key(uid)
+        return self.files[key]
+
     def get_is_complete(
         self,
         legistar_data: LegistarData,
@@ -318,6 +328,17 @@ class LegistarFiles(Serializable):
     def set_metadata(self, key: LegistarFileKey, meta: FileMeta) -> None:
         assert key in self
         self.files[key].metadata = meta
+
+    def iter_url_paths_uid(
+        self,
+        legistar_data: LegistarData
+    ) -> Iterator[FilePathURLComplete[LegistarFileUID]]:
+        for key, filename, url, is_complete in self.iter_url_paths(legistar_data):
+            uid = file_key_to_uid(key)
+            yield FilePathURLComplete(uid, filename, url, is_complete)
+        for key, filename, url, is_complete in self.iter_attachments(legistar_data):
+            uid = attachment_name_to_uid(key)
+            yield FilePathURLComplete(uid, filename, url, is_complete)
 
     def iter_incomplete(
         self,
@@ -926,12 +947,36 @@ class LegistarData(Serializable):
         base_dir = self.get_folder_for_item(guid)
         return base_dir / files.build_filename(key)
 
+    def set_uid_complete(
+        self,
+        guid: GUID,
+        uid: LegistarFileUID,
+        meta: FileMeta
+    ) -> LegistarFile|AttachmentFile:
+        """Set the file or attachment for the given parameters as "complete"
+        (after successful download)
+
+        This calls either :meth:`set_file_complete` or :meth:`set_attachment_complete`
+        depending on the *uid*.
+
+        Arguments:
+            guid: The :attr:`guid <LegistarFiles.guid>` of the :class:`LegistarFiles`
+                object
+            uid: The :obj:`file uid <.types.LegistarFileUID>`
+            meta: Metadata from the download
+        """
+        if is_attachment_uid(uid):
+            key = uid_to_attachment_name(uid)
+            return self.set_attachment_complete(guid, key, meta)
+        key = uid_to_file_key(uid)
+        return self.set_file_complete(guid, key, meta)
+
     def set_file_complete(
         self,
         guid: GUID,
         key: LegistarFileKey,
         meta: FileMeta
-    ) -> None:
+    ) -> LegistarFile:
         """Set the file for the given parameters as "complete"
         (after successful download)
 
@@ -946,11 +991,12 @@ class LegistarData(Serializable):
         filename = self.get_file_path(guid, key)
         assert filename.exists()
         assert filename.stat().st_size == meta.content_length
-        files[key] = LegistarFile(
+        file_obj = files[key] = LegistarFile(
             name=key,
             filename=filename,
             metadata=meta,
         )
+        return file_obj
 
     def get_attachment_path(self, guid: GUID, name: AttachmentName) -> Path:
         """Get the local path for an item in :attr:`LegistarFiles.attachments`
@@ -987,6 +1033,18 @@ class LegistarData(Serializable):
         assert filename.exists()
         assert filename.stat().st_size == meta.content_length
         return files.set_attachment(name, filename, meta)
+
+    def iter_url_paths_uid(
+        self,
+        guid: GUID
+    ) -> Iterator[FilePathURLComplete[LegistarFileUID]]:
+        """Iterate over all files and attachments for the given *guid*
+        as :class:`FilePathURLComplete` tuples using the
+        :obj:`uid <types.LegistarFileUID>` as the :attr:`~FilePathURLComplete.key`
+        parameter
+        """
+        files = self.get_or_create_files(guid)
+        yield from files.iter_url_paths_uid(self)
 
     def iter_attachments(
         self,
