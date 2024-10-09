@@ -56,6 +56,23 @@ class DatetimeError(ParseError):
     error_type = 'datetime'
 
 
+class LegistarThinksRSSCanPaginateError(Exception):
+    """Exception raised when an RSS feed contains exactly 100 items
+
+    This *could* mean there are exactly 100 items available, but Legistar's
+    feed generator limits the results for **any** RSS feed to 100 items
+    **even if there are more available**!
+
+    As a precaution, this is treated as an error so the feeds can be
+    divided up as described in :class:`Feed`.
+    """
+    def __str__(self) -> str:
+        args = self.args
+        arg_str = '' if not len(args) else f' {args!r}'
+        msg = 'Feed item count is exactly 100.  This may be missing items because Legistar thinks they can paginate RSS feeds!!!'
+        return f'{msg}{arg_str}'
+
+
 def set_timezone(tz: ZoneInfo) -> None:
     FeedItem.set_timezone(tz)
 
@@ -280,8 +297,6 @@ class Feed(Serializable):
         self.item_list = [item for item in items]
         self.items = {item.guid: item for item in self.item_list}
         assert len(self.items) == len(self.item_list)
-        if len(self.items) == 100:
-            logger.warning(f'Feed item count is exactly 100.  This may be missing items because Legistar thinks they can paginate RSS feeds!!!')
         self.items_by_category = self._get_items_by_category()
         self.category_maps = category_maps
 
@@ -289,14 +304,30 @@ class Feed(Serializable):
     def from_feed(
         cls,
         doc_str: str|bytes,
-        category_maps: dict[str, Category]|None = None
+        category_maps: dict[str, Category]|None = None,
+        overflow_allowed: bool = False
     ) -> Self:
         """Create an instance by parsing the supplied RSS data
+
+        Arguments:
+            doc_str: The raw RSS/XML string
+            category_maps: Value for the feed's :attr:`category_maps`
+            overflow_allowed: If ``True`` disables raising
+                :class:`LegistarThinksRSSCanPaginateError` if the feed's item
+                count is 100.  The default (``False``) allows exception
+                to be raised.
+
+        Raises:
+            LegistarThinksRSSCanPaginateError: If the feed's item count is 100
+                and *overflow_allowed* is ``False``
         """
         if isinstance(doc_str, str):
             doc_str = doc_str.encode()
         doc = PyQuery(doc_str, parser='xml')
-        return cls(items=parse_feed_items(doc), category_maps=category_maps)
+        feed = cls(items=parse_feed_items(doc), category_maps=category_maps)
+        if len(feed.items) == 100 and not overflow_allowed:
+            raise LegistarThinksRSSCanPaginateError()
+        return feed
 
     def _get_items_by_category(self) -> dict[Category, ItemDict]:
         result: dict[Category, ItemDict] = {}

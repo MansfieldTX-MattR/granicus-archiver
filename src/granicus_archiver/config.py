@@ -106,6 +106,11 @@ class LegistarConfig(BaseConfig):
     feed_urls: dict[str, URL] = field(default_factory=dict)
     """Mapping of calendar RSS feed urls with user-defined names as keys
     """
+    feed_overflows_allowed: list[str] = field(default_factory=list)
+    """A list of feed names (keys of :attr:`feed_urls`) that are allowed to
+    reach the 100 item limit described in
+    :meth:`.legistar.rss_parser.Feed.from_feed`
+    """
     category_maps: dict[str, Category] = field(default_factory=dict)
     """A :class:`dict` of any custom mappings to match the
     :attr:`Clip.location <.model.Clip.location>` fields to their appropriate
@@ -114,6 +119,23 @@ class LegistarConfig(BaseConfig):
     The keys for this should be the ``location`` with the values set to the
     ``category``.
     """
+
+    def is_feed_overflow_allowed(self, feed: str|URL) -> bool:
+        """Check whether the given feed name or url is allowed to overflow
+
+        If a string is supplied this returns whether it is present in
+        :attr:`feed_overflows_allowed`.
+
+        If a :class:`~yarl.URL` is supplied, :attr:`feed_urls` will be searched
+        and the matching key (if any) will be checked.
+        """
+        if isinstance(feed, URL):
+            urls_rev = {v:k for k,v in self.feed_urls.items()}
+            key = urls_rev.get(feed)
+        else:
+            key = feed
+        return key in self.feed_overflows_allowed
+
 
     def update(self, **kwargs) -> bool:
         changed = False
@@ -142,6 +164,13 @@ class LegistarConfig(BaseConfig):
             cur_val = getattr(self, key)
             cur_val.update(kwargs[key])
             changed = True
+        feed_overflows = kwargs.get('feed_overflows_allowed')
+        if feed_overflows is not None:
+            cur_val = self.feed_overflows_allowed
+            s = set(cur_val) | set(feed_overflows)
+            if s != set(cur_val):
+                self.feed_overflows_allowed = list(s)
+                changed = True
         return changed
 
     @classmethod
@@ -153,6 +182,7 @@ class LegistarConfig(BaseConfig):
             out_dir_abs=out_dir_abs,
             data_file=out_dir / 'data.json',
             feed_urls={},
+            feed_overflows_allowed=[],
             category_maps={},
         )
         for key, val in default_kw.items():
@@ -164,6 +194,7 @@ class LegistarConfig(BaseConfig):
         d: dict[str, object] = {k: str(getattr(self, k)) for k in path_attrs}
         d.update(dict(
             feed_urls={k:str(v) for k,v in self.feed_urls.items()},
+            feed_overflows_allowed=self.feed_overflows_allowed,
             category_maps=self.category_maps,
         ))
         return d
@@ -175,6 +206,7 @@ class LegistarConfig(BaseConfig):
             out_dir_abs=Path(data['out_dir_abs']),
             data_file=Path(data['data_file']),
             feed_urls={k:URL(v) for k,v in data['feed_urls'].items()},
+            feed_overflows_allowed=data.get('feed_overflows_allowed', []),
             category_maps=data['category_maps'],
         )
 

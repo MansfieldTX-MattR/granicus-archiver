@@ -16,7 +16,7 @@ from ..client import DownloadError
 from ..utils import JobWaiters, remove_pdf_links
 from ..model import ClipCollection, Clip, FileMeta
 from .types import GUID, LegistarFileKey, LegistarFileUID
-from .rss_parser import Feed, FeedItem, ParseError
+from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError,
     is_attachment_uid, uid_to_file_key,
@@ -139,6 +139,7 @@ class Client:
         self.allow_updates = allow_updates
         self.strip_pdf_links = strip_pdf_links
         root_dir = config.legistar.out_dir
+        self.config = config
         if self.data_filename.exists():
             self.legistar_data = LegistarData.load(self.data_filename, root_dir=root_dir)
         else:
@@ -184,7 +185,16 @@ class Client:
             if not resp.ok:
                 resp.raise_for_status()
             content = await resp.text()
-        feed = Feed.from_feed(content, category_maps=self.legistar_category_maps)
+        overflow_allowed = self.config.legistar.is_feed_overflow_allowed(name)
+        try:
+            feed = Feed.from_feed(
+                content,
+                category_maps=self.legistar_category_maps,
+                overflow_allowed=overflow_allowed,
+            )
+        except LegistarThinksRSSCanPaginateError:
+            # Recreate the exception, but show the feed url for clarity
+            raise LegistarThinksRSSCanPaginateError(f'{feed_url=}')
         assert len(feed.item_list) == len(feed.items)
         for feed_item in feed.item_list:
             assert feed_item.guid in feed.items
