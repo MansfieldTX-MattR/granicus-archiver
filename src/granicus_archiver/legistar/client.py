@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import ClassVar, Self, TypedDict, NotRequired, Unpack, TYPE_CHECKING
 from pathlib import Path
 import tempfile
+import asyncio
 
 from aiohttp import ClientSession, ClientTimeout, ServerTimeoutError
 import aiojobs
@@ -12,7 +13,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from ..config import Config
 from ..client import DownloadError
-from ..utils import JobWaiters
+from ..utils import JobWaiters, remove_pdf_links
 from ..model import ClipCollection, Clip, FileMeta
 from .types import GUID, LegistarFileKey, LegistarFileUID
 from .rss_parser import Feed, FeedItem, ParseError
@@ -128,13 +129,15 @@ class Client:
         self,
         clips: ClipCollection,
         config: Config,
-        allow_updates: bool = False
+        allow_updates: bool = False,
+        strip_pdf_links: bool = False
     ) -> None:
         self.clips = clips
         self.data_filename = config.legistar.data_file
         self.feed_urls = config.legistar.feed_urls
         self.legistar_category_maps = config.legistar.category_maps
         self.allow_updates = allow_updates
+        self.strip_pdf_links = strip_pdf_links
         root_dir = config.legistar.out_dir
         if self.data_filename.exists():
             self.legistar_data = LegistarData.load(self.data_filename, root_dir=root_dir)
@@ -148,11 +151,13 @@ class Client:
         self.waiter = JobWaiters(self.scheduler)
         self.download_scheduler = aiojobs.Scheduler(limit=4)
         self.downloader = Downloader(session=self.session, scheduler=self.download_scheduler)
+        self.completion_scheduler = aiojobs.Scheduler(limit=8)
         self._temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir = Path(self._temp_dir.name).resolve()
 
     async def close(self) -> None:
         try:
+            await self.completion_scheduler.close()
             await self.download_scheduler.close()
             await self.scheduler.close()
             await self.session.close()
@@ -328,13 +333,19 @@ class Client:
 
     # @logger.catch
     async def download_feed_item(self, guid: GUID) -> None:
-        waiters = JobWaiters(self.download_scheduler)
+        loop = asyncio.get_running_loop()
+        waiters = JobWaiters[tuple[LegistarFileUID, Path, DownloadResult]|None](self.download_scheduler)
+        completion_waiters = JobWaiters(self.completion_scheduler)
         temp_dir = self.temp_dir / guid
         temp_dir.mkdir()
         chunk_size = 16384
 
         @logger.catch
-        async def do_download(uid: LegistarFileUID, abs_filename: Path, url: URL):
+        async def do_download(
+            uid: LegistarFileUID,
+            abs_filename: Path,
+            url: URL
+        ) -> tuple[LegistarFileUID, Path, DownloadResult]|None:
             temp_filename = temp_dir / abs_filename.name
             temp_filename.parent.mkdir(exist_ok=True)
             logger.debug(f'downloading file "{url}"')
@@ -347,13 +358,47 @@ class Client:
                 if temp_filename.exists():
                     temp_filename.unlink()
                 logger.exception(exc)
-                return
+                return None
             except StupidZeroContentLengthError as exc:
                 logger.warning(str(exc))
-                return
+                return None
             logger.debug(f'download complete for "{url}"')
+            return uid, abs_filename, dl.result
+
+        @logger.catch
+        async def complete_download(
+            uid: LegistarFileUID,
+            abs_filename: Path,
+            dl_result: DownloadResult
+        ) -> None:
+            temp_filename = dl_result['filename']
+            meta = dl_result['meta']
+            strip_output: Path|None = None
+            try:
+                if self.strip_pdf_links:
+                    logger.debug(f'strip pdf links for {abs_filename}')
+                    strip_output = temp_filename.with_name(f'stripped-{temp_filename.name}')
+                    await loop.run_in_executor(None,
+                        remove_pdf_links, temp_filename, strip_output,
+                    )
+                    logger.debug(f'pdf links stripped for {abs_filename}')
+                    assert strip_output.exists()
+                    meta.content_length = strip_output.stat().st_size
+                    temp_filename.unlink()
+                    temp_filename = strip_output
+                    strip_output = None
+            except Exception as exc:
+                if strip_output is not None and strip_output.exists():
+                    strip_output.unlink()
+                if temp_filename.exists():
+                    temp_filename.unlink()
+                raise
             temp_filename.rename(abs_filename)
-            self.legistar_data.set_uid_complete(guid, uid, dl.meta)
+            file_obj = self.legistar_data.set_uid_complete(
+                guid, uid, meta, pdf_links_removed=self.strip_pdf_links,
+            )
+            assert file_obj.pdf_links_removed
+            assert file_obj.metadata.content_length == meta.content_length
 
         detail_item = self.legistar_data[guid]
         p = self.legistar_data.get_folder_for_item(detail_item)
@@ -371,8 +416,18 @@ class Client:
             coro = do_download(uid, abs_filename, url)
             await waiters.spawn(coro)
 
+        async for job in waiters:
+            if job.exception is not None:
+                raise job.exception
+            result = job.result
+            if result is None:
+                continue
+            uid, abs_filename, dl_result = result
+            coro = complete_download(uid, abs_filename, dl_result)
+            await completion_waiters.spawn(coro)
+
         try:
-            await waiters
+            await completion_waiters
         except Exception as exc:
             logger.exception(exc)
             raise
@@ -398,6 +453,7 @@ class Client:
             count += 1
             if count >= max_items:
                 break
+        logger.success(f'all feed items queued: {count=}')
         try:
             await waiters
         finally:
@@ -449,13 +505,15 @@ async def amain(
     config: Config,
     max_clips: int = 0,
     check_only: bool = False,
-    allow_updates: bool = False
+    allow_updates: bool = False,
+    strip_pdf_links: bool = False
 ):
     clips = ClipCollection.load(config.data_file)
     client = Client(
         clips=clips,
         config=config,
         allow_updates=allow_updates,
+        strip_pdf_links=strip_pdf_links,
     )
     client.check_files()
     if check_only:

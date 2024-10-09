@@ -445,13 +445,15 @@ class LegistarFiles(Serializable):
         self,
         name: AttachmentName,
         filename: Path,
-        meta: FileMeta
+        meta: FileMeta,
+        pdf_links_removed: bool = False
     ) -> AttachmentFile:
         assert self.attachments.get(name) is None
         a = AttachmentFile(
             name=name,
             filename=filename,
             metadata=meta,
+            pdf_links_removed=pdf_links_removed,
         )
         self.attachments[name] = a
         return a
@@ -1012,7 +1014,8 @@ class LegistarData(Serializable):
         self,
         guid: GUID,
         uid: LegistarFileUID,
-        meta: FileMeta
+        meta: FileMeta,
+        pdf_links_removed: bool = False
     ) -> LegistarFile|AttachmentFile:
         """Set the file or attachment for the given parameters as "complete"
         (after successful download)
@@ -1025,18 +1028,21 @@ class LegistarData(Serializable):
                 object
             uid: The :obj:`file uid <.types.LegistarFileUID>`
             meta: Metadata from the download
+            pdf_links_removed: Value to set for the file's
+                :attr:`~AbstractFile.pdf_links_removed` attribute
         """
         if is_attachment_uid(uid):
             key = uid_to_attachment_name(uid)
-            return self.set_attachment_complete(guid, key, meta)
+            return self.set_attachment_complete(guid, key, meta, pdf_links_removed)
         key = uid_to_file_key(uid)
-        return self.set_file_complete(guid, key, meta)
+        return self.set_file_complete(guid, key, meta, pdf_links_removed)
 
     def set_file_complete(
         self,
         guid: GUID,
         key: LegistarFileKey,
-        meta: FileMeta
+        meta: FileMeta,
+        pdf_links_removed: bool = False
     ) -> LegistarFile:
         """Set the file for the given parameters as "complete"
         (after successful download)
@@ -1046,17 +1052,21 @@ class LegistarData(Serializable):
                 object
             key: The :obj:`file key <LegistarFileKey>`
             meta: Metadata from the download
+            pdf_links_removed: Value to set for the file's
+                :attr:`~AbstractFile.pdf_links_removed` attribute
         """
         files = self.get_or_create_files(guid)
         assert key not in files
         filename = self.get_file_path(guid, key)
         assert filename.exists()
         assert filename.stat().st_size == meta.content_length
-        file_obj = files[key] = LegistarFile(
+        file_obj = LegistarFile(
             name=key,
             filename=filename,
             metadata=meta,
+            pdf_links_removed=pdf_links_removed,
         )
+        files[key] = file_obj
         return file_obj
 
     def get_attachment_path(self, guid: GUID, name: AttachmentName) -> Path:
@@ -1074,7 +1084,8 @@ class LegistarData(Serializable):
         self,
         guid: GUID,
         name: AttachmentName,
-        meta: FileMeta
+        meta: FileMeta,
+        pdf_links_removed: bool = False
     ) -> AttachmentFile:
         """Set an item in :attr:`LegistarFiles.attachments` as "complete"
         (after successful download)
@@ -1085,6 +1096,8 @@ class LegistarData(Serializable):
             name: The :obj:`AttachmentName` (key within
                 :attr:`LegistarFiles.attachments`)
             meta: Metadata from the download
+            pdf_links_removed: Value to set for the file's
+                :attr:`~AbstractFile.pdf_links_removed` attribute
         """
         files = self.get_or_create_files(guid)
         assert files.attachments.get(name) is None
@@ -1093,7 +1106,7 @@ class LegistarData(Serializable):
         filename = self.get_attachment_path(guid, name)
         assert filename.exists()
         assert filename.stat().st_size == meta.content_length
-        return files.set_attachment(name, filename, meta)
+        return files.set_attachment(name, filename, meta, pdf_links_removed)
 
     def iter_url_paths_uid(
         self,

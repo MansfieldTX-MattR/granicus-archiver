@@ -272,14 +272,24 @@ def add_category_map(obj: BaseContext, granicus_folder: str, legistar_category: 
     '--max-clips', type=int, required=False, default=0, show_default=True,
     help='Maximum number of clips to download agenda packets for. If zero, downloads are disabled',
 )
+@click.option(
+    '--strip-pdf-links/--no-strip-pdf-links', default=False,
+    help='Whether to remove embedded links from downloaded pdf files',
+)
 @click.pass_obj
-def download_legistar(obj: BaseContext, allow_updates: bool, max_clips: int):
+def download_legistar(
+    obj: BaseContext,
+    allow_updates: bool,
+    max_clips: int,
+    strip_pdf_links: bool
+):
     """Parse and download legistar files
     """
     asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=max_clips,
         allow_updates=allow_updates,
+        strip_pdf_links=strip_pdf_links,
     ))
 
 
