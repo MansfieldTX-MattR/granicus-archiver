@@ -311,7 +311,7 @@ class Client:
                 feed_item = feed.find_clip_match(clip)
             except ParseError:
                 feed_item = None
-            if feed_item is None:
+            if feed_item is None or feed_item.is_future:
                 continue
             parsed_item = self.legistar_data[feed_item.guid]
             if parsed_item.agenda_status == 'Draft' or parsed_item.agenda_status == 'Not Viewable by the Public':
