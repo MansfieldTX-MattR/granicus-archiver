@@ -1,4 +1,8 @@
 from zoneinfo import ZoneInfo
+from loguru import logger
+
+logger.disable('pypdf')
+logger.disable('pypdf.generic._data_structures')
 
 # from .config import Config
 from .model import set_timezone as model_set_timezone
