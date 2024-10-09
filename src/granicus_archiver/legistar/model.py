@@ -461,10 +461,10 @@ class LegistarFiles(Serializable):
     def __getitem__(self, key: LegistarFileKey) -> LegistarFile|None:
         return self.files.get(key)
 
-    def __setitem__(self, key: LegistarFileKey, value: LegistarFile|None) -> None:
+    def __setitem__(self, key: LegistarFileKey, value: LegistarFile) -> None:
         if value is not None:
             assert not value.filename.is_absolute()
-        setattr(self, key, value)
+        self.files[key] = value
 
     def __contains__(self, key: LegistarFileKey):
         return self[key] is not None

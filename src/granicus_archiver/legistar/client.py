@@ -239,7 +239,8 @@ class Client:
                         continue
                     actions.append(f'rm {filename}')
                     # filename.unlink()
-                    item_files[file_key] = None
+                    # TODO: maybe add a `__delitem__` method to `LegistarFiles`
+                    # item_files[file_key] = None
                 for att_name in attachment_keys:
                     attachment = item_files.attachments.get(att_name)
                     if attachment is None:
