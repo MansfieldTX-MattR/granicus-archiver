@@ -521,6 +521,8 @@ class Client:
             assert not len(asset_paths)
         else:
             for p in root_dir.glob('**/*.pdf'):
+                if p.name.startswith('._'):
+                    continue
                 assert p in asset_paths, f'untracked filename: {p}'
                 local_files.add(p)
             assert len(local_files) == len(asset_paths)
