@@ -120,14 +120,28 @@ def cli(
 def clips(obj: BaseContext):
     """Granicus clips sub-commands
     """
-    pass
+    root_dir_abs = obj.config.out_dir_abs
+    root_dir_rel = obj.config.out_dir
+    if root_dir_rel.resolve() != root_dir_abs:
+        click.confirm(
+            f'Current working directory does not match your config',
+            abort=True,
+        )
+
 
 @cli.group()
 @click.pass_obj
 def legistar(obj: BaseContext):
     """Legistar sub-commands
     """
-    pass
+    root_dir_abs = obj.config.legistar.out_dir_abs
+    root_dir_rel = obj.config.legistar.out_dir
+    if root_dir_rel.resolve() != root_dir_abs:
+        click.confirm(
+            f'Current working directory does not match your config',
+            abort=True,
+        )
+
 
 @cli.group()
 @click.pass_obj
