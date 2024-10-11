@@ -22,6 +22,29 @@ from .types import GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFil
 from ..utils import remove_pdf_links
 
 
+def make_path_legal(p: Path, is_dir: bool) -> Path:
+    def has_bad_end_chars(part: str) -> bool:
+        bad_chars = [' ', '.']
+        for c in bad_chars:
+            if part.endswith(c) or part.startswith(c):
+                return True
+        return False
+    if not is_dir:
+        name = p.name
+        p = p.parent
+    else:
+        name = None
+    parts = []
+    for part in p.parts:
+        while has_bad_end_chars(part):
+            part = part.strip(' ').strip('.')
+        assert len(part)
+        parts.append(part)
+    if name is not None:
+        parts.append(name)
+    return Path(*parts)
+
+
 class ThisShouldBeA500ErrorButItsNot(Exception):
     """Raised when a detail page request returns a ``200 - OK`` response,
     but with error information in the HTML content
@@ -713,7 +736,7 @@ class DetailPageResult(Serializable):
         parts = [item.category, dt.strftime('%Y'), title_str]
         parts = [strip_bad_chars(part) for part in parts]
         p = Path(*parts)
-        return p
+        return make_path_legal(p, is_dir=True)
 
     @classmethod
     def from_html(
