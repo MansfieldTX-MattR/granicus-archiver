@@ -538,6 +538,8 @@ async def amain(
     allow_updates: bool = False,
     strip_pdf_links: bool = False
 ):
+    if not config.legistar.out_dir_abs.exists():
+        config.legistar.out_dir_abs.mkdir(parents=True)
     clips = ClipCollection.load(config.data_file)
     client = Client(
         clips=clips,
