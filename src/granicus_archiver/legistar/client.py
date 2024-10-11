@@ -13,7 +13,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from ..config import Config
 from ..client import DownloadError
-from ..utils import JobWaiters, remove_pdf_links
+from ..utils import JobWaiters, remove_pdf_links, is_same_filesystem
 from ..model import ClipCollection, Clip, FileMeta
 from .types import GUID, LegistarFileKey, LegistarFileUID
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
@@ -404,7 +404,24 @@ class Client:
                 if temp_filename.exists():
                     temp_filename.unlink()
                 raise
-            temp_filename.rename(abs_filename)
+
+            if is_same_filesystem(temp_filename, abs_filename):
+                temp_filename.rename(abs_filename)
+                file_obj = self.legistar_data.set_uid_complete(
+                    guid, uid, meta, pdf_links_removed=self.strip_pdf_links,
+                )
+                assert file_obj.pdf_links_removed
+                assert file_obj.metadata.content_length == meta.content_length
+                return
+            chunk_size = 64*1024
+            logger.debug(f'copying "{temp_filename} -> {abs_filename}"')
+
+            async with aiofile.async_open(temp_filename, 'rb') as src_fd:
+                async with aiofile.async_open(abs_filename, 'wb') as dst_fd:
+                    async for chunk in src_fd.iter_chunked(chunk_size):
+                        await dst_fd.write(chunk)
+            logger.debug(f'copy complete for "{abs_filename}"')
+            temp_filename.unlink()
             file_obj = self.legistar_data.set_uid_complete(
                 guid, uid, meta, pdf_links_removed=self.strip_pdf_links,
             )
