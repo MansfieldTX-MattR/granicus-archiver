@@ -16,13 +16,14 @@ from .model import (
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps,
 )
 from .utils import JobWaiters, is_same_filesystem
+from .downloader import DownloadError
 
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
 
 T = TypeVar('T')
 
-class DownloadError(Exception): ...
+
 
 # class BatchQueue(Generic[T]):
 #     def __init__(self, max_batches: int = MAX_BATCHES) -> None:
