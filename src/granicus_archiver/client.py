@@ -333,7 +333,7 @@ async def amain(
             await waiter
             logger.info('closing schedulers..')
             scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
-            await asyncio.gather(*[sch.close() for sch in scheduler_list])
+            await asyncio.gather(*[sch.wait_and_close() for sch in scheduler_list])
 
             logger.debug('schedulers closed')
         finally:
