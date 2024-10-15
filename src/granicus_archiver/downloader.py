@@ -103,7 +103,7 @@ class FileDowload:
         }
 
     async def __call__(self) -> Self:
-        async with self.session.get(self.url) as resp:
+        async with self.session.get(self.url, timeout=self.timeout) as resp:
             ThisShouldBeA404ErrorButItsNot.detect_and_raise(resp)
             if resp.headers.get('Content-Length') in ['0', 0]:
                 raise StupidZeroContentLengthError(f'Content-Length 0 for {self.url}')
