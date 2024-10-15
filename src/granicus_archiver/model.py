@@ -260,7 +260,7 @@ class FileMeta(Serializable):
         if etag is not None:
             etag = etag.strip('"')
         return cls(
-            content_length=int(headers['Content-Length']),
+            content_length=int(headers.get('Content-Length', '0')),
             content_type=headers['Content-Type'],
             last_modified=dt,
             etag=etag,
