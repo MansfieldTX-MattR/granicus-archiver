@@ -64,6 +64,8 @@ class FileDowload:
             if resp.headers.get('Content-Length') in ['0', 0]:
                 raise StupidZeroContentLengthError(f'Content-Length 0 for {self.url}')
             meta = self._meta = FileMeta.from_headers(resp.headers)
+            if meta.content_length == 0:
+                raise StupidZeroContentLengthError(f'Content-Length 0 for {self.url}')
             total_bytes = meta.content_length
             bytes_recv = 0
             async with aiofile.async_open(self.filename, 'wb') as fd:
