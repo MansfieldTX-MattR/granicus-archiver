@@ -70,6 +70,9 @@ class JobWaiter(Generic[T], Awaitable[T]):
     def __await__(self) -> Generator[Any, None, T]:
         return self.task.__await__()
 
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__}: {self.job!r}>'
+
 
 class JobResult(Generic[T]):
     """A completed :class:`aiojobs.Job`
