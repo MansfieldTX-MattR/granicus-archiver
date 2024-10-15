@@ -266,6 +266,31 @@ class FileMeta(Serializable):
             etag=etag,
         )
 
+    @classmethod
+    def create_zero_length(cls) -> Self:
+        """Create an instance to indicate that the file has a reported length
+        of zero
+
+        This may be used to indicate that a file is malformed or no longer
+        exists on the server.
+
+        Zero-length :class:`FileMeta` instances can be detected from their
+        :attr:`is_zero_length` attribute.
+        """
+        return cls(
+            content_length=-1,
+            content_type='__none__',
+            last_modified=None,
+            etag=None,
+        )
+
+    @property
+    def is_zero_length(self) -> bool:
+        """Whether this instance represents a zero-length file (created by
+        :meth:`create_zero_length`)
+        """
+        return self.content_length == -1 and self.content_type == '__none__'
+
     def serialize(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)
         if self.last_modified is not None:
@@ -342,6 +367,9 @@ class ClipFiles(Serializable):
     def complete(self) -> bool:
         for key, u, p in self.clip.iter_url_paths():
             if not p.exists():
+                meta = self.get_metadata(key)
+                if meta is not None and meta.is_zero_length:
+                    continue
                 return False
         return True
 
@@ -423,6 +451,8 @@ class ClipFiles(Serializable):
             st = full_p.stat()
             meta = self.get_metadata(key)
             assert meta is not None
+            if meta.is_zero_length:
+                continue
             assert meta.content_length == st.st_size
             keys_checked.add(key)
         for key in self.metadata.keys():
@@ -430,6 +460,9 @@ class ClipFiles(Serializable):
                 continue
             meta = self.metadata[key]
             full_p = self.clip.get_file_path(key, absolute=True)
+            if meta.is_zero_length:
+                assert not full_p.exists()
+                continue
             assert full_p.exists()
             st = full_p.stat()
             assert st.st_size == meta.content_length

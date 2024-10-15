@@ -16,7 +16,7 @@ from .model import (
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
 )
 from .utils import JobWaiters, is_same_filesystem
-from .downloader import Downloader
+from .downloader import Downloader, StupidZeroContentLengthError
 
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
@@ -129,6 +129,17 @@ async def download_clip(downloader: Downloader, clip: Clip) -> None:
     download_waiter = JobWaiters[aiojobs.Job|None](scheduler=get_scheduler('downloads'))
     copy_waiter = JobWaiters(scheduler=get_scheduler('copies'))
 
+    def set_zero_length_meta(key: ClipFileKey) -> None:
+        if key == 'video':
+            logger.warning(f'Cannot set zero-length meta on video: "{clip.unique_name=}')
+            return
+        cur_meta = clip.files.get_metadata(key)
+        if cur_meta is None:
+            cur_meta = FileMeta.create_zero_length()
+            clip.files.set_metadata(key, cur_meta)
+        else:
+            logger.warning(f'{cur_meta=}')
+
     async def download_file(
         key: ClipFileKey,
         url: URL,
@@ -152,6 +163,10 @@ async def download_clip(downloader: Downloader, clip: Clip) -> None:
             if temp_filename.exists():
                 temp_filename.unlink()
             logger.exception(exc)
+            return None
+        except StupidZeroContentLengthError as exc:
+            logger.warning(str(exc))
+            set_zero_length_meta(key)
             return None
 
         logger.debug(f'download complete for "{clip.unique_name} - {key}"')
