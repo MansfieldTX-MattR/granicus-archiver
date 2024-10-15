@@ -53,9 +53,9 @@ def get_schedulers(limit: int|None = None) -> SchedulersTD:
         if limit is None:
             raise RuntimeError('scheduler limits must be set')
         SCHEDULERS = {
-            'general':aiojobs.Scheduler(limit=32),
+            'general':aiojobs.Scheduler(limit=16, pending_limit=1),
             'downloads':aiojobs.Scheduler(limit=limit),
-            'copies':aiojobs.Scheduler(limit=limit),
+            'copies':aiojobs.Scheduler(limit=2),
         }
     elif limit is not None:
         raise RuntimeError('schedulers already created')

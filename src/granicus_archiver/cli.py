@@ -245,7 +245,7 @@ def check_legistar(obj: BaseContext):
     help='Maximum number of clips to download. If not provided, there is no limit',
 )
 @click.option(
-    '--io-job-limit', type=int, default=8, show_default=True,
+    '--io-job-limit', type=int, default=4, show_default=True,
     help='Limit number of concurrent uploads to this amount'
 )
 @click.option(
