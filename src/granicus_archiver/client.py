@@ -16,7 +16,11 @@ from .model import (
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
 )
 from .utils import JobWaiters, is_same_filesystem
-from .downloader import Downloader, StupidZeroContentLengthError
+from .downloader import (
+    Downloader,
+    StupidZeroContentLengthError,
+    ThisShouldBeA404ErrorButItsNot,
+)
 
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
@@ -166,6 +170,10 @@ async def download_clip(downloader: Downloader, clip: Clip) -> None:
             return None
         except StupidZeroContentLengthError as exc:
             logger.warning(str(exc))
+            set_zero_length_meta(key)
+            return None
+        except ThisShouldBeA404ErrorButItsNot as exc:
+            logger.warning(f'{exc.__class__.__name__}: {exc} {filename=}, {url=}')
             set_zero_length_meta(key)
             return None
 
