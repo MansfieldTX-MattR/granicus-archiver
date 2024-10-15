@@ -69,7 +69,7 @@ class DownloadResult(TypedDict):
     meta: FileMeta
 
 
-class FileDowload:
+class FileDownload:
     def __init__(
         self,
         session: ClientSession,
@@ -135,17 +135,17 @@ class Downloader:
         self.default_chunk_size = 65536
         self.default_timeout = ClientTimeout(total=300)
 
-    def _build_download_obj(self, **kwargs: Unpack[DownloadRequest]) -> FileDowload:
+    def _build_download_obj(self, **kwargs: Unpack[DownloadRequest]) -> FileDownload:
         kwargs.setdefault('chunk_size', self.default_chunk_size)
         kwargs.setdefault('timeout', self.default_timeout)
-        return FileDowload(session=self.session, **kwargs)
+        return FileDownload(session=self.session, **kwargs)
 
-    async def spawn(self, **kwargs: Unpack[DownloadRequest]) -> aiojobs.Job[FileDowload]:
+    async def spawn(self, **kwargs: Unpack[DownloadRequest]) -> aiojobs.Job[FileDownload]:
         if self.scheduler is None:
             raise RuntimeError('scheduler not set')
         dl = self._build_download_obj(**kwargs)
         return await self.scheduler.spawn(dl())
 
-    async def download(self, **kwargs: Unpack[DownloadRequest]) -> FileDowload:
+    async def download(self, **kwargs: Unpack[DownloadRequest]) -> FileDownload:
         dl = self._build_download_obj(**kwargs)
         return await dl()
