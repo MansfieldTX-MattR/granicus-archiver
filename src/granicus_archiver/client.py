@@ -5,7 +5,7 @@ from pathlib import Path
 from loguru import logger
 import tempfile
 
-from aiohttp import ClientSession, ClientTimeout
+from aiohttp import ClientSession, ClientTimeout, ServerTimeoutError
 import aiojobs
 import aiofile
 from yarl import URL
@@ -13,10 +13,10 @@ from yarl import URL
 from .parser import parse_page, parse_player_page
 from .model import (
     ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey,
-    AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps,
+    AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
 )
 from .utils import JobWaiters, is_same_filesystem
-from .downloader import DownloadError
+from .downloader import Downloader
 
 DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
@@ -125,8 +125,8 @@ async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -
         await asyncio.gather(*[job.wait() for job in jobs])
 
 
-async def download_clip(session: ClientSession, clip: Clip):
-    download_waiter = JobWaiters(scheduler=get_scheduler('downloads'))
+async def download_clip(downloader: Downloader, clip: Clip) -> None:
+    download_waiter = JobWaiters[aiojobs.Job|None](scheduler=get_scheduler('downloads'))
     copy_waiter = JobWaiters(scheduler=get_scheduler('copies'))
 
     async def download_file(
@@ -134,7 +134,7 @@ async def download_clip(session: ClientSession, clip: Clip):
         url: URL,
         filename: Path,
         temp_dir: Path
-    ) -> aiojobs.Job:
+    ) -> aiojobs.Job|None:
         temp_filename = temp_dir / filename.name
         logger.debug(f'download {url} to {filename}')
         chunk_size = 64*1024
@@ -143,25 +143,34 @@ async def download_clip(session: ClientSession, clip: Clip):
             timeout = ClientTimeout(total=60*60, sock_connect=60, sock_read=60)
         else:
             timeout = ClientTimeout(total=300)
-        async with session.get(url, timeout=timeout) as response:
-            # logger.debug(f'{response.headers=}')
-            meta = clip.files.set_metadata(key, response.headers)
-            async with aiofile.async_open(temp_filename, 'wb') as fd:
-                async for chunk in response.content.iter_chunked(chunk_size):
-                    await fd.write(chunk)
-        if meta.content_length is not None:
-            stat = temp_filename.stat()
-            if stat.st_size != meta.content_length:
-                raise DownloadError(f'Filesize mismatch: {clip.unique_name=}, {key=}, {url=}, {stat.st_size=}, {response.headers=}')
+        try:
+            dl = await downloader.download(
+                url=url, filename=temp_filename, chunk_size=chunk_size,
+                timeout=timeout,
+            )
+        except ServerTimeoutError as exc:
+            if temp_filename.exists():
+                temp_filename.unlink()
+            logger.exception(exc)
+            return None
+
         logger.debug(f'download complete for "{clip.unique_name} - {key}"')
-        copy_coro = copy_clip_to_dest(key, src_file=temp_filename, dst_file=filename)
+        copy_coro = copy_clip_to_dest(
+            key, src_file=temp_filename, dst_file=filename, meta=dl.meta,
+        )
         return await copy_waiter.spawn(copy_coro)
 
 
-    async def copy_clip_to_dest(key: ClipFileKey, src_file: Path, dst_file: Path) -> None:
+    async def copy_clip_to_dest(
+        key: ClipFileKey,
+        src_file: Path,
+        dst_file: Path,
+        meta: FileMeta
+    ) -> None:
         if is_same_filesystem(src_file, dst_file):
             src_file.rename(dst_file)
             clip.files.ensure_path(key)
+            clip.files.set_metadata(key, meta)
             return
         chunk_size = 64*1024
         logger.debug(f'copying "{clip.unique_name} - {key}"')
@@ -173,6 +182,7 @@ async def download_clip(session: ClientSession, clip: Clip):
         logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
         src_file.unlink()
         clip.files.ensure_path(key)
+        clip.files.set_metadata(key, meta)
 
     logger.info(f'downloading clip "{clip.unique_name}"')
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -294,6 +304,8 @@ async def amain(
     else:
         timestamps = AgendaTimestampCollection()
     async with ClientSession() as session:
+        download_scheduler = schedulers['downloads']
+        downloader = Downloader(session=session, scheduler=download_scheduler)
         clips = await get_main_data(session, out_dir)
         if local_clips is not None:
             clips = clips.merge(local_clips)
@@ -313,7 +325,7 @@ async def amain(
                 logger.debug(f'skipping {clip.unique_name}')
                 continue
             # logger.debug(f'{scheduler.active_count=}')
-            await waiter.spawn(download_clip(session, clip))
+            await waiter.spawn(download_clip(downloader, clip))
             i += 1
             if max_clips is not None and i >= max_clips:
                 break
