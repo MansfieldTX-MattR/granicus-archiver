@@ -315,25 +315,27 @@ async def amain(
         timestamps.save(timestamp_file)
         check_all_clip_files(clips)
         i = 0
-        for clip in clips:
-            if max_clips == 0:
-                break
-            if folder is not None and clip.location != folder:
-                continue
-            build_web_vtt(clip, timestamps, mkdir=True)
-            if clip.complete:
-                logger.debug(f'skipping {clip.unique_name}')
-                continue
-            # logger.debug(f'{scheduler.active_count=}')
-            await waiter.spawn(download_clip(downloader, clip))
-            i += 1
-            if max_clips is not None and i >= max_clips:
-                break
-        await waiter
-        logger.info('closing schedulers..')
-        scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
-        await asyncio.gather(*[sch.close() for sch in scheduler_list])
+        try:
+            for clip in clips:
+                if max_clips == 0:
+                    break
+                if folder is not None and clip.location != folder:
+                    continue
+                build_web_vtt(clip, timestamps, mkdir=True)
+                if clip.complete:
+                    logger.debug(f'skipping {clip.unique_name}')
+                    continue
+                # logger.debug(f'{scheduler.active_count=}')
+                await waiter.spawn(download_clip(downloader, clip))
+                i += 1
+                if max_clips is not None and i >= max_clips:
+                    break
+            await waiter
+            logger.info('closing schedulers..')
+            scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
+            await asyncio.gather(*[sch.close() for sch in scheduler_list])
 
-        logger.debug('schedulers closed')
-        clips.save(data_file)
+            logger.debug('schedulers closed')
+        finally:
+            clips.save(data_file)
     return clips
