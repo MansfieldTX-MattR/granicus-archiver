@@ -2,6 +2,7 @@
 import asyncio
 from pathlib import Path
 from dataclasses import dataclass
+import os
 
 import click
 from aiohttp import ClientSession
@@ -249,6 +250,16 @@ def check_legistar(obj: BaseContext):
     help='Limit number of concurrent uploads to this amount'
 )
 @click.option(
+    '--temp-dir',
+    type=click.Path(
+        file_okay=False,
+        dir_okay=True,
+        exists=True,
+        path_type=Path,
+    ),
+    help="Directory for temporary files. Only set this if you know what you're doing",
+)
+@click.option(
     '--folder', type=str,
 )
 @click.pass_obj
@@ -256,10 +267,17 @@ def download_clips(
     obj: BaseContext,
     max_clips: int|None,
     io_job_limit: int,
+    temp_dir: Path|None,
     folder: str|None,
 ):
     """Download files for Granicus clips
     """
+    if temp_dir is not None:
+        os.environ['TMPDIR'] = str(temp_dir)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            td_p = Path(td).resolve()
+            assert td_p.parent == temp_dir.resolve()
     clips = asyncio.run(client.amain(
         data_file=obj.config.data_file,
         timestamp_file=obj.config.timestamp_file,
