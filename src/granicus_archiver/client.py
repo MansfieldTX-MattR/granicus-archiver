@@ -174,15 +174,20 @@ async def download_clip(downloader: Downloader, clip: Clip) -> None:
             return
         chunk_size = 64*1024
         logger.debug(f'copying "{clip.unique_name} - {key}"')
-
-        async with aiofile.async_open(src_file, 'rb') as src_fd:
-            async with aiofile.async_open(dst_file, 'wb') as dst_fd:
-                async for chunk in src_fd.iter_chunked(chunk_size):
-                    await dst_fd.write(chunk)
-        logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
-        src_file.unlink()
-        clip.files.ensure_path(key)
-        clip.files.set_metadata(key, meta)
+        try:
+            async with aiofile.async_open(src_file, 'rb') as src_fd:
+                async with aiofile.async_open(dst_file, 'wb') as dst_fd:
+                    async for chunk in src_fd.iter_chunked(chunk_size):
+                        await dst_fd.write(chunk)
+            logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
+            src_file.unlink()
+            clip.files.ensure_path(key)
+            clip.files.set_metadata(key, meta)
+        except:
+            if dst_file.exists():
+                dst_file.unlink()
+            if key in clip.files.metadata:
+                del clip.files.metadata[key]
 
     logger.info(f'downloading clip "{clip.unique_name}"')
     with tempfile.TemporaryDirectory() as temp_dir:
