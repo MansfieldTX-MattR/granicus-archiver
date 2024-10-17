@@ -82,7 +82,7 @@ class GoogleClient:
     aiogoogle: Aiogoogle        #: The actual google client
     drive_v3: DriveResource     #: Drive resource
 
-    folder_cache: dict[Path, FileId]
+    folder_cache: FolderCache
     """A cache of Drive folders and their id
     """
 

@@ -3,20 +3,24 @@ from typing import (
     NewType, TypeVar, Generic, TypedDict, NotRequired,
     AsyncGenerator, Iterable,
 )
+from pathlib import Path
 
-from aiogoogle.client import Aiogoogle
 from aiogoogle.resource import GoogleAPI, Resource
 from aiogoogle.models import Request
 
 __all__ = (
     'FileId', 'FileMeta', 'FileMetaFull', 'FileUploadResponse', 'FileListResponse',
-    'DriveResource', 'DriveFiles',
+    'DriveResource', 'DriveFiles', 'FolderCache',
 )
 
 T = TypeVar('T')
 
 FileId = NewType('FileId', str)
 """A unique id for a file or directory in Drive"""
+
+FolderCache = dict[Path, FileId]
+"""Mapping of paths to :obj:`FileId` to aid in caching Drive folders"""
+
 
 class FileMeta(TypedDict):
     """Metadata for a Drive file or folder
