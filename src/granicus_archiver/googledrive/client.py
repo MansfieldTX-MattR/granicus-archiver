@@ -42,31 +42,10 @@ class UploadError(Exception):
 
 class SchedulersTD(TypedDict):
     general: aiojobs.Scheduler
+    clip_uploads: aiojobs.Scheduler
     uploads: aiojobs.Scheduler
     upload_checks: aiojobs.Scheduler
 
-SchedulerKey = Literal['general', 'uploads', 'upload_checks']
-
-
-SCHEDULERS: SchedulersTD|None = None
-def get_schedulers(limit: int|None = None) -> SchedulersTD:
-    global SCHEDULERS
-    if SCHEDULERS is None:
-        if limit is None:
-            raise RuntimeError('scheduler limits must be set')
-        SCHEDULERS = {
-            'general':aiojobs.Scheduler(limit=32),
-            'uploads':aiojobs.Scheduler(limit=limit),
-            'upload_checks':aiojobs.Scheduler(limit=UPLOAD_CHECK_LIMIT),
-        }
-    elif limit is not None:
-        raise RuntimeError('schedulers already created')
-    return SCHEDULERS
-
-
-def get_scheduler(key: SchedulerKey) -> aiojobs.Scheduler:
-    d = get_schedulers()
-    return d[key]
 
 
 
@@ -570,9 +549,14 @@ class ClipGoogleClient(GoogleClient):
         return self.root_conf.google.drive_folder
 
     async def __aenter__(self) -> Self:
-        self.schedulers = get_schedulers(self.scheduler_limit)
-        self.upload_check_waiters = JobWaiters(scheduler=self.schedulers['upload_checks'])
-        self.upload_clip_waiters = JobWaiters[bool](scheduler=self.schedulers['uploads'])
+        self.schedulers: SchedulersTD = {
+            'general': aiojobs.Scheduler(limit=32, pending_limit=1),
+            'uploads': aiojobs.Scheduler(limit=self.scheduler_limit),
+            'upload_checks': aiojobs.Scheduler(limit=UPLOAD_CHECK_LIMIT, pending_limit=1),
+            'clip_uploads': aiojobs.Scheduler(limit=8, pending_limit=1),
+        }
+        self.upload_check_waiters = JobWaiters[tuple[bool, Clip, set[Path]]](scheduler=self.schedulers['upload_checks'])
+        self.upload_clip_waiters = JobWaiters[bool](scheduler=self.schedulers['clip_uploads'])
         return await super().__aenter__()
 
     async def __aexit__(self, *args) -> None:
@@ -623,7 +607,7 @@ class ClipGoogleClient(GoogleClient):
     ) -> bool:
         """Upload all assets for the given clip
         """
-        waiter = JobWaiters[bool](scheduler=get_scheduler('uploads'))
+        waiter = JobWaiters[bool](scheduler=self.schedulers['uploads'])
         num_jobs = 0
         drive_folder_id: FileId|None = None
 
