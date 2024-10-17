@@ -15,6 +15,7 @@ import aiofile
 
 from .types import *
 from .cache import FileCache, MetaCacheKey
+from .pathtree import PathNode
 from . import config
 from ..model import (
     ClipCollection, Clip, ClipFileKey, ClipFileUploadKey,
@@ -511,6 +512,38 @@ class GoogleClient:
             if not matched:
                 raise UploadError(f'Uploaded file hash mismatch for "{local_file}"')
         return uploaded_meta
+
+    async def prebuild_paths(self, *paths: Path):
+        """Build multiple Drive folders from the given *paths*
+
+        Uses a tree of :class:`~.pathtree.PathNode` objects to search for and
+        create non-existent folders while minimizing Drive API calls.
+
+        This can be more efficient during uploads since the
+        :meth:`create_folder_from_path` method relies on a :class:`~asyncio.Lock`
+        for concurrency.
+        """
+        logger.info(f'prebuilding paths...')
+        count = 0
+        async with self.cache_lock:
+            root = PathNode.create_from_paths(*paths, folder_cache=self.folder_cache)
+            to_build = root.cost
+            logger.debug(f'prebuild count: {to_build}')
+            for node in root.walk_non_cached():#(breadth_first=True):
+                parent_id = None if node.parent is None else node.parent.folder_id
+                if node.parent is not None:
+                    if parent_id is None:
+                        logger.warning(f'parent cache missing: {node=}, {node.parent=}')
+                        parent_id = await self._create_folder_from_path(node.parent.full_path)
+                        node.folder_id = parent_id
+
+                logger.debug(f'create folder {node.full_path}, {parent_id=}')
+                f_id = await self.create_folder(node.part, parent_id)
+                self.cache_single_folder(node.full_path, f_id)
+                node.folder_id = f_id
+                count += 1
+        self.save_folder_cache()
+        logger.info(f'prebuild complete: {count} of {to_build}')
 
 
 class ClipGoogleClient(GoogleClient):
