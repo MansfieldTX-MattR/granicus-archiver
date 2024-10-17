@@ -29,5 +29,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = [
-    'tests'
+    'tests',
+    'src'
 ]
+addopts = "--doctest-modules"
