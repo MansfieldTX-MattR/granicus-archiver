@@ -780,14 +780,19 @@ class LegistarGoogleClient(GoogleClient):
         return self.root_conf.google.legistar_drive_folder
 
     async def __aenter__(self) -> Self:
-        self.item_scheduler = aiojobs.Scheduler(limit=32)
-        self.check_scheduler = aiojobs.Scheduler(limit=32, pending_limit=1)
-        self.upload_scheduler = aiojobs.Scheduler(limit=16)
+        self.item_scheduler = aiojobs.Scheduler(limit=16)
+        self.check_scheduler = aiojobs.Scheduler(limit=16, pending_limit=1)
+        self.upload_scheduler = aiojobs.Scheduler(limit=32)
+        self.check_waiters = JobWaiters[tuple[bool, GUID, set[Path]]](
+            scheduler=self.check_scheduler
+        )
+        self.item_waiters = JobWaiters[bool](scheduler=self.item_scheduler)
         return await super().__aenter__()
 
     async def __aexit__(self, *args) -> None:
-        await self.upload_scheduler.close()
-        await self.item_scheduler.close()
+        await self.check_scheduler.wait_and_close()
+        await self.item_scheduler.wait_and_close()
+        await self.upload_scheduler.wait_and_close()
         return await super().__aexit__(*args)
 
     def get_file_upload_path(self, guid: GUID, uid: LegistarFileUID) -> Path:
@@ -861,9 +866,19 @@ class LegistarGoogleClient(GoogleClient):
             f_id_index = 1 if is_attachment else 0
             folder_id = folder_ids[f_id_index]
             if folder_id is None:
-                folder_id = folder_ids[f_id_index] = await self.create_folder_from_path(
-                    upload_filename.parent
-                )
+                await asyncio.sleep(0)
+                cached = self.find_folder_cache(upload_filename.parent)
+                if cached is not None:
+                    cached_ids, cached_path = cached
+                    if cached_path == upload_filename.parent:
+                        folder_id = folder_ids[f_id_index] = cached_ids[-1]
+                        logger.info('CACHE HIT')
+                    else:
+                        logger.warning('CACHE MISS')
+                if folder_id is None:
+                    folder_id = folder_ids[f_id_index] = await self.create_folder_from_path(
+                        upload_filename.parent
+                    )
             await waiters.spawn(self.upload_legistar_file(
                 guid, uid, filename, upload_filename, folder_id,
             ))
@@ -876,61 +891,84 @@ class LegistarGoogleClient(GoogleClient):
         logger.info(f'Upload complete for guid: {guid}')
         return all_skipped
 
-    async def check_item_needs_upload(self, guid: GUID) -> bool:
+    async def check_item_needs_upload(self, guid: GUID) -> tuple[bool, GUID, set[Path]]:
         """Check if the item matching *guid* has any local files that need to
         be uploaded
         """
-        async def do_check(uid: LegistarFileUID, filename: Path) -> bool:
+        async def do_check(uid: LegistarFileUID, filename: Path) -> tuple[bool, Path]:
+            upload_filename = self.get_file_upload_path(guid, uid)
             upload_meta, _ = await self.get_remote_meta(guid, uid)
             if upload_meta is None:
-                return True
+                return True, upload_filename
             assert 'size' in upload_meta
             local_size = filename.stat().st_size
             upload_size = int(upload_meta['size'])
             if upload_size != local_size:
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
-            return False
-
-        coros: set[Coroutine[Any, Any, bool]] = set()
+            return False, upload_filename
+        if self.num_uploaded >= self.max_clips:
+            return False, guid, set()
+        coros: set[Coroutine[Any, Any, tuple[bool, Path]]] = set()
         it = self.legistar_data.iter_files_for_upload(guid)
         for uid, filename, local_meta, is_attachment in it:
             coros.add(do_check(uid, filename))
 
+        upload_filenames: set[Path] = set()
+        needs_upload = False
         if len(coros):
             results = await asyncio.gather(*coros)
-            if any(results):
-                return True
-        return False
+            for _needs_upload, upload_filename in results:
+                if _needs_upload:
+                    needs_upload = True
+                    upload_filenames.add(upload_filename)
+        return needs_upload, guid, upload_filenames
 
-    async def upload_item_if_needed(self, guid: GUID, waiter: JobWaiters[bool]) -> bool:
-        """Check and upload any missing files for the item matching *guid*
+    async def handle_upload_check_jobs(self) -> None:
+        """Wait for jobs from :meth:`check_item_needs_upload` and spawns their
+        :meth:`upload_legistar_item` jobs
 
-        If uploads are needed, a job is scheduled for :meth:`upload_legistar_item`
-        and added to the given :class:`~.utils.JobWaiters`.
-
-        Returns:
-            ``True`` if any file uploads were scheduled, ``False`` otherwise
+        The folders from each incoming job will be created with
+        :meth:`~GoogleClient.prebuild_paths` before spawning the upload jobs
         """
-        needs_upload = await self.check_item_needs_upload(guid)
-        if not needs_upload or self.num_uploaded >= self.max_clips:
-            return False
-        logger.info(f'Upload item {guid}')
-        self.num_uploaded += 1
-        await waiter.spawn(self.upload_legistar_item(guid))
-        return True
+        upload_dirs = set[Path]()
+        guids_to_upload: list[GUID] = []
+        if self.num_uploaded >= self.max_clips:
+            return
+        async for job in self.check_waiters:
+            if job.exception is not None:
+                raise job.exception
+            needs_upload, guid, upload_filenames = job.result
+            if not needs_upload:
+                continue
+            upload_dirs |= set([p.parent for p in upload_filenames])
+            guids_to_upload.append(guid)
+
+        if len(upload_dirs):
+            # logger.debug(f'{upload_dirs=}')
+            await self.prebuild_paths(*upload_dirs)
+        for guid in guids_to_upload:
+            await self.item_waiters.spawn(self.upload_legistar_item(guid))
+            self.num_uploaded += 1
+            if self.num_uploaded >= self.max_clips:
+                break
 
     async def upload_all(self):
         """Upload files for all items in :attr:`legistar_data` (up to by :attr:`max_clips`)
         """
-        check_waiters = JobWaiters[bool](scheduler=self.check_scheduler)
-        item_waiters = JobWaiters[bool](scheduler=self.item_scheduler)
+        check_waiters = self.check_waiters
+        check_limit = self.check_scheduler.limit
+        assert check_limit is not None
+        item_waiters = self.item_waiters
         if self.max_clips == 0:
             return
 
         for guid in self.legistar_data.keys():
-            await check_waiters.spawn(self.upload_item_if_needed(guid, item_waiters))
+            await check_waiters.spawn(self.check_item_needs_upload(guid))
+            if len(check_waiters) >= check_limit:
+                await self.handle_upload_check_jobs()
             if self.num_uploaded >= self.max_clips:
                 break
+        await self.handle_upload_check_jobs()
         logger.info(f'all jobs scheduled, waiting ({len(item_waiters)=}), {len(check_waiters)=}, {self.num_uploaded=}')
         await check_waiters
         await item_waiters
