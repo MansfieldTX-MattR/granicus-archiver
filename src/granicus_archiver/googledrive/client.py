@@ -378,30 +378,34 @@ class GoogleClient:
         """Find or create a (possibly nested) Drive folder with the given path
         """
         async with self.cache_lock:
-            find_result = await self.find_folder(folder)
-            logger.debug(f'{find_result=}')
-            if find_result is not None:
-                f_id, find_path = find_result
-                if find_path == folder:
-                    return f_id
-                remaining_path = folder.relative_to(find_path)
-                logger.debug(f'{remaining_path=}')
-                # remaining_parts = folder.parts[:len(find_path.parts)]
-                path_parts = remaining_path.parts
-                parent_path = find_path
-                parent = f_id
-                use_cache = True
-                # return await create_folder_nested(aiogoogle, drive_v3, *remaining_path.parts, parent=f_id)
-            else:
-                path_parts = folder.parts
-                parent_path = None
-                parent = None
-                use_cache = False
-            # return await create_folder_nested(aiogoogle, drive_v3, *folder.parts, parent=None)
-            return await self.create_folder_nested(
-                *path_parts, parent=parent,
-                parent_path=parent_path, use_cache=use_cache,
-            )
+            result = await self._create_folder_from_path(folder)
+        return result
+
+    async def _create_folder_from_path(self, folder: Path) -> FileId:
+        find_result = await self.find_folder(folder)
+        logger.debug(f'{find_result=}')
+        if find_result is not None:
+            f_id, find_path = find_result
+            if find_path == folder:
+                return f_id
+            remaining_path = folder.relative_to(find_path)
+            logger.debug(f'{remaining_path=}')
+            # remaining_parts = folder.parts[:len(find_path.parts)]
+            path_parts = remaining_path.parts
+            parent_path = find_path
+            parent = f_id
+            use_cache = True
+            # return await create_folder_nested(aiogoogle, drive_v3, *remaining_path.parts, parent=f_id)
+        else:
+            path_parts = folder.parts
+            parent_path = None
+            parent = None
+            use_cache = False
+        # return await create_folder_nested(aiogoogle, drive_v3, *folder.parts, parent=None)
+        return await self.create_folder_nested(
+            *path_parts, parent=parent,
+            parent_path=parent_path, use_cache=use_cache,
+        )
 
     async def file_exists(
         self,
