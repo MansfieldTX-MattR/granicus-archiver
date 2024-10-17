@@ -11,3 +11,4 @@
     auth
     config
     cache
+    pathtree

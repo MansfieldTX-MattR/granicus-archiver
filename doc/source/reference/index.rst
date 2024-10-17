@@ -7,5 +7,6 @@ Reference
     config
     model
     utils
+    downloader
     legistar/index
     googledrive/index
