@@ -1007,10 +1007,11 @@ async def upload_clips(
         max_clips=max_clips,
         scheduler_limit=scheduler_limit,
     )
-    async with client:
-        await client.upload_all(clips)
-
-    client.save_cache()
+    try:
+        async with client:
+            await client.upload_all(clips)
+    finally:
+        client.save_cache()
 
 
 @logger.catch
