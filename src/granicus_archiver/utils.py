@@ -337,3 +337,38 @@ def seconds_to_time_str(seconds: int) -> str:
     m = (seconds - h * 3600) // 60
     s = seconds % 60
     return f'{h:02d}:{m:02d}:{s:02d}'
+
+
+async def aio_read_iter(
+    fd: aiofile.FileIOWrapperBase,
+    chunk_size: int = 65536,
+    timeout_total: float|None = None,
+    timeout_chunk: float|None = None
+) -> AsyncGenerator[str|bytes]:
+    """Iterate over chunked segments of a file descriptor as a
+    :term:`asynchronous generator` with optional timeouts
+
+    Arguments:
+        fd: A :class:`aiofile.utils.FileIOWrapperBase` (the context manager returned
+            when using :func:`aiofile.utils.async_open` with :keyword:`async with`)
+        chunk_size: The chunk sized passed to the
+            :meth:`aiofile.utils.FileIOWrapperBase.iter_chunked` method
+        timeout_total: Timeout to apply for the entire read operation.  If
+            not given, no timeout will be enforced.
+        timeout_chunk: Timeout to apply for each chunk iteration.  If not
+            given, no tiemout will be enforced.
+
+    Raises:
+        TimeoutError: If either timeout argument is supplied and its limit
+            was reached
+    """
+
+    chunk_iter = fd.iter_chunked(chunk_size=chunk_size)
+    async with asyncio.timeout(timeout_total):
+        while True:
+            async with asyncio.timeout(timeout_chunk):
+                try:
+                    chunk = await anext(chunk_iter)
+                except StopAsyncIteration:
+                    break
+                yield chunk

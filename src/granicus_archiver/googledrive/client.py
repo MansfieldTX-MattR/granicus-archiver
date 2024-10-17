@@ -23,7 +23,7 @@ from ..model import (
 )
 from ..legistar.types import GUID, LegistarFileUID
 from ..legistar.model import LegistarData
-from ..utils import JobWaiters, get_file_hash_async
+from ..utils import JobWaiters, get_file_hash_async, aio_read_iter
 from .. import html_builder
 
 if TYPE_CHECKING:
@@ -426,7 +426,9 @@ class GoogleClient:
         upload_filename: Path,
         check_exists: bool = True,
         folder_id: FileId|None = None,
-        check_hash: bool = True
+        check_hash: bool = True,
+        timeout_total: float|None = None,
+        timeout_chunk: float|None = None
     ) -> FileMetaFull|None:
         """Upload a file to Drive
 
@@ -473,7 +475,10 @@ class GoogleClient:
                 return None
         logger.debug(f'uploading "{upload_filename}"')
         async with aiofile.async_open(local_file, 'rb') as src_fd:
-            chunk_iter = src_fd.iter_chunked(chunk_size)
+            chunk_iter = aio_read_iter(
+                src_fd, chunk_size=chunk_size,
+                timeout_total=timeout_total, timeout_chunk=timeout_chunk,
+            )
             req = self.drive_v3.files.create(
                 pipe_from=chunk_iter,
                 fields="id",
@@ -619,6 +624,7 @@ class ClipGoogleClient(GoogleClient):
         ) -> bool:
             meta = await self.stream_upload_file(
                 filename, upload_filename, folder_id=folder_id,
+                timeout_chunk=60,
             )
             if meta is not None:
                 self.set_cached_file_meta(('clips', clip.id, key), meta)
