@@ -704,6 +704,8 @@ class ClipGoogleClient(GoogleClient):
         """
         upload_dirs = set[Path]()
         clips_to_upload: list[Clip] = []
+        if self.num_uploaded >= self.max_clips:
+            return
         async for job in self.upload_check_waiters:
             if job.exception is not None:
                 raise job.exception
@@ -736,6 +738,7 @@ class ClipGoogleClient(GoogleClient):
             if self.num_uploaded >= self.max_clips:
                 break
 
+        await self.handle_upload_check_jobs()
         if len(self.upload_check_waiters):
             logger.info(f'waiting for check_waiters ({len(self.upload_check_waiters)=})')
             await self.upload_check_waiters
