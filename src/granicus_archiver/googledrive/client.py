@@ -132,11 +132,14 @@ class GoogleClient:
     def save_cache(self):
         """Save :attr:`folder_cache` and :attr:`meta_cache` to disk
         """
-        d = {str(k):v for k,v in self.folder_cache.items()}
-        self.CACHE_FILE.write_text(json.dumps(d, indent=2))
+        self.save_folder_cache()
         self.META_CACHE_FILE.write_text(
             json.dumps(self.meta_cache.serialize(), indent=2)
         )
+
+    def save_folder_cache(self):
+        d = {str(k):v for k,v in self.folder_cache.items()}
+        self.CACHE_FILE.write_text(json.dumps(d, indent=2))
 
     def find_folder_cache(self, folder: Path) -> tuple[list[FileId], Path]|None:
         """Search for cached Drive folders previously found by :meth:`find_folder`
