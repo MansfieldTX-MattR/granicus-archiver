@@ -630,6 +630,15 @@ class ClipGoogleClient(GoogleClient):
                 continue
             upload_filename = self.get_clip_file_upload_path(clip, key)
             if drive_folder_id is None:
+                cached = self.find_folder_cache(upload_filename.parent)
+                if cached is not None:
+                    cached_ids, cached_path = cached
+                    if cached_path == upload_filename.parent:
+                        drive_folder_id = cached_ids[-1]
+                        logger.info('CACHE HIT')
+                    else:
+                        logger.warning('CACHE MISS')
+            if drive_folder_id is None:
                 drive_folder_id = await self.create_folder_from_path(
                     upload_filename.parent
                 )
@@ -649,49 +658,75 @@ class ClipGoogleClient(GoogleClient):
     async def check_clip_needs_upload(
         self,
         clip: Clip
-    ) -> bool:
+    ) -> tuple[bool, Clip, set[Path]]:
         """Check if the given clip has any assets that need to be uploaded
         """
-        async def do_check(key: ClipFileUploadKey, filename: Path) -> bool:
+        async def do_check(key: ClipFileUploadKey, filename: Path) -> tuple[bool, Path]:
+            upload_filename = self.get_clip_file_upload_path(clip, key)
             upload_meta, _ = await self.get_clip_file_meta(clip, key)
             if upload_meta is None:
-                return True
+                return True, upload_filename
             assert 'size' in upload_meta
             local_size = filename.stat().st_size
             upload_size = int(upload_meta['size'])
             if upload_size != local_size:
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
-            return False
-
-        coros: set[Coroutine[Any, Any, bool]] = set()
+            return False, upload_filename
+        if self.num_uploaded >= self.max_clips:
+            return False, clip, set()
+        coros: set[Coroutine[Any, Any, tuple[bool, Path]]] = set()
         for key, filename in clip.iter_paths(for_download=False):
             if not filename.exists():
                 continue
             coros.add(do_check(key, filename))
+        all_paths = set[Path]()
+        needs_upload = False
         if len(coros):
             results = await asyncio.gather(*coros)
-            if any(results):
-                return True
-        return False
+            for _needs_upload, upload_filename in results:
+                if _needs_upload:
+                    needs_upload = True
+                    all_paths.add(upload_filename)
+        return needs_upload, clip, all_paths
 
-    async def upload_clip_if_needed(self, clip: Clip) -> bool:
-        """Check assets for the given clip and upload if missing from Drive
+    async def handle_upload_check_jobs(self) -> None:
+        """Wait for jobs from :meth:`check_clip_needs_upload` and spawns their
+        :meth:`upload_clip` jobs
+
+        The folders from each incoming job will be created with
+        :meth:`~GoogleClient.prebuild_paths` before spawning the upload jobs
         """
-        if self.num_uploaded >= self.max_clips:
-            return False
-        needs_upload = await self.check_clip_needs_upload(clip)
-        if not needs_upload or self.num_uploaded >= self.max_clips:
-            return False
-        self.num_uploaded += 1
-        logger.info(f'Upload clip {clip.unique_name}')
-        await self.upload_clip_waiters.spawn(self.upload_clip(clip))
-        return needs_upload
+        upload_dirs = set[Path]()
+        clips_to_upload: list[Clip] = []
+        async for job in self.upload_check_waiters:
+            if job.exception is not None:
+                raise job.exception
+            needs_upload, clip, upload_filenames = job.result
+            if not needs_upload:
+                continue
+            upload_dirs |= set([p.parent for p in upload_filenames])
+            clips_to_upload.append(clip)
+
+        if len(upload_dirs):
+            _clip_ids = [c.id for c in clips_to_upload]
+            logger.debug(f'{_clip_ids=}, {upload_dirs=}')
+            await self.prebuild_paths(*upload_dirs)
+        for clip in clips_to_upload:
+            await self.upload_clip_waiters.spawn(self.upload_clip(clip))
+            self.num_uploaded += 1
+            if self.num_uploaded >= self.max_clips:
+                break
 
     async def upload_all(self, clips: ClipCollection) -> None:
         """Upload assets for the given clips (up to by :attr:`max_clips`)
         """
+        upload_check_sch = self.schedulers['upload_checks']
+        upload_check_limit = upload_check_sch.limit
+        assert upload_check_limit is not None
         for clip in clips:
-            await self.upload_check_waiters.spawn(self.upload_clip_if_needed(clip))
+            await self.upload_check_waiters.spawn(self.check_clip_needs_upload(clip))
+            if len(self.upload_check_waiters) >= upload_check_limit:
+                await self.handle_upload_check_jobs()
             if self.num_uploaded >= self.max_clips:
                 break
 
@@ -702,6 +737,7 @@ class ClipGoogleClient(GoogleClient):
         if len(self.upload_clip_waiters):
             logger.info(f'waiting for waiters ({len(self.upload_clip_waiters)=})')
             await self.upload_clip_waiters
+        logger.success(f'all waiters finished')
 
 
 class LegistarGoogleClient(GoogleClient):
