@@ -307,6 +307,37 @@ class FileMeta(Serializable):
         return cls(**kw)
 
 
+class CheckError(Exception):
+    """Base exception for :meth:`ClipFiles.check`
+    """
+    def __init__(self, clip: Clip, key: ClipFileUploadKey) -> None:
+        super().__init__()
+        self.clip = clip
+        self.key = key
+
+    def __str__(self) -> str:
+        return f'{self.clip.unique_name} ({self.key})'
+
+class NoMetaError(CheckError):
+    """Raised when a file exists locally with no stored :class:`FileMeta`
+    """
+
+class ContentLengthError(CheckError):
+    """Raised when the stored :attr:`~FileMeta.content_length` does not match
+    the local filesize
+    """
+
+class NoFileError(CheckError):
+    """Raised when there is :class:`metadata <FileMeta>` for a file that
+    does not exist locally
+    """
+
+class FileShouldNotExist(CheckError):
+    """Raised when the stored metadata for a file is
+    :attr:`zero-length <FileMeta.is_zero_length>` but the file exists locally
+    """
+
+
 @dataclass
 class ClipFiles(Serializable):
     """File information for a :class:`Clip`
@@ -443,6 +474,11 @@ class ClipFiles(Serializable):
         return True
 
     def check(self):
+        """Check local files against the stored :attr:`metadata`
+
+        Raises:
+            CheckError: A subclass of :class:`CheckError` if any errors are found
+        """
         keys_checked: set[ClipFileUploadKey] = set()
         for key, p in self.iter_existing(for_download=False):
             full_p = self.clip.get_file_path(key, absolute=True)
@@ -450,10 +486,12 @@ class ClipFiles(Serializable):
                 continue
             st = full_p.stat()
             meta = self.get_metadata(key)
-            assert meta is not None
+            if meta is None:
+                raise NoMetaError(self.clip, key)
             if meta.is_zero_length:
                 continue
-            assert meta.content_length == st.st_size
+            if meta.content_length != st.st_size:
+                raise ContentLengthError(self.clip, key)
             keys_checked.add(key)
         for key in self.metadata.keys():
             if key in keys_checked:
@@ -461,11 +499,14 @@ class ClipFiles(Serializable):
             meta = self.metadata[key]
             full_p = self.clip.get_file_path(key, absolute=True)
             if meta.is_zero_length:
-                assert not full_p.exists()
+                if full_p.exists():
+                    raise FileShouldNotExist(self.clip, key)
                 continue
-            assert full_p.exists()
+            if not full_p.exists():
+                raise NoFileError(self.clip, key)
             st = full_p.stat()
-            assert st.st_size == meta.content_length
+            if st.st_size != meta.content_length:
+                raise ContentLengthError(self.clip, key)
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {
