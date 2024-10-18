@@ -288,6 +288,12 @@ class FileMeta(Serializable):
         )
 
     @property
+    def is_pdf(self) -> bool:
+        """Whether this is a pdf file
+        """
+        return self.content_type == 'application/pdf'
+
+    @property
     def is_zero_length(self) -> bool:
         """Whether this instance represents a zero-length file (created by
         :meth:`create_zero_length`)
@@ -408,6 +414,53 @@ class FileShouldNotExist(CheckError):
     """Raised when the stored metadata for a file is
     :attr:`zero-length <FileMeta.is_zero_length>` but the file exists locally
     """
+
+
+class FilesizeMagicNumber(CheckError):
+    """Raised when the filesize is exactly ``1245`` bytes
+
+    Don't ask me why, but this happens with some pdf downloads.  It usually
+    means the file can be re-downloaded because the Content-Length in the
+    header shows a different value.
+
+    (I stopped asking why their systems are the way they are a long time ago)
+    """
+
+    @classmethod
+    def is_magic_number(cls, item: Path|FileMeta|int) -> bool:
+        """Check if the value equals ``1245``
+
+        This seriously feels a bit like the `is-thirteen`_ package.
+
+        .. _is-thirteen: https://github.com/jezen/is-thirteen
+        """
+        if isinstance(item, FileMeta):
+            content_length = item.content_length
+        elif isinstance(item, Path):
+            content_length = item.stat().st_size
+        else:
+            content_length = item
+        return content_length == 1245
+
+    @classmethod
+    def check_and_raise(
+        cls,
+        clip: Clip,
+        key: ClipFileUploadKey,
+        item: Path|FileMeta|int,
+        msg: str|None = None
+    ) -> None:
+        """Check the given *item* against :meth:`is_magic_number` and raise
+        this exception if true
+        """
+        if not cls.is_magic_number(item):
+            return
+        extra_msg = 'Filesize is exactly 1245 bytes. Corruption likely'
+        if msg is None:
+            msg = ''
+        else:
+            msg = f' - "{msg}"'
+        raise cls(clip, key, msg=f'{extra_msg}{msg}')
 
 
 @dataclass
@@ -565,6 +618,13 @@ class ClipFiles(Serializable):
             ContentTypeError.check_and_raise(self.clip, key, meta, full_p)
             if meta.content_length != st.st_size:
                 raise ContentLengthError(self.clip, key)
+            if meta.is_pdf:
+                FilesizeMagicNumber.check_and_raise(
+                    self.clip, key, st.st_size, msg='filesize',
+                )
+                FilesizeMagicNumber.check_and_raise(
+                    self.clip, key, meta, msg='local meta',
+                )
             keys_checked.add(key)
         for key in self.metadata.keys():
             if key in keys_checked:
@@ -581,6 +641,13 @@ class ClipFiles(Serializable):
             st = full_p.stat()
             if st.st_size != meta.content_length:
                 raise ContentLengthError(self.clip, key)
+            if meta.is_pdf:
+                FilesizeMagicNumber.check_and_raise(
+                    self.clip, key, full_p, msg='filesize',
+                )
+                FilesizeMagicNumber.check_and_raise(
+                    self.clip, key, meta, msg='local meta',
+                )
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {
