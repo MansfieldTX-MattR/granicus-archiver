@@ -310,13 +310,20 @@ class FileMeta(Serializable):
 class CheckError(Exception):
     """Base exception for :meth:`ClipFiles.check`
     """
-    def __init__(self, clip: Clip, key: ClipFileUploadKey) -> None:
+    def __init__(
+        self,
+        clip: Clip,
+        key: ClipFileUploadKey,
+        msg: str|None = None
+    ) -> None:
         super().__init__()
         self.clip = clip
         self.key = key
+        self.msg = msg
 
     def __str__(self) -> str:
-        return f'{self.clip.unique_name} ({self.key})'
+        msg = '' if self.msg is None else f': {self.msg}'
+        return f'{self.clip.unique_name} ({self.key}){msg}'
 
 class NoMetaError(CheckError):
     """Raised when a file exists locally with no stored :class:`FileMeta`
