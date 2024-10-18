@@ -1,4 +1,4 @@
-from typing import TypeVar, TypedDict, Literal
+from typing import TypeVar, TypedDict, Literal, Coroutine, Any
 import asyncio
 from pathlib import Path
 
@@ -10,11 +10,12 @@ import aiojobs
 import aiofile
 from yarl import URL
 
+from .config import Config
 from .parser import parse_page, parse_player_page
 from .model import (
     ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey,
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
-    CheckError,
+    CheckError, FilesizeMagicNumber,
 )
 from .utils import JobWaiters, is_same_filesystem
 from .downloader import (
@@ -333,6 +334,119 @@ def build_web_vtt(
     vtt_filename.write_text(vtt_text)
     clip.files.check_chapters_file()
     return True
+
+
+
+async def check_clip_file_meta(
+    session: ClientSession,
+    clip: Clip,
+    report_only: bool = True
+) -> bool:
+
+    if session.closed:
+        # Just in case this task was cancelled from other exceptions
+        return False
+
+    async def get_file_meta(
+        key: ClipFileKey,
+        url: URL,
+        filename: Path
+    ) -> tuple[ClipFileKey, Path, FileMeta|Literal[False]]:
+        if session.closed:
+            # Another escape hatch for task cancellation
+            return key, filename, False
+        async with session.get(url) as resp:
+            meta = FileMeta.from_headers(resp.headers)
+        return key, filename, meta
+
+    coros = set[Coroutine[Any, Any, tuple[ClipFileKey, Path, FileMeta|Literal[False]]]]()
+    for key, url, filename in clip.iter_url_paths():
+        if not filename.exists():
+            continue
+        coros.add(get_file_meta(key, url, filename))
+
+    changed = False
+    for c in asyncio.as_completed(coros):
+        key, filename, remote_meta = await c
+        if remote_meta is False:
+            continue
+        local_meta = clip.files.get_metadata(key)
+        if local_meta is None:
+            if not filename.exists():
+                continue
+            logger.warning(f'{filename} has no local metadata')
+            st = filename.stat()
+            assert st.st_size == remote_meta.content_length, f'content length incorrect for {filename}'
+            if not report_only:
+                # Since there is no local metadata, it's safe to just add it here
+                # (after making sure the filesize matches above)
+                logger.info(f'inserting meta for {filename}')
+                clip.files.set_metadata(key, remote_meta)
+            changed = True
+        else:
+            if local_meta.content_length != remote_meta.content_length:
+                if remote_meta.etag is None or remote_meta.last_modified is None:
+                    # There's no way to be certain which of the two is valid
+                    # so just warn here and skip all checks below
+                    logger.warning(f'invalid remote meta for {filename}: {remote_meta=}, {local_meta=}')
+                    continue
+                filesize = filename.stat().st_size
+                if remote_meta.content_length == filesize:
+                    logger.warning(f'{filename} content-length mismatch: filesize={filesize}, local={local_meta.content_length}, remote={remote_meta.content_length}')
+                    if not report_only:
+                        # Remote meta matches, so replace the local with it
+                        logger.info(f'replacing meta for content_length: {filename}')
+                        clip.files.set_metadata(key, remote_meta)
+                    changed = True
+                elif (FilesizeMagicNumber.is_magic_number(local_meta) or
+                      FilesizeMagicNumber.is_magic_number(filesize)):
+                    logger.warning(f'{filename} size is {filesize}, but remote is {remote_meta.content_length}.  This is likely a bad file')
+                    if not report_only:
+                        # Delete the file so it can be re-downloaded
+                        logger.info(f'delete "{filename}"')
+                        filename.unlink()
+                        del clip.files.metadata[key]
+                    changed = True
+                    # Skip any further checks since the file and metadata
+                    # have been deleted
+                    continue
+                else:
+                    # We don't really know what to do at this point
+                    logger.warning(f'filesize mis-match: remote={remote_meta.content_length}, local={local_meta.content_length}, filesize={filesize}, {filename=}')
+            if local_meta.etag != remote_meta.etag:
+                if local_meta.etag is None:
+                    logger.warning(f'{filename} has no etag, but the remote value is "{remote_meta.etag}"')
+                    if not report_only:
+                        # Safe to replace since we have no local etag
+                        logger.info(f'replacing meta for etag: {filename}')
+                        clip.files.set_metadata(key, remote_meta)
+                    changed = True
+                    continue
+                logger.warning(f'etag mismatch for {filename}, local="{local_meta.etag}", remote="{remote_meta.etag}"')
+    return changed
+
+
+@logger.catch
+async def check_all_clip_meta(
+    conf: Config,
+    report_only: bool = True
+) -> None:
+    schedulers = get_schedulers(limit=16)
+    data_file = conf.data_file
+    if not data_file.exists():
+        raise Exception('No data file')
+    clips = ClipCollection.load(data_file)
+
+    async with ClientSession() as session:
+        meta_waiter = JobWaiters[bool](scheduler=schedulers['general'])
+        for clip in clips:
+            await meta_waiter.spawn(check_clip_file_meta(
+                session, clip, report_only=report_only,
+            ))
+        meta_changed = await meta_waiter
+        if not report_only and any(meta_changed):
+            clips.save(data_file)
+        await close_schedulers()
 
 
 @logger.catch

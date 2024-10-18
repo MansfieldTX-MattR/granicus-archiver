@@ -213,6 +213,18 @@ def build_vtt(obj: BaseContext):
     if changed:
         clips.save(obj.config.data_file)
 
+@clips.command(name='check-meta')
+@click.option(
+    '--report-only/--no-report-only', default=True, show_default=True,
+    help='If enabled, no modifications will be made to the data'
+)
+@click.pass_obj
+def check_clip_meta(obj: BaseContext, report_only: bool):
+    """Compare local metadata against remote request headers
+    """
+    asyncio.run(client.check_all_clip_meta(obj.config, report_only=report_only))
+    click.echo('Check complete')
+
 
 @clips.command(name='check')
 @click.option(
