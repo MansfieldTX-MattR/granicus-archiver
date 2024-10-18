@@ -45,6 +45,7 @@ class SchedulersTD(TypedDict):
     copies: aiojobs.Scheduler
 
 SchedulerKey = Literal['general', 'downloads', 'copies']
+SchedulerKeys: list[SchedulerKey] = ['general', 'downloads', 'copies']
 
 
 SCHEDULERS: SchedulersTD|None = None
@@ -66,6 +67,13 @@ def get_schedulers(limit: int|None = None) -> SchedulersTD:
 def get_scheduler(key: SchedulerKey, limit: int|None = None) -> aiojobs.Scheduler:
     d = get_schedulers(limit=limit)
     return d[key]
+
+
+async def close_schedulers() -> None:
+    logger.info('closing schedulers..')
+    scheduler_list = [get_scheduler(key) for key in SchedulerKeys]
+    await asyncio.gather(*[sch.wait_and_close() for sch in scheduler_list])
+    logger.debug('schedulers closed')
 
 
 async def get_main_data(session: ClientSession, base_dir: Path) -> ClipCollection:
@@ -374,11 +382,7 @@ async def amain(
                 if max_clips is not None and i >= max_clips:
                     break
             await waiter
-            logger.info('closing schedulers..')
-            scheduler_list: list[aiojobs.Scheduler] = [schedulers[key] for key in schedulers.keys()]
-            await asyncio.gather(*[sch.wait_and_close() for sch in scheduler_list])
-
-            logger.debug('schedulers closed')
+            await close_schedulers()
         finally:
             clips.save(data_file)
     return clips
