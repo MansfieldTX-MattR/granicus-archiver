@@ -12,9 +12,14 @@ import aiofile
 from .model import FileMeta
 
 
-class DownloadError(Exception): ...
+class DownloadError(Exception):
+    """Raised if the downloaded content size does not match the "Content-Length"
+    from the response headers
+    """
 
-class StupidZeroContentLengthError(Exception): ...
+class StupidZeroContentLengthError(Exception):
+    """Raised when the reported "Content-Length" is zero
+    """
 
 class ThisShouldBeA404ErrorButItsNot(ClientResponseError):
     """Exception raised when Granicus redirects you to a warning page saying
@@ -58,30 +63,49 @@ class ThisShouldBeA404ErrorButItsNot(ClientResponseError):
 
 
 class DownloadRequest(TypedDict):
+    """Keyword arguments to create :class:`FileDownload` instances
+    """
     url: URL
+    """URL for the download"""
     filename: Path
+    """Local filename for the download"""
     chunk_size: NotRequired[int]
+    """Chunk size for streaming download segments"""
     timeout: NotRequired[ClientTimeout]
+    """Custom :class:`~aiohttp.ClientTimeout` specification"""
 
 class DownloadResult(TypedDict):
+    """Result type used for :attr:`FileDownload.result`
+    """
     url: URL
+    """The :attr:`~DownloadRequest.url` of the request"""
     filename: Path
+    """The :attr:`~DownloadRequest.filename` of the request"""
     meta: FileMeta
+    """Metadata from the response headers as a :class:`~.model.FileMeta` instance"""
 
 
 class FileDownload:
+    """Downloads a single file
+
+    Arguments:
+        session (aiohttp.ClientSession):
+        **kwargs (DownloadRequest):
+    """
+    session: ClientSession
+    """The current :class:`aiohttp.ClientSession`"""
+    progress: float
+    """Current download progress (from ``0.0`` to ``1.0``)"""
     def __init__(
         self,
         session: ClientSession,
-        url: URL,
-        filename: Path,
-        chunk_size: int = 65536,
-        timeout: ClientTimeout|None = None
+        **kwargs: Unpack[DownloadRequest]
     ) -> None:
         self.session = session
-        self.url = url
-        self.filename = filename
-        self.chunk_size = chunk_size
+        self.url = kwargs['url']
+        self.filename = kwargs['filename']
+        self.chunk_size = kwargs.get('chunk_size', 65536)
+        timeout = kwargs.get('timeout')
         if timeout is None:
             timeout = ClientTimeout(total=300)
         self.timeout = timeout
@@ -90,12 +114,16 @@ class FileDownload:
 
     @property
     def meta(self) -> FileMeta:
+        """Metadata from the response headers
+        """
         if self._meta is None:
             raise RuntimeError('FileMeta not available')
         return self._meta
 
     @property
     def result(self) -> DownloadResult:
+        """The completed :class:`DownloadResult`
+        """
         return {
             'url': self.url,
             'filename': self.filename,
@@ -125,6 +153,16 @@ class FileDownload:
 
 
 class Downloader:
+    """Manager for scheduling :class:`FileDownload` jobs
+    """
+    session: ClientSession
+    """The current :class:`aiohttp.ClientSession`"""
+    scheduler: aiojobs.Scheduler|None
+    """The :class:`~aiojobs.Scheduler` to place download jobs on"""
+    default_chunk_size: int
+    """Default to use for :attr:`FileDownload.chunk_size`"""
+    default_timeout: ClientTimeout
+    """Default to use for :attr:`FileDownload.timeout`"""
     def __init__(
         self,
         session: ClientSession,
@@ -141,11 +179,34 @@ class Downloader:
         return FileDownload(session=self.session, **kwargs)
 
     async def spawn(self, **kwargs: Unpack[DownloadRequest]) -> aiojobs.Job[FileDownload]:
+        """Create a :class:`FileDownload` and run it on the :attr:`scheduler`
+
+        - If :attr:`~DownloadRequest.chunk_size` is not provided, the
+          :attr:`default_chunk_size` will be used.
+        - If :attr:`~DownloadRequest.timeout` is not provided,
+          :attr:`default_timeout` will be used.
+
+        Arguments:
+            **kwargs (DownloadRequest): Keyword arguments to initialize the
+                :class:`FileDownload` instance
+        """
         if self.scheduler is None:
             raise RuntimeError('scheduler not set')
         dl = self._build_download_obj(**kwargs)
         return await self.scheduler.spawn(dl())
 
     async def download(self, **kwargs: Unpack[DownloadRequest]) -> FileDownload:
+        """Create a :class:`FileDownload` and begin downloading immediately
+        (bypassing :attr:`scheduler`)
+
+        - If :attr:`~DownloadRequest.chunk_size` is not provided, the
+          :attr:`default_chunk_size` will be used.
+        - If :attr:`~DownloadRequest.timeout` is not provided,
+          :attr:`default_timeout` will be used.
+
+        Arguments:
+            **kwargs (DownloadRequest): Keyword arguments to initialize the
+                :class:`FileDownload` instance
+        """
         dl = self._build_download_obj(**kwargs)
         return await dl()
