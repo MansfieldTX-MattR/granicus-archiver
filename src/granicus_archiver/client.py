@@ -14,6 +14,7 @@ from .parser import parse_page, parse_player_page
 from .model import (
     ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey,
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
+    CheckError,
 )
 from .utils import JobWaiters, is_same_filesystem
 from .downloader import (
@@ -229,8 +230,14 @@ async def download_clip(downloader: Downloader, clip: Clip) -> None:
 
     logger.success(f'clip "{clip.unique_name}" complete')
 
-def check_clip_files(clip: Clip) -> int:
-    clip.files.check()
+def check_clip_files(clip: Clip, warnings_only: bool = False) -> int:
+    try:
+        clip.files.check()
+    except CheckError as exc:
+        if warnings_only:
+            logger.warning(str(exc))
+            return 0
+        raise
     count = 0
     for key, url, filename in clip.iter_url_paths():
         if not filename.exists():
@@ -248,11 +255,11 @@ def check_clip_files(clip: Clip) -> int:
     return count
 
 @logger.catch
-def check_all_clip_files(clips: ClipCollection):
+def check_all_clip_files(clips: ClipCollection, warnings_only: bool = False):
     clip_count = 0
     item_count = 0
     for clip in clips:
-        _item_count = check_clip_files(clip)
+        _item_count = check_clip_files(clip, warnings_only=warnings_only)
         item_count += _item_count
         clip_count += 1
     logger.info(f'checked {clip_count} clips and {item_count} items')

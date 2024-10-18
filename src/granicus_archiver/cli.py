@@ -215,12 +215,16 @@ def build_vtt(obj: BaseContext):
 
 
 @clips.command(name='check')
+@click.option(
+    '--warnings-only/--no-warnings-only', default=True, show_default=True,
+    help='Whether to treat check errors as warnings or exceptions'
+)
 @click.pass_obj
-def check_clips(obj: BaseContext):
+def check_clips(obj: BaseContext, warnings_only: bool):
     """Check downloaded files using the stored metadata
     """
     clips = ClipCollection.load(obj.config.data_file)
-    client.check_all_clip_files(clips)
+    client.check_all_clip_files(clips, warnings_only=warnings_only)
     click.echo('Check complete')
 
 
