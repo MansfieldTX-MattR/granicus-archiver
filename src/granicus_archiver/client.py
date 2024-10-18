@@ -488,7 +488,6 @@ async def amain(
                     continue
                 build_web_vtt(clip, timestamps, mkdir=True)
                 if clip.complete:
-                    logger.debug(f'skipping {clip.unique_name}')
                     continue
                 # logger.debug(f'{scheduler.active_count=}')
                 await waiter.spawn(download_clip(downloader, clip))
