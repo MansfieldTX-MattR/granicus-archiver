@@ -319,6 +319,7 @@ class FileMeta(Serializable):
 class CheckError(Exception):
     """Base exception for :meth:`ClipFiles.check`
     """
+    key: ClipFileUploadKey
     def __init__(
         self,
         clip: Clip,
@@ -491,7 +492,7 @@ class ClipFiles(Serializable):
         """
         root_dir = clip.root_dir
         links = parse_data.original_links
-        kw = {k: v if not v else cls.build_path(root_dir, k) for k,v in links}
+        kw: dict[str, Any] = {k: v if not v else cls.build_path(root_dir, k) for k,v in links}
         return cls(clip=clip, metadata={}, **kw)
 
     @classmethod
