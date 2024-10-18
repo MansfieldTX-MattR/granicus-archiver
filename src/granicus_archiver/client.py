@@ -229,8 +229,9 @@ async def download_clip(downloader: Downloader, clip: Clip) -> None:
 
     logger.success(f'clip "{clip.unique_name}" complete')
 
-def check_clip_files(clip: Clip):
+def check_clip_files(clip: Clip) -> int:
     clip.files.check()
+    count = 0
     for key, url, filename in clip.iter_url_paths():
         if not filename.exists():
             continue
@@ -243,11 +244,18 @@ def check_clip_files(clip: Clip):
         if filename.stat().st_size != meta.content_length:
             logger.warning(f'Size mismatch for "{filename}"')
             filename.unlink()
+        count += 1
+    return count
 
 @logger.catch
 def check_all_clip_files(clips: ClipCollection):
+    clip_count = 0
+    item_count = 0
     for clip in clips:
-        check_clip_files(clip)
+        _item_count = check_clip_files(clip)
+        item_count += _item_count
+        clip_count += 1
+    logger.info(f'checked {clip_count} clips and {item_count} items')
 
 
 async def get_agenda_timestamps(
