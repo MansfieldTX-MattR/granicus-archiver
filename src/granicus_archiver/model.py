@@ -24,6 +24,8 @@ from multidict import MultiMapping
 
 from .utils import seconds_to_time_str
 
+mimetypes.add_type('audio/mp3', '.mp3')
+
 # __all__ = ('CLIP_ID', 'ParseClipData', 'ClipCollection')
 
 UTC = datetime.timezone.utc
