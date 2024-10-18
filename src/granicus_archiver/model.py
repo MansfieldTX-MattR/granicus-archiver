@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import datetime
 import zoneinfo
 import json
+import mimetypes
 from loguru import logger
 
 from yaml import (
@@ -334,6 +335,68 @@ class ContentLengthError(CheckError):
     the local filesize
     """
 
+class ContentTypeError(CheckError):
+    """Raised when the :attr:`~FileMeta.content_type` disagrees with the
+    file extension
+    """
+    @overload
+    @classmethod
+    def check(
+        cls,
+        meta: FileMeta,
+        filename: PathLike,
+        return_mtypes: Literal[False]
+    ) -> bool: ...
+    @overload
+    @classmethod
+    def check(
+        cls,
+        meta: FileMeta,
+        filename: PathLike,
+        return_mtypes: Literal[True]
+    ) -> tuple[bool, str|None, str|None]: ...
+    @classmethod
+    def check(
+        cls,
+        meta: FileMeta,
+        filename: PathLike,
+        return_mtypes: bool = False
+    ) -> bool|tuple[bool, str|None, str|None]:
+        mtype, _ = mimetypes.guess_type(filename)
+        ext = mimetypes.guess_extension(meta.content_type)
+        if mtype == meta.content_type:
+            if return_mtypes:
+                return True, mtype, ext
+            return True
+        filename = Path(filename)
+        if filename.suffix == ext:
+            if return_mtypes:
+                return True, mtype, ext
+            return True
+        return False, mtype, ext
+
+    @classmethod
+    def check_and_raise(
+        cls,
+        clip: Clip,
+        key: ClipFileUploadKey,
+        meta: FileMeta,
+        filename: PathLike,
+    ) -> None:
+        """Check the metadata against the file extension using :mod:`mimetypes`
+        and raise this exception if they do not match
+        """
+        matched, mtype, ext = cls.check(meta, filename, return_mtypes=True)
+        if matched:
+            return
+        filename = Path(filename)
+        raise cls(
+            clip,
+            key,
+            msg=f'{meta.content_type=}, mimetype={mtype}, {ext=}, {filename.suffix=}',
+        )
+
+
 class NoFileError(CheckError):
     """Raised when there is :class:`metadata <FileMeta>` for a file that
     does not exist locally
@@ -497,6 +560,7 @@ class ClipFiles(Serializable):
                 raise NoMetaError(self.clip, key)
             if meta.is_zero_length:
                 continue
+            ContentTypeError.check_and_raise(self.clip, key, meta, full_p)
             if meta.content_length != st.st_size:
                 raise ContentLengthError(self.clip, key)
             keys_checked.add(key)
@@ -511,6 +575,7 @@ class ClipFiles(Serializable):
                 continue
             if not full_p.exists():
                 raise NoFileError(self.clip, key)
+            ContentTypeError.check_and_raise(self.clip, key, meta, full_p)
             st = full_p.stat()
             if st.st_size != meta.content_length:
                 raise ContentLengthError(self.clip, key)
