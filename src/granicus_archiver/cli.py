@@ -437,8 +437,6 @@ def authorize(obj: BaseContext):
 @click.option(
     '--drive-folder',
     type=click.Path(path_type=Path),
-    default=Path('granicus-archive/data'),
-    show_default=True,
     help='Name of the root folder to upload to',
 )
 @click.option(
@@ -453,15 +451,16 @@ def authorize(obj: BaseContext):
 def upload_clips(
     obj: BaseContext,
     max_clips: int,
-    drive_folder: Path,
+    drive_folder: Path|None,
     io_job_limit: int
 ):
     """Upload all local content to Google Drive
     """
-    google_conf = obj.config.google
-    if google_conf.drive_folder != drive_folder:
-        google_conf.drive_folder = drive_folder
-        obj.config.save(obj.config_file)
+    if drive_folder is not None:
+        google_conf = obj.config.google
+        if google_conf.drive_folder != drive_folder:
+            google_conf.drive_folder = drive_folder
+            obj.config.save(obj.config_file)
     clips = ClipCollection.load(obj.config.data_file)
     asyncio.run(googleclient.upload_clips(
         clips,

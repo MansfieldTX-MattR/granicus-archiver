@@ -68,7 +68,7 @@ class GoogleConfig(BaseConfig):
     def build_defaults(cls, **kwargs) -> Self:
         default_kw = dict(
             user_credentials_filename=Path.home() / '.granicus-oauth-user.json',
-            drive_folder=Path('granicus-archive/data'),
+            drive_folder=Path('granicus-archive/data/granicus'),
             legistar_drive_folder=Path('granicus-archive/data/legistar'),
         )
         for key, val in default_kw.items():
@@ -319,7 +319,7 @@ class Config(BaseConfig):
 
     @classmethod
     def build_defaults(cls, **kwargs) -> Self:
-        out_dir = Path('data')
+        out_dir = Path('data/granicus')
         out_dir_abs = out_dir.resolve()
         # out_dir_abs: Path = kwargs.get('out_dir', Path.cwd() / 'data')
         # out_dir = out_dir_abs.relative_to(Path.cwd())
