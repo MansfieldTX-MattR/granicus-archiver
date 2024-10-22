@@ -67,6 +67,15 @@ class HiddenItemError(IncompleteItemError):
     """Raised if a detail page is ``"Not Viewable by the Public"``
     """
 
+class NoMeetingTimeError(IncompleteItemError):
+    """Raised if no time was set for the meeting
+
+    .. note::
+
+        This exception is not raised if the item is older than a set amount
+        of time (see :attr:`.rss_parser.FeedItem.is_in_past`)
+    """
+
 
 ATTACHMENT_UID_PREFIX = ':attachment:'
 
@@ -714,6 +723,12 @@ class DetailPageResult(Serializable):
         return self.feed_item.is_future
 
     @property
+    def is_in_past(self) -> bool:
+        """Alias for :attr:`.rss_parser.FeedItem.is_in_past`
+        """
+        return self.feed_item.is_in_past
+
+    @property
     def real_guid(self) -> REAL_GUID:
         """Alias for :attr:`.rss_parser.FeedItem.real_guid`
         """
@@ -771,12 +786,17 @@ class DetailPageResult(Serializable):
             raise HiddenItemError()
         date_str, time_str = get_elem_text(doc, 'date'), get_elem_text(doc, 'time')
         if len(date_str.strip(' ')) and not len(time_str.strip(' ')):
-            raise IncompleteItemError()
-        dt_str = ' - '.join([date_str, time_str])
-
-        dt = datetime.datetime.strptime(dt_str, dt_fmt)
-        dt = dt.replace(tzinfo=feed_item.get_timezone())
-        assert dt == feed_item.meeting_date
+            if not feed_item.is_in_past:
+                raise NoMeetingTimeError()
+            tmp_dt_str = ' - '.join([date_str, '12:00 pm'])
+            tmp_dt = datetime.datetime.strptime(tmp_dt_str, dt_fmt)
+            tmp_dt = tmp_dt.replace(tzinfo=feed_item.get_timezone())
+            assert tmp_dt == feed_item.meeting_date
+        else:
+            dt_str = ' - '.join([date_str, time_str])
+            dt = datetime.datetime.strptime(dt_str, dt_fmt)
+            dt = dt.replace(tzinfo=feed_item.get_timezone())
+            assert dt == feed_item.meeting_date
         assert get_elem_text(doc, 'title') == feed_item.title
 
         links = DetailPageLinks.from_html(doc, feed_item)

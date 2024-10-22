@@ -184,7 +184,7 @@ class Client:
                 if parsed_item is not None:
                     if parsed_item.is_hidden:
                         continue
-                    if not parsed_item.is_final:
+                    if not parsed_item.is_final and not parsed_item.is_in_past:
                         logger.warning(f'existing item not final: {feed_item.guid=}, {feed_item.category=}, {feed_item.title=}')
                     continue
                 result = await do_page_parse(feed_item)

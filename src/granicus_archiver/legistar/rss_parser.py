@@ -158,6 +158,10 @@ class FeedItem(Serializable):
     """Date and time the meeting was published (not the meeting date/time)
     """
 
+    ITEM_IN_PAST_DELTA: ClassVar[datetime.timedelta] = datetime.timedelta(days=365)
+    """Amount of time to consider an item as "in the past" (default is one year)
+    """
+
     TZ: ClassVar[ZoneInfo|None] = None
     """Local timezone used to parse :attr:`meeting_date`"""
 
@@ -177,6 +181,14 @@ class FeedItem(Serializable):
         now = datetime.datetime.now(UTC)
         dt = self.meeting_date + FUTURE_TIMEDELTA
         return dt >= now
+
+    @property
+    def is_in_past(self) -> bool:
+        """Whether the item is older than :attr:`ITEM_IN_PAST_DELTA`
+        """
+        now = datetime.datetime.now(UTC)
+        td = now - self.meeting_date
+        return td >= self.ITEM_IN_PAST_DELTA
 
     @classmethod
     def from_rss(cls, elem: PyQuery) -> Self:
