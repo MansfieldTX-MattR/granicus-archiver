@@ -450,6 +450,11 @@ def upload_clips(
         google_conf = obj.config.google
         if google_conf.drive_folder != drive_folder:
             google_conf.drive_folder = drive_folder
+            if google_conf.drive_folder == google_conf.legistar_drive_folder:
+                click.confirm(
+                    'Granicus and Legistar drive folders match. Continue?',
+                    abort=True,
+                )
             obj.config.save(obj.config_file)
     clips = ClipCollection.load(obj.config.data_file)
     asyncio.run(googleclient.upload_clips(
@@ -491,6 +496,11 @@ def upload_legistar(
         google_conf = obj.config.google
         if drive_folder != google_conf.legistar_drive_folder:
             google_conf.legistar_drive_folder = drive_folder
+            if google_conf.drive_folder == google_conf.legistar_drive_folder:
+                click.confirm(
+                    'Granicus and Legistar drive folders match. Continue?',
+                    abort=True,
+                )
             obj.config.save(obj.config_file)
     asyncio.run(googleclient.upload_legistar(
         root_conf=obj.config,
