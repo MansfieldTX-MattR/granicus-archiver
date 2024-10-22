@@ -52,7 +52,8 @@ class GoogleConfig(BaseConfig):
 
     def update(self, **kwargs) -> bool:
         changed = False
-        for key in ['user_credentials_filename', 'drive_folder']:
+        keys = ['user_credentials_filename', 'drive_folder', 'legistar_drive_folder']
+        for key in keys:
             if key not in kwargs:
                 continue
             val = kwargs[key]
@@ -310,7 +311,10 @@ class Config(BaseConfig):
                 if self.google.update(**val):
                     changed = True
             elif key == 'local_timezone_name':
+                if val == self.local_timezone_name:
+                    continue
                 self.local_timezone_name = val
+                changed = True
         return changed
 
     @classmethod
