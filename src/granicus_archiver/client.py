@@ -1,4 +1,4 @@
-from typing import TypeVar, TypedDict, Literal, Coroutine, Any
+from typing import TypeVar, TypedDict, Literal, Coroutine, Any, Self
 import asyncio
 from pathlib import Path
 
@@ -24,20 +24,6 @@ from .downloader import (
     ThisShouldBeA404ErrorButItsNot,
 )
 
-
-
-T = TypeVar('T')
-
-
-
-# class BatchQueue(Generic[T]):
-#     def __init__(self, max_batches: int = MAX_BATCHES) -> None:
-#         self.max_batches = max_batches
-#         self._q = asyncio.Queue(maxsize=max_batches)
-
-
-
-#     # async def __aenter__(self) -> Self:
 
 class SchedulersTD(TypedDict):
     general: aiojobs.Scheduler
@@ -76,167 +62,225 @@ async def close_schedulers() -> None:
     logger.debug('schedulers closed')
 
 
-async def get_main_data(session: ClientSession, data_url: URL, base_dir: Path) -> ClipCollection:
-    async with session.get(str(data_url)) as response:
-        if not response.ok:
-            response.raise_for_status()
-        html = await response.text()
-        clips = parse_page(html, base_dir=base_dir, scheme=data_url.scheme)
-    return clips
-
-# @logger.catch
-async def get_real_pdf_link(session: ClientSession, src_url: URL) -> URL:
-    logger.info(f'get_real_pdf_link: {src_url=}')
-    # https://docs.google.com/gview?url=http://legistar.granicus.com/Mansfield/meetings/2018/3/2571_M_City_Council_18-03-26_Meeting_Minutes.pdf&embedded=true
-    async with session.get(src_url, allow_redirects=False) as response:
-        assert response.status == 302
-        logger.debug(f'{response.url=}, {response.real_url=}')
-        logger.debug(f'{response.headers=}')
-        re_url = response.headers['Location']
-        assert len(re_url)
-        re_url = URL(re_url)
-        if re_url.host == 'docs.google.com':
-            real_url = URL(re_url.query.getone('url'))
-        else:
-            real_url = re_url
-        logger.debug(f'{real_url=}')
-        return real_url
-
-
-async def replace_pdf_links(
-    session: ClientSession,
-    parse_clip: ParseClipData,
-) -> ParseClipData:
-    if not parse_clip.has_incomplete_links():
-        return parse_clip
-    link_kw = {}
-    for key, url in parse_clip.iter_incomplete_links():
-        real_key = key.split('_')[0]
-        if key == 'audio' or key == 'video':
-            link_kw[real_key] = url
-            continue
-        real_url = await get_real_pdf_link(session, url)
-        if parse_clip.actual_links is not None:
-            parse_clip.actual_links[key] = real_url
-        else:
-            link_kw[real_key] = real_url
-    if parse_clip.actual_links is None:
-        links = ParseClipLinks(**link_kw)
-        parse_clip.actual_links = links
-    return parse_clip
-
-
-async def replace_all_pdf_links(session: ClientSession, clips: ClipCollection) -> None:
-    scheduler = get_scheduler('general')
-    jobs: set[aiojobs.Job[ParseClipData]] = set()
-    for clip in clips:
-        if not clip.parse_data.has_incomplete_links():
-            continue
-        job = await scheduler.spawn(replace_pdf_links(session, clip.parse_data))
-        jobs.add(job)
-    if len(jobs):
-        await asyncio.gather(*[job.wait() for job in jobs])
-
-
-async def download_clip(downloader: Downloader, clip: Clip) -> None:
-    download_waiter = JobWaiters[aiojobs.Job|None](scheduler=get_scheduler('downloads'))
-    copy_waiter = JobWaiters(scheduler=get_scheduler('copies'))
-
-    def set_zero_length_meta(key: ClipFileKey) -> None:
-        if key == 'video':
-            logger.warning(f'Cannot set zero-length meta on video: "{clip.unique_name=}')
-            return
-        cur_meta = clip.files.get_metadata(key)
-        if cur_meta is None:
-            cur_meta = FileMeta.create_zero_length()
-            clip.files.set_metadata(key, cur_meta)
-        else:
-            logger.warning(f'{cur_meta=}')
-
-    async def download_file(
-        key: ClipFileKey,
-        url: URL,
-        filename: Path,
-        temp_dir: Path
-    ) -> aiojobs.Job|None:
-        temp_filename = temp_dir / filename.name
-        logger.debug(f'download {url} to {filename}')
-        chunk_size = 64*1024
-        if key == 'video':
-            # 1 hour total, 1 minute for connect, 1 minute between reads
-            timeout = ClientTimeout(total=60*60, sock_connect=60, sock_read=60)
-        else:
-            timeout = ClientTimeout(total=300)
-        try:
-            dl = await downloader.download(
-                url=url, filename=temp_filename, chunk_size=chunk_size,
-                timeout=timeout,
-            )
-        except ServerTimeoutError as exc:
-            if temp_filename.exists():
-                temp_filename.unlink()
-            logger.exception(exc)
-            return None
-        except StupidZeroContentLengthError as exc:
-            logger.warning(str(exc))
-            set_zero_length_meta(key)
-            return None
-        except ThisShouldBeA404ErrorButItsNot as exc:
-            logger.warning(f'{exc.__class__.__name__}: {exc} {filename=}, {url=}')
-            set_zero_length_meta(key)
-            return None
-
-        logger.debug(f'download complete for "{clip.unique_name} - {key}"')
-        copy_coro = copy_clip_to_dest(
-            key, src_file=temp_filename, dst_file=filename, meta=dl.meta,
-        )
-        return await copy_waiter.spawn(copy_coro)
-
-
-    async def copy_clip_to_dest(
-        key: ClipFileKey,
-        src_file: Path,
-        dst_file: Path,
-        meta: FileMeta
+class GranicusClient:
+    schedulers: SchedulersTD
+    session: ClientSession
+    def __init__(
+        self,
+        data_url: URL,
+        out_dir: Path,
+        scheduler_limit: int,
     ) -> None:
-        if is_same_filesystem(src_file, dst_file):
-            src_file.rename(dst_file)
-            clip.files.ensure_path(key)
-            clip.files.set_metadata(key, meta)
-            return
-        chunk_size = 64*1024
-        logger.debug(f'copying "{clip.unique_name} - {key}"')
-        try:
-            async with aiofile.async_open(src_file, 'rb') as src_fd:
-                async with aiofile.async_open(dst_file, 'wb') as dst_fd:
-                    async for chunk in src_fd.iter_chunked(chunk_size):
-                        await dst_fd.write(chunk)
-            logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
-            src_file.unlink()
-            clip.files.ensure_path(key)
-            clip.files.set_metadata(key, meta)
-        except:
-            if dst_file.exists():
-                dst_file.unlink()
-            if key in clip.files.metadata:
-                del clip.files.metadata[key]
+        self.data_url = data_url
+        self.out_dir = out_dir
+        self.scheduler_limit = scheduler_limit
 
-    logger.info(f'downloading clip "{clip.unique_name}"')
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_dir = Path(temp_dir).resolve()
-        clip.root_dir_abs.mkdir(exist_ok=True, parents=True)
-        for key, url, filename in clip.iter_url_paths():
-            if filename.exists():
-                logger.debug(f'filename exists: {key=}, {filename=}')
+    async def __aenter__(self) -> Self:
+        self.schedulers = get_schedulers(limit=self.scheduler_limit)
+        self.session = ClientSession()
+        self.downloader = Downloader(
+            session=self.session, scheduler=self.schedulers['downloads'],
+        )
+        return self
+
+    async def __aexit__(self, *args):
+        await close_schedulers()
+        await self.session.close()
+
+    async def get_main_data(self) -> ClipCollection:
+        async with self.session.get(str(self.data_url)) as response:
+            if not response.ok:
+                response.raise_for_status()
+            html = await response.text()
+            clips = parse_page(html, base_dir=self.out_dir, scheme=self.data_url.scheme)
+        return clips
+
+    # @logger.catch
+    async def get_real_pdf_link(self, src_url: URL) -> URL:
+        logger.info(f'get_real_pdf_link: {src_url=}')
+        # https://docs.google.com/gview?url=http://legistar.granicus.com/Mansfield/meetings/2018/3/2571_M_City_Council_18-03-26_Meeting_Minutes.pdf&embedded=true
+        async with self.session.get(src_url, allow_redirects=False) as response:
+            assert response.status == 302
+            logger.debug(f'{response.url=}, {response.real_url=}')
+            logger.debug(f'{response.headers=}')
+            re_url = response.headers['Location']
+            assert len(re_url)
+            re_url = URL(re_url)
+            if re_url.host == 'docs.google.com':
+                real_url = URL(re_url.query.getone('url'))
+            else:
+                real_url = re_url
+            logger.debug(f'{real_url=}')
+            return real_url
+
+    async def replace_pdf_links(
+        self,
+        parse_clip: ParseClipData,
+    ) -> ParseClipData:
+        if not parse_clip.has_incomplete_links():
+            return parse_clip
+        link_kw = {}
+        for key, url in parse_clip.iter_incomplete_links():
+            real_key = key.split('_')[0]
+            if key == 'audio' or key == 'video':
+                link_kw[real_key] = url
                 continue
-            # logger.debug(f'{scheduler.active_count=}')
-            coro = download_file(key, url, filename, temp_dir)
-            await download_waiter.spawn(coro)
+            real_url = await self.get_real_pdf_link(url)
+            if parse_clip.actual_links is not None:
+                parse_clip.actual_links[key] = real_url
+            else:
+                link_kw[real_key] = real_url
+        if parse_clip.actual_links is None:
+            links = ParseClipLinks(**link_kw)
+            parse_clip.actual_links = links
+        return parse_clip
 
-        await download_waiter.gather()
-        await copy_waiter.gather()
+    async def replace_all_pdf_links(self, clips: ClipCollection) -> None:
+        scheduler = self.schedulers['general']
+        jobs: set[aiojobs.Job[ParseClipData]] = set()
+        for clip in clips:
+            if not clip.parse_data.has_incomplete_links():
+                continue
+            job = await scheduler.spawn(self.replace_pdf_links(clip.parse_data))
+            jobs.add(job)
+        if len(jobs):
+            await asyncio.gather(*[job.wait() for job in jobs])
 
-    logger.success(f'clip "{clip.unique_name}" complete')
+    async def download_clip(self, clip: Clip) -> None:
+        download_waiter = JobWaiters[aiojobs.Job|None](scheduler=self.schedulers['downloads'])
+        copy_waiter = JobWaiters(scheduler=self.schedulers['copies'])
+
+        def set_zero_length_meta(key: ClipFileKey) -> None:
+            if key == 'video':
+                logger.warning(f'Cannot set zero-length meta on video: "{clip.unique_name=}')
+                return
+            cur_meta = clip.files.get_metadata(key)
+            if cur_meta is None:
+                cur_meta = FileMeta.create_zero_length()
+                clip.files.set_metadata(key, cur_meta)
+            else:
+                logger.warning(f'{cur_meta=}')
+
+        async def download_file(
+            key: ClipFileKey,
+            url: URL,
+            filename: Path,
+            temp_dir: Path
+        ) -> aiojobs.Job|None:
+            temp_filename = temp_dir / filename.name
+            logger.debug(f'download {url} to {filename}')
+            chunk_size = 64*1024
+            if key == 'video':
+                # 1 hour total, 1 minute for connect, 1 minute between reads
+                timeout = ClientTimeout(total=60*60, sock_connect=60, sock_read=60)
+            else:
+                timeout = ClientTimeout(total=300)
+            try:
+                dl = await self.downloader.download(
+                    url=url, filename=temp_filename, chunk_size=chunk_size,
+                    timeout=timeout,
+                )
+            except ServerTimeoutError as exc:
+                if temp_filename.exists():
+                    temp_filename.unlink()
+                logger.exception(exc)
+                return None
+            except StupidZeroContentLengthError as exc:
+                logger.warning(str(exc))
+                set_zero_length_meta(key)
+                return None
+            except ThisShouldBeA404ErrorButItsNot as exc:
+                logger.warning(f'{exc.__class__.__name__}: {exc} {filename=}, {url=}')
+                set_zero_length_meta(key)
+                return None
+
+            logger.debug(f'download complete for "{clip.unique_name} - {key}"')
+            copy_coro = copy_clip_to_dest(
+                key, src_file=temp_filename, dst_file=filename, meta=dl.meta,
+            )
+            return await copy_waiter.spawn(copy_coro)
+
+        async def copy_clip_to_dest(
+            key: ClipFileKey,
+            src_file: Path,
+            dst_file: Path,
+            meta: FileMeta
+        ) -> None:
+            if is_same_filesystem(src_file, dst_file):
+                src_file.rename(dst_file)
+                clip.files.ensure_path(key)
+                clip.files.set_metadata(key, meta)
+                return
+            chunk_size = 64*1024
+            logger.debug(f'copying "{clip.unique_name} - {key}"')
+            try:
+                async with aiofile.async_open(src_file, 'rb') as src_fd:
+                    async with aiofile.async_open(dst_file, 'wb') as dst_fd:
+                        async for chunk in src_fd.iter_chunked(chunk_size):
+                            await dst_fd.write(chunk)
+                logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
+                src_file.unlink()
+                clip.files.ensure_path(key)
+                clip.files.set_metadata(key, meta)
+            except:
+                if dst_file.exists():
+                    dst_file.unlink()
+                if key in clip.files.metadata:
+                    del clip.files.metadata[key]
+
+        logger.info(f'downloading clip "{clip.unique_name}"')
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = Path(temp_dir).resolve()
+            clip.root_dir_abs.mkdir(exist_ok=True, parents=True)
+            for key, url, filename in clip.iter_url_paths():
+                if filename.exists():
+                    logger.debug(f'filename exists: {key=}, {filename=}')
+                    continue
+                # logger.debug(f'{scheduler.active_count=}')
+                coro = download_file(key, url, filename, temp_dir)
+                await download_waiter.spawn(coro)
+
+            await download_waiter.gather()
+            await copy_waiter.gather()
+
+        logger.success(f'clip "{clip.unique_name}" complete')
+
+    async def get_agenda_timestamps(
+        self,
+        timestamps: AgendaTimestampCollection,
+        clip: Clip
+    ) -> bool:
+        if clip in timestamps:
+            return False
+        url = clip.parse_data.player_link
+        if url is None:
+            return False
+        logger.debug(f'getting timestamps for "{clip.id} - {clip.parse_data.name}"')
+        async with self.session.get(url) as response:
+            if not response.ok:
+                response.raise_for_status()
+            html = await response.text()
+            items: list[AgendaTimestamp] = []
+            for time_seconds, item_text in parse_player_page(html):
+                items.append(AgendaTimestamp(seconds=time_seconds, text=item_text))
+        timestamps.add(AgendaTimestamps(clip_id=clip.id, items=items))
+        return True
+
+    async def get_all_agenda_timestamps(
+        self,
+        clips: ClipCollection,
+        timestamps: AgendaTimestampCollection
+    ):
+        scheduler = self.schedulers['general']
+        waiter: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
+        for clip in clips:
+            if clip in timestamps:
+                continue
+            if clip.parse_data.player_link is None:
+                continue
+            await waiter.spawn(self.get_agenda_timestamps(timestamps, clip))
+        await waiter
+
 
 def check_clip_files(clip: Clip, warnings_only: bool = False) -> int:
     try:
@@ -273,42 +317,6 @@ def check_all_clip_files(clips: ClipCollection, warnings_only: bool = False):
     logger.info(f'checked {clip_count} clips and {item_count} items')
 
 
-async def get_agenda_timestamps(
-    session: ClientSession,
-    timestamps: AgendaTimestampCollection,
-    clip: Clip
-) -> bool:
-    if clip in timestamps:
-        return False
-    url = clip.parse_data.player_link
-    if url is None:
-        return False
-    logger.debug(f'getting timestamps for "{clip.id} - {clip.parse_data.name}"')
-    async with session.get(url) as response:
-        if not response.ok:
-            response.raise_for_status()
-        html = await response.text()
-        items: list[AgendaTimestamp] = []
-        for time_seconds, item_text in parse_player_page(html):
-            items.append(AgendaTimestamp(seconds=time_seconds, text=item_text))
-    timestamps.add(AgendaTimestamps(clip_id=clip.id, items=items))
-    return True
-
-
-async def get_all_agenda_timestamps(
-    session: ClientSession,
-    clips: ClipCollection,
-    timestamps: AgendaTimestampCollection
-):
-    scheduler = get_scheduler('general')
-    waiter: JobWaiters[bool] = JobWaiters(scheduler=scheduler)
-    for clip in clips:
-        if clip in timestamps:
-            continue
-        if clip.parse_data.player_link is None:
-            continue
-        await waiter.spawn(get_agenda_timestamps(session, timestamps, clip))
-    await waiter
 
 
 def build_web_vtt(
@@ -458,9 +466,6 @@ async def amain(
     max_clips: int|None = None,
     folder: str|None = None,
 ):
-    schedulers = get_schedulers(limit=scheduler_limit)
-    waiter = JobWaiters(scheduler=schedulers['general'])
-
     local_clips: ClipCollection|None = None
     if data_file.exists():
         local_clips = ClipCollection.load(data_file)
@@ -468,14 +473,19 @@ async def amain(
         timestamps = AgendaTimestampCollection.load(timestamp_file)
     else:
         timestamps = AgendaTimestampCollection()
-    async with ClientSession() as session:
-        download_scheduler = schedulers['downloads']
-        downloader = Downloader(session=session, scheduler=download_scheduler)
-        clips = await get_main_data(session, data_url, out_dir)
+    client = GranicusClient(
+        data_url=data_url,
+        out_dir=out_dir,
+        scheduler_limit=scheduler_limit,
+    )
+    async with client:
+        schedulers = client.schedulers
+        waiter = JobWaiters(scheduler=schedulers['general'])
+        clips = await client.get_main_data()
         if local_clips is not None:
             clips = clips.merge(local_clips)
-        await replace_all_pdf_links(session, clips)
-        await get_all_agenda_timestamps(session, clips, timestamps)
+        await client.replace_all_pdf_links(clips)
+        await client.get_all_agenda_timestamps(clips, timestamps)
         clips.save(data_file)
         timestamps.save(timestamp_file)
         check_all_clip_files(clips)
@@ -490,12 +500,11 @@ async def amain(
                 if clip.complete:
                     continue
                 # logger.debug(f'{scheduler.active_count=}')
-                await waiter.spawn(download_clip(downloader, clip))
+                await waiter.spawn(client.download_clip(clip))
                 i += 1
                 if max_clips is not None and i >= max_clips:
                     break
             await waiter
-            await close_schedulers()
         finally:
             clips.save(data_file)
     return clips
