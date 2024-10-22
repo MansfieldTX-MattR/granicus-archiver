@@ -44,6 +44,11 @@ class BaseContext:
     help='Filename to store download information. Defaults to "<out-dir>/data.json"',
 )
 @click.option(
+    '--granicus-data-url',
+    type=str, required=False,
+    help='URL for granicus clip data',
+)
+@click.option(
     '--local-timezone', type=str, required=False,
 )
 @click.option(
@@ -77,6 +82,7 @@ def cli(
     config_file: Path,
     out_dir: Path,
     data_file: Path|None,
+    granicus_data_url: str|None,
     local_timezone: str|None,
     legistar_out_dir: Path|None,
     legistar_data_file: Path|None,
@@ -86,6 +92,7 @@ def cli(
     conf_kw = dict(
         out_dir=out_dir,
         data_file=data_file,
+        granicus_data_url=granicus_data_url,
         local_timezone_name=local_timezone,
         legistar=dict(
             out_dir=legistar_out_dir,
@@ -288,6 +295,13 @@ def download_clips(
 ):
     """Download files for Granicus clips
     """
+    data_url = obj.config.granicus_data_url
+    if data_url is None:
+        url_str = click.prompt('Please enter the URL for granicus data: ', type=str)
+        data_url = URL(url_str)
+        obj.config.update(granicus_data_url=data_url)
+        obj.config.save(obj.config_file)
+
     if temp_dir is not None:
         os.environ['TMPDIR'] = str(temp_dir)
         import tempfile
@@ -295,6 +309,7 @@ def download_clips(
             td_p = Path(td).resolve()
             assert td_p.parent == temp_dir.resolve()
     clips = asyncio.run(client.amain(
+        data_url=data_url,
         data_file=obj.config.data_file,
         timestamp_file=obj.config.timestamp_file,
         out_dir=obj.config.out_dir,

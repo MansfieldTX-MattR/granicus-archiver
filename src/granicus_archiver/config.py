@@ -227,6 +227,9 @@ class Config(BaseConfig):
     timestamp_file: Path
     """Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.yaml"
     """
+    granicus_data_url: URL|None
+    """URL for granicus clip data
+    """
 
     legistar: LegistarConfig
     """:class:`LegistarConfig` instance
@@ -294,6 +297,12 @@ class Config(BaseConfig):
                 assert isinstance(val, Path)
                 setattr(self, key, val)
                 changed = True
+            elif key == 'granicus_data_url':
+                val = URL(val)
+                if self.granicus_data_url == val:
+                    continue
+                self.granicus_data_url = val
+                changed = True
             elif key == 'legistar':
                 if self.legistar.update(**val):
                     changed = True
@@ -310,6 +319,9 @@ class Config(BaseConfig):
         out_dir_abs = out_dir.resolve()
         # out_dir_abs: Path = kwargs.get('out_dir', Path.cwd() / 'data')
         # out_dir = out_dir_abs.relative_to(Path.cwd())
+        data_url = kwargs.get('data_url')
+        if data_url is not None:
+            data_url = URL(data_url)
         feed_url = kwargs.get('legistar_feed_url')
         if feed_url is not None:
             feed_url = URL(feed_url)
@@ -318,6 +330,7 @@ class Config(BaseConfig):
             out_dir_abs=out_dir_abs,
             data_file=out_dir / 'data.json',
             timestamp_file=out_dir / 'timestamp-data.yaml',
+            granicus_data_url=data_url,
             local_timezone_name=None,
             legistar=LegistarConfig.build_defaults(**kwargs.get('legistar', {})),
             google=GoogleConfig.build_defaults(**kwargs.get('google', {}))
@@ -329,6 +342,8 @@ class Config(BaseConfig):
     def serialize(self) -> dict[str, Any]:
         path_attrs = ['out_dir', 'out_dir_abs', 'data_file', 'timestamp_file']
         d: dict[str, object] = {k: str(getattr(self, k)) for k in path_attrs}
+        data_url = self.granicus_data_url
+        d['granicus_data_url'] = None if data_url is None else str(data_url)
         d['google'] = self.google.serialize()
         d['legistar'] = self.legistar.serialize()
         d['local_timezone_name'] = self.local_timezone_name
@@ -338,12 +353,16 @@ class Config(BaseConfig):
     def deserialize(cls, data: dict[str, Any]) -> Self:
         path_attrs = ['out_dir', 'out_dir_abs', 'data_file', 'timestamp_file']
         kw = {k: Path(data[k]) for k in path_attrs}
+        data_url = data.get('granicus_data_url')
+        if data_url is not None:
+            data_url = URL(data_url)
         legistar: LegistarConfig
         if 'legistar' in data:
             legistar = LegistarConfig.deserialize(data['legistar'])
         else:
             legistar = LegistarConfig.build_defaults()
         return cls(
+            granicus_data_url=data_url,
             google=GoogleConfig.deserialize(data['google']),
             legistar=legistar,
             local_timezone_name=data.get('local_timezone_name'),

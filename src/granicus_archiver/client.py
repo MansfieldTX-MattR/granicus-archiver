@@ -24,7 +24,6 @@ from .downloader import (
     ThisShouldBeA404ErrorButItsNot,
 )
 
-DATA_URL = URL('https://mansfieldtx.granicus.com/ViewPublisher.php?view_id=6')
 
 
 T = TypeVar('T')
@@ -77,12 +76,12 @@ async def close_schedulers() -> None:
     logger.debug('schedulers closed')
 
 
-async def get_main_data(session: ClientSession, base_dir: Path) -> ClipCollection:
-    async with session.get(str(DATA_URL)) as response:
+async def get_main_data(session: ClientSession, data_url: URL, base_dir: Path) -> ClipCollection:
+    async with session.get(str(data_url)) as response:
         if not response.ok:
             response.raise_for_status()
         html = await response.text()
-        clips = parse_page(html, base_dir=base_dir, scheme=DATA_URL.scheme)
+        clips = parse_page(html, base_dir=base_dir, scheme=data_url.scheme)
     return clips
 
 # @logger.catch
@@ -451,6 +450,7 @@ async def check_all_clip_meta(
 
 @logger.catch
 async def amain(
+    data_url: URL,
     data_file: Path,
     timestamp_file: Path,
     out_dir: Path,
@@ -471,7 +471,7 @@ async def amain(
     async with ClientSession() as session:
         download_scheduler = schedulers['downloads']
         downloader = Downloader(session=session, scheduler=download_scheduler)
-        clips = await get_main_data(session, out_dir)
+        clips = await get_main_data(session, data_url, out_dir)
         if local_clips is not None:
             clips = clips.merge(local_clips)
         await replace_all_pdf_links(session, clips)
