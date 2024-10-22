@@ -64,13 +64,6 @@ class BaseContext:
     help='Filename to store legistar information. Defaults to "<legistar-out-dir>/legistar-data.json"',
 )
 @click.option(
-    '--legistar-drive-folder',
-    type=click.Path(path_type=Path),
-    default=Path('granicus-archive/data/legistar'),
-    show_default=True,
-    help='Name of the root folder to upload legistar items to',
-)
-@click.option(
     '--timestamp-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     required=False,
@@ -86,7 +79,6 @@ def cli(
     local_timezone: str|None,
     legistar_out_dir: Path|None,
     legistar_data_file: Path|None,
-    legistar_drive_folder: Path|None,
     timestamp_file: Path|None
 ):
     conf_kw = dict(
@@ -98,9 +90,7 @@ def cli(
             out_dir=legistar_out_dir,
             data_file=legistar_data_file,
         ),
-        google=dict(
-            legistar_drive_folder=legistar_drive_folder,
-        ),
+        google={},
         timestamp_file=timestamp_file,
     )
     conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
@@ -484,13 +474,24 @@ def check_clips_uploads(obj: BaseContext):
     '--max-clips', type=int, default=0,
     help='Maximum number of clips to upload',
 )
+@click.option(
+    '--drive-folder',
+    type=click.Path(path_type=Path),
+    help='Name of the root folder to upload to',
+)
 @click.pass_obj
 def upload_legistar(
     obj: BaseContext,
+    drive_folder: Path|None,
     max_clips: int
 ):
     """Upload all local content to Google Drive
     """
+    if drive_folder is not None:
+        google_conf = obj.config.google
+        if drive_folder != google_conf.legistar_drive_folder:
+            google_conf.legistar_drive_folder = drive_folder
+            obj.config.save(obj.config_file)
     asyncio.run(googleclient.upload_legistar(
         root_conf=obj.config,
         max_clips=max_clips,
