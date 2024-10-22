@@ -17,7 +17,7 @@ from ..model import ClipCollection, Clip
 from .types import GUID, LegistarFileKey, LegistarFileUID
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
 from .model import (
-    LegistarData, DetailPageResult, IncompleteItemError,
+    LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
     is_attachment_uid, uid_to_file_key,
 )
 from ..downloader import Downloader, DownloadResult, StupidZeroContentLengthError
@@ -124,6 +124,8 @@ class Client:
         async def do_page_parse(feed_item: FeedItem) -> DetailPageResult|None:
             try:
                 result = await self.parse_detail_page(feed_item)
+            except HiddenItemError:
+                result = None
             except IncompleteItemError:
                 logger.warning(f'incomplete item: {feed_item.guid=}, {feed_item.category=}, {feed_item.title=}')
                 result = None
@@ -180,6 +182,8 @@ class Client:
                             continue
 
                 if parsed_item is not None:
+                    if parsed_item.is_hidden:
+                        continue
                     if not parsed_item.is_final:
                         logger.warning(f'existing item not final: {feed_item.guid=}, {feed_item.category=}, {feed_item.title=}')
                     continue

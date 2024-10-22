@@ -56,10 +56,15 @@ class ThisShouldBeA500ErrorButItsNot(Exception):
 
 
 class IncompleteItemError(Exception):
-    """Raised if a detail page is in an incomplete state
+    """Raised in :meth:`DetailPageResult.from_html` if a detail page is in an
+    incomplete state
 
     This can be the case if the agenda status is not public or if no
     meeting time has been set.
+    """
+
+class HiddenItemError(IncompleteItemError):
+    """Raised if a detail page is ``"Not Viewable by the Public"``
     """
 
 
@@ -696,6 +701,13 @@ class DetailPageResult(Serializable):
         return self.agenda_status == 'Draft' or self.minutes_status == 'Draft'
 
     @property
+    def is_hidden(self) -> bool:
+        """Whether the item is hidden
+        (if :attr:`agenda_status` is "Not Viewable by the Public")
+        """
+        return self.agenda_status == 'Not Viewable by the Public'
+
+    @property
     def is_future(self) -> bool:
         """Alias for :attr:`.rss_parser.FeedItem.is_future`
         """
@@ -756,7 +768,7 @@ class DetailPageResult(Serializable):
         agenda_status = get_elem_text(doc, 'agenda_status').strip(' ')
         assert agenda_status in AgendaStatusItems, f'{agenda_status=}'
         if agenda_status == 'Not Viewable by the Public':
-            raise IncompleteItemError()
+            raise HiddenItemError()
         date_str, time_str = get_elem_text(doc, 'date'), get_elem_text(doc, 'time')
         if len(date_str.strip(' ')) and not len(time_str.strip(' ')):
             raise IncompleteItemError()
