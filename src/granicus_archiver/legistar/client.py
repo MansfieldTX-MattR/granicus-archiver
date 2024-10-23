@@ -211,7 +211,7 @@ class Client:
                 if parsed_item is not None:
                     if parsed_item.is_hidden:
                         continue
-                    if not parsed_item.is_final and not parsed_item.is_in_past:
+                    if not parsed_item.agenda_final and not parsed_item.is_in_past:
                         logger.warning(f'existing item not final: {feed_item.to_str()}')
                         self.incomplete_existing_items[feed_item.guid] = feed_item
                     continue
@@ -254,7 +254,7 @@ class Client:
             if feed_item is None or feed_item.is_future:
                 continue
             parsed_item = self.legistar_data[feed_item.guid]
-            if parsed_item.agenda_status == 'Draft' or parsed_item.agenda_status == 'Not Viewable by the Public':
+            if parsed_item.is_draft or parsed_item.is_hidden:
                 return None
             return parsed_item
 
@@ -444,7 +444,7 @@ class Client:
         count = 0
         for guid in self.legistar_data.detail_results.keys():
             detail_item = self.legistar_data[guid]
-            if not detail_item.is_final:
+            if not detail_item.can_download:
                 continue
             guid = detail_item.feed_guid
             files = self.legistar_data.get_or_create_files(guid)
