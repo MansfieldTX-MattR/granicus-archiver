@@ -338,12 +338,14 @@ def download_legistar(
 ):
     """Parse and download legistar files
     """
-    asyncio.run(legistar_client.amain(
+    c = asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=max_clips,
         allow_updates=allow_updates,
         strip_pdf_links=strip_pdf_links,
     ))
+    click.echo('')
+    click.echo(c.get_warning_items())
 
 
 @legistar.command

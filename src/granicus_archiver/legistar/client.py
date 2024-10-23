@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from ..config import Config
 from ..utils import JobWaiters, remove_pdf_links, is_same_filesystem
 from ..model import ClipCollection, Clip
-from .types import GUID, LegistarFileKey, LegistarFileUID
+from .types import GUID, REAL_GUID, LegistarFileKey, LegistarFileUID
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
@@ -52,6 +52,10 @@ class Client:
         else:
             self.legistar_data = LegistarData(root_dir=root_dir)
         self.all_feeds: dict[str, Feed] = {}
+        self.incomplete_items: dict[GUID, FeedItem] = {}
+        self.incomplete_existing_items: dict[GUID, FeedItem] = {}
+        self.guid_collisions: dict[REAL_GUID, tuple[FeedItem, list[str]]] = {}
+        self.ambiguous_matches: dict[GUID, tuple[DetailPageResult, Clip]] = {}
 
     async def open(self) -> None:
         self.session = ClientSession()
@@ -128,6 +132,7 @@ class Client:
                 result = None
             except IncompleteItemError:
                 logger.warning(f'incomplete item: {feed_item.to_str()}')
+                self.incomplete_items[feed_item.guid] = feed_item
                 result = None
             return result
 
@@ -200,6 +205,7 @@ class Client:
                             if not _changed:
                                 continue
                             logger.warning(f'existing item needs update: {feed_item.to_str()}, {actions=}')
+                            self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
                             continue
 
                 if parsed_item is not None:
@@ -207,6 +213,7 @@ class Client:
                         continue
                     if not parsed_item.is_final and not parsed_item.is_in_past:
                         logger.warning(f'existing item not final: {feed_item.to_str()}')
+                        self.incomplete_existing_items[feed_item.guid] = feed_item
                     continue
                 result = await do_page_parse(feed_item)
                 if result is None:
@@ -233,6 +240,7 @@ class Client:
                 logger.debug(f'match item from feed: {clip.unique_name=}, {item.feed_item.to_str()}')
             if item.feed_guid in self.legistar_data.matched_guids.values():
                 logger.warning(f'ambiguous feed match: {clip.unique_name=}, {item.feed_item.to_str()}')
+                self.ambiguous_matches[item.feed_guid] = (item, clip)
                 continue
             self.legistar_data.add_guid_match(clip.id, item.feed_guid)
 
@@ -273,6 +281,34 @@ class Client:
         self.legistar_data.ensure_unique_item_folders()
         self.match_clips()
         self.legistar_data.save(self.data_filename)
+
+    def get_warning_items(self) -> str:
+        """Get all parse warnings as a text block
+        """
+        lines: list[str] = ['']
+        lines.append('INCOMPLETE ITEMS:')
+        for feed_item in self.incomplete_items.values():
+            lines.append(f'{feed_item.to_str()}')
+        lines.append('')
+
+        lines.append('EXISTING ITEMS NOT FINAL:')
+        for feed_item in self.incomplete_existing_items.values():
+            lines.append(feed_item.to_str())
+        lines.append('')
+
+        lines.append('REAL GUID COLLISIONS:')
+        for feed_item, update_actions in self.guid_collisions.values():
+            lines.append(f'{feed_item.to_str()}:')
+            for action in update_actions:
+                lines.append(f'    {action}')
+        lines.append('')
+
+        lines.append('AMBIGUOUS CLIP MATCHES:')
+        for detail_result, clip in self.ambiguous_matches.values():
+            lines.append(f'{detail_result.feed_item.to_str()} --> {clip.unique_name}')
+        lines.append('')
+
+        return '\n'.join(lines)
 
     # @logger.catch
     async def download_feed_item(self, guid: GUID) -> None:
@@ -469,7 +505,7 @@ async def amain(
     check_only: bool = False,
     allow_updates: bool = False,
     strip_pdf_links: bool = False
-):
+) -> Client:
     if not config.legistar.out_dir_abs.exists():
         config.legistar.out_dir_abs.mkdir(parents=True)
     clips = ClipCollection.load(config.data_file)
