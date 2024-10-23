@@ -263,6 +263,9 @@ class FeedItem(Serializable):
         kw['pub_date'] = parse_pubdate(kw['pub_date'])
         return cls(**kw)
 
+    def to_str(self) -> str:
+        return f'"{self.link}": {self.title} @ {self.meeting_date.date()}'
+
 
 class Feed(Serializable):
     """An representation of Legistar's calendar RSS feed

@@ -127,7 +127,7 @@ class Client:
             except HiddenItemError:
                 result = None
             except IncompleteItemError:
-                logger.warning(f'incomplete item: {feed_item.guid=}, {feed_item.category=}, {feed_item.title=}')
+                logger.warning(f'incomplete item: {feed_item.to_str()}')
                 result = None
             return result
 
@@ -185,7 +185,7 @@ class Client:
                     if parsed_item.is_hidden:
                         continue
                     if not parsed_item.is_final and not parsed_item.is_in_past:
-                        logger.warning(f'existing item not final: {feed_item.guid=}, {feed_item.category=}, {feed_item.title=}')
+                        logger.warning(f'existing item not final: {feed_item.to_str()}')
                     continue
                 result = await do_page_parse(feed_item)
                 if result is None:
@@ -209,9 +209,9 @@ class Client:
                 item = self.get_clip_feed_match(clip)
                 if item is None:
                     continue
-                logger.debug(f'match item from feed: {clip.unique_name=}, {item.page_url=}')
+                logger.debug(f'match item from feed: {clip.unique_name=}, {item.feed_item.to_str()}')
             if item.feed_guid in self.legistar_data.matched_guids.values():
-                logger.warning(f'ambiguous feed match: {clip.unique_name=}, {item.page_url=}')
+                logger.warning(f'ambiguous feed match: {clip.unique_name=}, {item.feed_item.to_str()}')
                 continue
             self.legistar_data.add_guid_match(clip.id, item.feed_guid)
 
