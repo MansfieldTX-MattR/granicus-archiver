@@ -131,7 +131,11 @@ class Client:
                 result = None
             return result
 
-        async def handle_update(feed_item: FeedItem, existing_item: DetailPageResult) -> tuple[bool, list[str]]:
+        async def handle_update(
+            feed_item: FeedItem,
+            existing_item: DetailPageResult,
+            apply_actions: bool
+        ) -> tuple[bool, list[str]]:
             # NOTE: This is untested so the mutations are currently disabled
             result = await do_page_parse(feed_item)
             if result is None:
@@ -143,21 +147,25 @@ class Client:
             actions = []
             if item_files is not None:
                 for file_key in file_keys:
-                    filename = item_files[file_key]
-                    if filename is None:
+                    file_obj = item_files[file_key]
+                    if file_obj is None:
                         continue
+                    filename = file_obj.filename
                     actions.append(f'rm {filename}')
-                    # filename.unlink()
-                    # TODO: maybe add a `__delitem__` method to `LegistarFiles`
-                    # item_files[file_key] = None
+                    actions.append(f'del files["{file_key}"]')
+                    if apply_actions:
+                        filename.unlink()
+                        del item_files.files[file_key]
                 for att_name in attachment_keys:
                     attachment = item_files.attachments.get(att_name)
                     if attachment is None:
                         continue
                     actions.append(f'rm {attachment.filename}')
-                    # attachment.filename.unlink()
                     actions.append(f'del attachments["{att_name}"]')
-                    # del item_files.attachments[att_name]
+                    if apply_actions:
+                        attachment.filename.unlink()
+                        del item_files.attachments[att_name]
+
             return True, actions
 
         logger.debug(f'parsing detail pages for "{name}"')
@@ -172,7 +180,9 @@ class Client:
                     if similar_item is not None:
                         if self.allow_updates:
                             logger.info(f'Updating item "{similar_item.feed_guid}"')
-                            _changed, actions = await handle_update(feed_item, similar_item)
+                            _changed, actions = await handle_update(
+                                feed_item, similar_item, apply_actions=False,
+                            )
                             if _changed:
                                 raise Exception('\n'.join(actions))
                                 changed = True
