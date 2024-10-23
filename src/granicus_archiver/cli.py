@@ -483,12 +483,26 @@ def upload_clips(
 
 
 @clips.command(name='check-uploads')
+@click.option(
+    '--check-hashes/--no-check-hashes', default=False,
+    help='If supplied, verify checksums of uploaded files',
+)
+@click.option(
+    '--hash-logfile',
+    type=click.Path(path_type=Path),
+    help='Optional file to store/load local file hashes (for faster checks)'
+)
 @click.pass_obj
-def check_clips_uploads(obj: BaseContext):
+def check_clips_uploads(obj: BaseContext, check_hashes: bool, hash_logfile: Path|None):
     """Check uploaded metadata and verify content hashes
     """
     clips = ClipCollection.load(obj.config.data_file)
-    asyncio.run(googleclient.get_all_clip_file_meta(clips, root_conf=obj.config))
+    asyncio.run(googleclient.check_clip_file_meta(
+        clips,
+        root_conf=obj.config,
+        check_hashes=check_hashes,
+        hash_logfile=hash_logfile,
+    ))
 
 
 @legistar.command(name='upload')

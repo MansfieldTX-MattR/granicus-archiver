@@ -18,7 +18,7 @@ from .cache import FileCache, MetaCacheKey
 from .pathtree import PathNode
 from . import config
 from ..model import (
-    ClipCollection, Clip, ClipFileKey, ClipFileUploadKey,
+    ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID,
     FileMeta as ClipFileMeta,
 )
 from ..legistar.types import GUID, LegistarFileUID
@@ -748,6 +748,120 @@ class ClipGoogleClient(GoogleClient):
             await self.upload_clip_waiters
         logger.success(f'all waiters finished')
 
+    @logger.catch(reraise=True)
+    async def check_meta(
+        self,
+        clips: ClipCollection,
+        enable_hashes: bool,
+        hash_logfile: Path|None = None
+    ) -> bool:
+        """Check metadata for all available files stored on Drive
+
+        Arguments:
+            enable_hashes: If ``True``, the :attr:`~.types.FileMetaFull.sha1Checksum`
+                will be compared with the hash of the local file contents
+            hash_logfile: Optional file to store / load the local file hashes.
+                This can greatly reduce the time required since most files are
+                rather large.
+
+        .. note::
+
+            If using *hash_logfile*, it is recommended to delete it periodically,
+            especially if there have been any major changes to the local files.
+
+        Raises:
+            UploadError: If *enable_hashes* is True and the content hashes
+                do not match
+
+        Returns:
+            bool: Whether any changes to the :attr:`~GoogleClient.meta_cache` were made
+        """
+
+        def load_hash_data():
+            if hash_logfile is None:
+                return {}
+            if not hash_logfile.exists():
+                return {}
+            return json.loads(hash_logfile.read_text())
+
+        hash_dict: dict[CLIP_ID, dict[ClipFileUploadKey, str]] = load_hash_data()
+
+        def save_hash_data():
+            if hash_logfile is None:
+                return
+            hash_logfile.write_text(json.dumps(hash_dict, indent=2))
+
+        def store_local_hash(clip: Clip|CLIP_ID, key: ClipFileUploadKey, value: str):
+            clip_id = clip if isinstance(clip, str) else clip.id
+            d = hash_dict.setdefault(clip_id, {})
+            d[key] = value
+            save_hash_data()
+
+        def get_local_hash(clip: Clip|CLIP_ID, key: ClipFileUploadKey) -> str|None:
+            clip_id = clip if isinstance(clip, str) else clip.id
+            d = hash_dict.get(clip_id, {})
+            return d.get(key)
+
+        async def check_hash(
+            clip_id: CLIP_ID,
+            key: ClipFileUploadKey,
+            filename: Path,
+            remote_meta: FileMetaFull,
+        ):
+            sch = self.schedulers['uploads']
+            local_hash = get_local_hash(clip_id, key)
+            if local_hash is None:
+                local_hash = await get_file_hash_async(filename, 'sha1')
+            remote_hash = remote_meta['sha1Checksum']
+            matched = local_hash == remote_hash
+            logger.debug(f'Checking hashes for "{filename}": {matched=}, {sch.active_count=}')
+            if not matched:
+                raise UploadError(f'Uploaded file hash mismatch for "{filename}"')
+            if hash_logfile is not None:
+                store_local_hash(clip_id, key, local_hash)
+
+        async def check_file(
+            clip: Clip,
+            key: ClipFileUploadKey,
+            filename: Path
+        ) -> tuple[CLIP_ID, ClipFileUploadKey, FileMetaFull|None, bool, Path]:
+            meta, is_cached = await self.get_clip_file_meta(clip, key)
+            return clip.id, key, meta, is_cached, filename
+
+        async def check_item(clip: Clip) -> bool:
+            changed = False
+            hash_waiters = JobWaiters(scheduler=self.schedulers['uploads'])
+            meta_waiters = JobWaiters[tuple[CLIP_ID, ClipFileUploadKey, FileMetaFull|None, bool, Path]](
+                scheduler=self.schedulers['general']
+            )
+            for key, filename in clip.iter_paths(for_download=False):
+                if not filename.exists():
+                    continue
+                await meta_waiters.spawn(check_file(clip, key, filename))
+
+            async for job in meta_waiters:
+                if job.exception is not None:
+                    raise job.exception
+                clip_id, key, meta, is_cached, filename = job.result
+                if meta is None:
+                    continue
+                if not is_cached:
+                    changed = True
+                if enable_hashes:
+                    await hash_waiters.spawn(check_hash(clip_id, key, filename, meta))
+            await hash_waiters
+            return changed
+
+        item_waiters = JobWaiters[bool](scheduler=self.schedulers['upload_checks'])
+        for clip in clips:
+            logger.info(f'check_item: {clip.unique_name}')
+            await item_waiters.spawn(check_item(clip))
+
+        logger.success('all items scheduled')
+        results = await item_waiters
+        changed = any(results)
+        return changed
+
 
 class LegistarGoogleClient(GoogleClient):
     """Client to upload items from :class:`~.legistar.model.LegistarData`
@@ -1089,6 +1203,26 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
 
         results = await waiters
         changed = any(results)
+    if changed:
+        logger.info(f'Meta changed, saving cache file')
+        client.save_cache()
+    else:
+        logger.info('No changes detected')
+
+
+@logger.catch(reraise=True)
+async def check_clip_file_meta(
+    clips: ClipCollection,
+    root_conf: Config,
+    check_hashes: bool,
+    hash_logfile: Path|None = None
+) -> None:
+    async with ClipGoogleClient(root_conf=root_conf, max_clips=0) as client:
+        changed = await client.check_meta(
+            clips,
+            enable_hashes=check_hashes,
+            hash_logfile=hash_logfile,
+        )
     if changed:
         logger.info(f'Meta changed, saving cache file')
         client.save_cache()
