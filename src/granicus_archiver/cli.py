@@ -326,7 +326,7 @@ def add_category_map(obj: BaseContext, granicus_folder: str, legistar_category: 
     help='Maximum number of clips to download agenda packets for. If zero, downloads are disabled',
 )
 @click.option(
-    '--strip-pdf-links/--no-strip-pdf-links', default=False,
+    '--strip-pdf-links/--no-strip-pdf-links', default=True, show_default=True,
     help='Whether to remove embedded links from downloaded pdf files',
 )
 @click.option(
