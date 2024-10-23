@@ -192,10 +192,10 @@ class Client:
                         if self.allow_updates:
                             logger.info(f'Updating item "{similar_item.feed_guid}"')
                             _changed, actions = await handle_update(
-                                feed_item, similar_item, apply_actions=False,
+                                feed_item, similar_item, apply_actions=True,
                             )
+                            logger.info(f'Update item: {actions=}')
                             if _changed:
-                                raise Exception('\n'.join(actions))
                                 changed = True
                             continue
                         else:
