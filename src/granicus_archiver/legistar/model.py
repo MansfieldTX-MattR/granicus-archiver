@@ -835,6 +835,11 @@ class DetailPageResult(Serializable):
         assert isinstance(obj.links, DetailPageLinks)
         return obj
 
+    def copy(self) -> Self:
+        """Return a deep copy of this item and its children
+        """
+        return self.deserialize(self.serialize())
+
     def update(self, other: Self) -> UpdateResult:
         """Update *self* with changed attributes in *other*
         """

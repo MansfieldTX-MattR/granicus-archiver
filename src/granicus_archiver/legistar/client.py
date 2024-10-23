@@ -194,7 +194,12 @@ class Client:
                                 changed = True
                             continue
                         else:
-                            logger.warning(f'real_guid exists: {similar_item.feed_guid=}, {feed_item.guid=}')
+                            _changed, actions = await handle_update(
+                                feed_item, similar_item.copy(), apply_actions=False,
+                            )
+                            if not _changed:
+                                continue
+                            logger.warning(f'existing item needs update: {feed_item.to_str()}, {actions=}')
                             continue
 
                 if parsed_item is not None:
