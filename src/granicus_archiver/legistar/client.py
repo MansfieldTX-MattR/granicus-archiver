@@ -324,7 +324,7 @@ class Client:
         temp_dir.mkdir()
         chunk_size = 16384
 
-        @logger.catch
+        @logger.catch(reraise=True)
         async def do_download(
             uid: LegistarFileUID,
             abs_filename: Path,
@@ -349,7 +349,7 @@ class Client:
             logger.debug(f'download complete for "{url}"')
             return uid, abs_filename, dl.result
 
-        @logger.catch
+        @logger.catch(reraise=True)
         async def complete_download(
             uid: LegistarFileUID,
             abs_filename: Path,
@@ -503,7 +503,8 @@ class Client:
 
 
 
-@logger.catch
+
+@logger.catch(reraise=True)
 async def amain(
     config: Config,
     max_clips: int = 0,
