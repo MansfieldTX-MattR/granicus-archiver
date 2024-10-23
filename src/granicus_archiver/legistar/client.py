@@ -140,11 +140,17 @@ class Client:
             result = await do_page_parse(feed_item)
             if result is None:
                 return False, []
-            changed, file_keys, attachment_keys = existing_item.update(result)
+            update_result = existing_item.update(result)
+            changed, file_keys, attachment_keys, changed_attrs = update_result
+            assert changed_attrs is not None
             if not changed:
+                assert not len(changed_attrs)
                 return False, []
             item_files = self.legistar_data.files.get(existing_item.feed_guid)
-            actions = []
+            actions = [
+                f'setattr(obj, "{key}", {val})'
+                for key, val in changed_attrs.items()
+            ]
             if item_files is not None:
                 for file_key in file_keys:
                     file_obj = item_files[file_key]

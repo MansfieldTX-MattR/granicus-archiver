@@ -161,6 +161,8 @@ class UpdateResult(NamedTuple):
     """Any URL attributes from :class:`DetailPageLinks` that changed"""
     attachment_keys: list[AttachmentName]
     """Any keys in :attr:`DetailPageLinks.attachments` that changed"""
+    attributes: dict[str, Any]|None = None
+    """Attributes of :class:`DetailPageResult` that changed"""
 
 
 ELEM_ID_PREFIX = 'ctl00_ContentPlaceHolder1_'
@@ -840,6 +842,7 @@ class DetailPageResult(Serializable):
         assert other.page_url == self.page_url
         changed = False
         attrs = ['agenda_status', 'minutes_status', 'location']
+        changed_attrs = {}
         for attr in attrs:
             self_val = getattr(self, attr)
             oth_val = getattr(other, attr)
@@ -847,9 +850,15 @@ class DetailPageResult(Serializable):
                 continue
             logger.debug(f'{attr=}, {self_val=}, {oth_val=}')
             setattr(self, attr, oth_val)
+            changed_attrs[attr] = oth_val
             changed = True
-        links_changed, file_keys, attachment_keys = self.links.update(other.links)
-        return UpdateResult(changed or links_changed, file_keys, attachment_keys)
+        links_changed, file_keys, attachment_keys, _ = self.links.update(other.links)
+        return UpdateResult(
+            changed or links_changed,
+            file_keys,
+            attachment_keys,
+            changed_attrs,
+        )
 
 
 @dataclass
