@@ -206,6 +206,31 @@ class FeedItem(Serializable):
             pub_date=parse_pubdate(get_elem_text(elem, 'pubDate')),
         )
 
+    @classmethod
+    def to_csv(cls, *items: FeedItem) -> str:
+        """Get a comma-separated representation for the given feed items
+
+        The result will include a header followed by the results of
+        :meth:`to_csv_line` for each item given.
+        """
+        header = 'Title, Date, Link'
+        lines = [header]
+        for item in items:
+            lines.append(item.to_csv_line())
+        return '\n'.join(lines)
+
+    def to_csv_line(self) -> str:
+        """Get the comma-separated values of this item
+
+        The attributes returned will be
+
+        - :attr:`title`
+        - :attr:`meeting_date` (the :meth:`~datetime.datetime.date` portion only)
+        - :attr:`link`
+
+        """
+        return f'{self.title}, {self.meeting_date.date()}, {self.link}'
+
     @property
     def real_guid(self) -> REAL_GUID:
         """The portion of :attr:`guid` that IS ACTUALLY A GUID

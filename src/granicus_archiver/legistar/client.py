@@ -310,6 +310,11 @@ class Client:
 
         return '\n'.join(lines)
 
+    def get_incomplete_csv(self) -> str:
+        items = list(self.incomplete_items.values())
+        items.extend(list(self.incomplete_existing_items.values()))
+        return FeedItem.to_csv(*items)
+
     # @logger.catch
     async def download_feed_item(self, guid: GUID) -> None:
         loop = asyncio.get_running_loop()

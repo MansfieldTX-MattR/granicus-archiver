@@ -329,12 +329,22 @@ def add_category_map(obj: BaseContext, granicus_folder: str, legistar_category: 
     '--strip-pdf-links/--no-strip-pdf-links', default=False,
     help='Whether to remove embedded links from downloaded pdf files',
 )
+@click.option(
+    '--incomplete-csv',
+    type=click.Path(
+        file_okay=True,
+        dir_okay=False,
+        path_type=Path,
+    ),
+    help='Optional file to write incomplete items to (as CSV)',
+)
 @click.pass_obj
 def download_legistar(
     obj: BaseContext,
     allow_updates: bool,
     max_clips: int,
-    strip_pdf_links: bool
+    strip_pdf_links: bool,
+    incomplete_csv: Path|None
 ):
     """Parse and download legistar files
     """
@@ -344,8 +354,13 @@ def download_legistar(
         allow_updates=allow_updates,
         strip_pdf_links=strip_pdf_links,
     ))
-    click.echo('')
-    click.echo(c.get_warning_items())
+    if incomplete_csv is not None:
+        csv = c.get_incomplete_csv()
+        incomplete_csv.write_text(csv)
+        click.echo(f'incomplete items written to {incomplete_csv}')
+    else:
+        click.echo('')
+        click.echo(c.get_warning_items())
 
 
 @legistar.command
