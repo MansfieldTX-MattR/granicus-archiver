@@ -130,6 +130,7 @@ AgendaStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the 
 MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 AgendaStatusItems: list[AgendaStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
 MinutesStatusItems: list[MinutesStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+ItemStatus = Literal['final', 'addendum', 'draft', 'hidden']
 
 KT = TypeVar('KT')
 
@@ -728,6 +729,27 @@ class DetailPageResult(Serializable):
         )
 
     @property
+    def item_status(self) -> ItemStatus:
+        """Overall item status
+
+        One of:
+
+        - ``"final"``
+        - ``"addendum"``
+        - ``"draft"``
+        - ``"hidden"``
+
+        """
+        if self.is_hidden:
+            return 'hidden'
+        elif self.is_addendum:
+            return 'addendum'
+        elif self.is_draft:
+            return 'draft'
+        assert self.agenda_final and self.minutes_final
+        return 'final'
+
+    @property
     def can_download(self) -> bool:
         """Whether this item may be safely downloaded
         """
@@ -782,13 +804,27 @@ class DetailPageResult(Serializable):
 
         The structure will be:
 
-        ``<category>/<year>/<title>``
+        ``<category>/<year>/<datetime>_<title>_<status>``
 
-        Where ``<category>`` is the :attr:`~.rss_parser.FeedItem.category` of
-        the :attr:`feed_item`, ``<year>`` is the 4-digit year of the
-        :attr:`~.rss_parser.FeedItem.meeting_date` and ``<title>`` is a
-        combination of the date, :attr:`~.rss_parser.FeedItem.title` and
-        :attr:`location`.  This combination was chosen to ensure uniqueness.
+        Where
+
+        ``<category>``
+            Is the :attr:`~.rss_parser.FeedItem.category` of the :attr:`feed_item`
+
+        ``<year>``
+            Is the 4-digit year of the :attr:`~.rss_parser.FeedItem.meeting_date`
+
+        ``<datetime>``
+            Is the :attr:`~.rss_parser.FeedItem.meeting_date`
+            (formatted as ``"%Y%m%d-%H%M"``)
+
+        ``<title>``
+            Is the :attr:`~.rss_parser.FeedItem.title`
+
+        ``<status>``
+            Is the :attr:`item_status`
+
+        This combination was chosen to ensure uniqueness.
         """
         def strip_bad_chars(s: str):
             s = s.replace(' / ', ' - ').replace('\n', ' ')
@@ -799,10 +835,7 @@ class DetailPageResult(Serializable):
         dt = item.meeting_date.astimezone(item.get_timezone())
         dtstr = dt.strftime('%Y%m%d-%H%M')
 
-        # location often has newlines and its length can cause issues with
-        # directory name limitations.  Strip newlines and limit to 80 chars
-        loc = self.location.replace('\n', ' ')[:80]
-        title_str = f'{dtstr} - {item.title} - {loc}'
+        title_str = f'{dtstr}_{item.title}_{self.item_status}'
         parts = [item.category, dt.strftime('%Y'), title_str]
         parts = [strip_bad_chars(part) for part in parts]
         p = Path(*parts)
