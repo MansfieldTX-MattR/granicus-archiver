@@ -330,6 +330,16 @@ def add_category_map(obj: BaseContext, granicus_folder: str, legistar_category: 
     help='Whether to remove embedded links from downloaded pdf files',
 )
 @click.option(
+    '--temp-dir',
+    type=click.Path(
+        file_okay=False,
+        dir_okay=True,
+        exists=True,
+        path_type=Path,
+    ),
+    help="Directory for temporary files. Only set this if you know what you're doing",
+)
+@click.option(
     '--incomplete-csv',
     type=click.Path(
         file_okay=True,
@@ -344,10 +354,22 @@ def download_legistar(
     allow_updates: bool,
     max_clips: int,
     strip_pdf_links: bool,
+    temp_dir: Path|None,
     incomplete_csv: Path|None
 ):
     """Parse and download legistar files
     """
+    if temp_dir is not None:
+        assert temp_dir.exists()
+        temp_dir_contents = [f for f in temp_dir.iterdir()]
+        if len(temp_dir_contents):
+            click.echo('\n'.join([str(f) for f in temp_dir_contents]))
+            click.confirm('Temp dir not empty. Continue?')
+        os.environ['TMPDIR'] = str(temp_dir)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            td_p = Path(td).resolve()
+            assert td_p.parent == temp_dir.resolve()
     c = asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=max_clips,
