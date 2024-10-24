@@ -17,7 +17,7 @@ from .model import (
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
     CheckError, FilesizeMagicNumber,
 )
-from .utils import JobWaiters, is_same_filesystem
+from .utils import JobWaiters, CompletionCounts, is_same_filesystem
 from .downloader import (
     Downloader,
     StupidZeroContentLengthError,
@@ -70,10 +70,13 @@ class GranicusClient:
         data_url: URL,
         out_dir: Path,
         scheduler_limit: int,
+        max_clips: int|None
     ) -> None:
         self.data_url = data_url
         self.out_dir = out_dir
         self.scheduler_limit = scheduler_limit
+        self.max_clips = max_clips
+        self.completion_counts = CompletionCounts(max_clips, enable_log=True)
 
     async def __aenter__(self) -> Self:
         self.schedulers = get_schedulers(limit=self.scheduler_limit)
@@ -244,6 +247,7 @@ class GranicusClient:
             await copy_waiter.gather()
 
         logger.success(f'clip "{clip.unique_name}" complete')
+        self.completion_counts.num_completed += 1
 
     async def get_agenda_timestamps(
         self,
@@ -477,8 +481,10 @@ async def amain(
         data_url=data_url,
         out_dir=out_dir,
         scheduler_limit=scheduler_limit,
+        max_clips=max_clips,
     )
     async with client:
+        completion_counts = client.completion_counts
         schedulers = client.schedulers
         waiter = JobWaiters(scheduler=schedulers['general'])
         clips = await client.get_main_data()
@@ -489,7 +495,6 @@ async def amain(
         clips.save(data_file)
         timestamps.save(timestamp_file)
         check_all_clip_files(clips)
-        i = 0
         try:
             for clip in clips:
                 if max_clips == 0:
@@ -501,8 +506,8 @@ async def amain(
                     continue
                 # logger.debug(f'{scheduler.active_count=}')
                 await waiter.spawn(client.download_clip(clip))
-                i += 1
-                if max_clips is not None and i >= max_clips:
+                completion_counts.num_queued += 1
+                if completion_counts.full:
                     break
             await waiter
         finally:

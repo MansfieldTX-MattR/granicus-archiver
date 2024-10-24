@@ -12,7 +12,12 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from ..config import Config
-from ..utils import JobWaiters, remove_pdf_links, is_same_filesystem
+from ..utils import (
+    JobWaiters,
+    CompletionCounts,
+    remove_pdf_links,
+    is_same_filesystem,
+)
 from ..model import ClipCollection, Clip
 from .types import GUID, REAL_GUID, LegistarFileKey, LegistarFileUID
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
@@ -56,6 +61,7 @@ class Client:
         self.incomplete_existing_items: dict[GUID, FeedItem] = {}
         self.guid_collisions: dict[REAL_GUID, tuple[FeedItem, list[str]]] = {}
         self.ambiguous_matches: dict[GUID, tuple[DetailPageResult, Clip]] = {}
+        self.completion_counts = CompletionCounts(enable_log=True)
 
     async def open(self) -> None:
         self.session = ClientSession()
@@ -436,12 +442,14 @@ class Client:
         if att_dir.exists():
             att_dir.rmdir()
         temp_dir.rmdir()
+        self.completion_counts.num_completed += 1
 
     async def download_feed_items(self, max_items: int):
+        self.completion_counts.max_items = max_items
+        self.completion_counts.reset()
         self.legistar_data.root_dir.mkdir(exist_ok=True)
         waiters = JobWaiters(self.scheduler)
         keys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet']
-        count = 0
         for guid in self.legistar_data.detail_results.keys():
             detail_item = self.legistar_data[guid]
             if not detail_item.can_download:
@@ -451,12 +459,13 @@ class Client:
             if files.get_is_complete(self.legistar_data, keys):
                 continue
             await waiters.spawn(self.download_feed_item(guid))
-            count += 1
-            if count >= max_items:
+            self.completion_counts.num_queued += 1
+            if self.completion_counts.full:
                 break
-        logger.success(f'all feed items queued: {count=}')
+        logger.success(f'all feed items queued: {self.completion_counts}')
         try:
             await waiters
+            logger.info(f'{self.completion_counts=}')
         finally:
             self.legistar_data.save(self.data_filename)
 

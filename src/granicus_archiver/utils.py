@@ -5,7 +5,7 @@ from typing import (
 )
 import hashlib
 from pathlib import Path
-
+from loguru import logger
 import asyncio
 import aiojobs
 import aiofile
@@ -372,3 +372,173 @@ async def aio_read_iter(
                 except StopAsyncIteration:
                     break
                 yield chunk
+
+
+class CompletionCounts:
+    """Helper to track item queue and completion counts
+
+    >>> counts = CompletionCounts(max_items=10)
+    >>> counts
+    <CompletionCounts: queued=0, completed=0, active=0, progress=0%>
+
+    >>> counts.num_queued += 4
+    >>> counts
+    <CompletionCounts: queued=4, completed=0, active=4, progress=0%>
+
+    >>> counts.num_completed += 1
+    >>> counts
+    <CompletionCounts: queued=4, completed=1, active=3, progress=10%>
+    >>> counts.full
+    False
+
+    >>> counts.num_queued += 6
+    >>> counts
+    <CompletionCounts: queued=10, completed=1, active=9, progress=10%>
+    >>> counts.full
+    True
+
+    >>> counts.complete
+    False
+    >>> for i in range(9):
+    ...     counts.num_completed += 1
+    ...     print(repr(counts))
+    <CompletionCounts: queued=10, completed=2, active=8, progress=20%>
+    <CompletionCounts: queued=10, completed=3, active=7, progress=30%>
+    <CompletionCounts: queued=10, completed=4, active=6, progress=40%>
+    <CompletionCounts: queued=10, completed=5, active=5, progress=50%>
+    <CompletionCounts: queued=10, completed=6, active=4, progress=60%>
+    <CompletionCounts: queued=10, completed=7, active=3, progress=70%>
+    <CompletionCounts: queued=10, completed=8, active=2, progress=80%>
+    <CompletionCounts: queued=10, completed=9, active=1, progress=90%>
+    <CompletionCounts: queued=10, completed=10, active=0, progress=100%>
+
+    >>> counts.complete
+    True
+
+    """
+    max_items: int|None
+    """Maximum number of items"""
+    enable_log: bool
+    """If ``True`` any changes to :attr:`num_queued` or :attr:`num_completed`
+    will be logged
+    """
+    def __init__(self, max_items: int|None = None, enable_log: bool = False) -> None:
+        self.max_items = max_items
+        self.enable_log = enable_log
+        self._num_queued = 0
+        self._num_completed = 0
+
+    @property
+    def num_queued(self) -> int:
+        """Number of items that have been queued
+        """
+        return self._num_queued
+    @num_queued.setter
+    def num_queued(self, value: int) -> None:
+        if value == self._num_queued:
+            return
+        self._num_queued = value
+        self._log_counts('queued:    ')
+
+    @property
+    def num_completed(self) -> int:
+        """Number of items that have been completed
+        """
+        return self._num_completed
+    @num_completed.setter
+    def num_completed(self, value: int) -> None:
+        if value == self._num_completed:
+            return
+        self._num_completed = value
+        self._log_counts('completed: ')
+
+    @property
+    def num_active(self) -> int:
+        """Number of active items (``num_queued - num_completed``)
+        """
+        return self.num_queued - self.num_completed
+
+    @property
+    def progress(self) -> int:
+        """Percent of items :attr:`completed <num_completed>` versus
+        :attr:`max_items`
+
+        .. note::
+
+            This will be zero if :attr:`max_items` is ``None``
+
+        """
+        if self.max_items is None or self.max_items == 0:
+            return 0
+        p = self.num_completed / self.max_items
+        return int(round(p * 100))
+
+    @property
+    def full(self) -> bool:
+        """Whether all items have been queued
+
+        .. note::
+
+            This will always be ``False`` if :attr:`max_items` is ``None``
+
+        """
+        if self.max_items is None:
+            return False
+        return self.num_queued >= self.max_items
+
+    @property
+    def complete(self) -> bool:
+        """Whether all items have been completed
+
+        .. note::
+
+            This will always be ``False`` if :attr:`max_items` is ``None``
+
+        """
+        if self.max_items is None:
+            return False
+        return self.num_completed >= self.max_items
+
+    def reset(self) -> None:
+        """Reset all counters to zero
+
+        >>> counts = CompletionCounts(max_items=4)
+        >>> counts
+        <CompletionCounts: queued=0, completed=0, active=0, progress=0%>
+
+        >>> counts.num_queued = 4
+        >>> counts.num_completed = 2
+        >>> counts.full
+        True
+        >>> counts
+        <CompletionCounts: queued=4, completed=2, active=2, progress=50%>
+
+        >>> counts.reset()
+        >>> counts.full
+        False
+        >>> counts
+        <CompletionCounts: queued=0, completed=0, active=0, progress=0%>
+
+        """
+        enable_log = self.enable_log
+        self.enable_log = False
+        self.num_completed = 0
+        self.num_queued = 0
+        self.enable_log = enable_log
+
+    def _log_counts(self, msg: str) -> None:
+        if self.enable_log:
+            logger.debug(f'{msg}{self}')
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__}: {self}>'
+
+    def __str__(self) -> str:
+        fields = [
+            ('queued', self.num_queued, ''), ('completed', self.num_completed, ''),
+            ('active', self.num_active, ''), ('progress', self.progress, '%'),
+        ]
+        field_str = [
+            f'{name}={value}{suffix}' for name, value, suffix in fields
+        ]
+        return ', '.join(field_str)

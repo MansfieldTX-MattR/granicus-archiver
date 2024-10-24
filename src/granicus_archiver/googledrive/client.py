@@ -23,7 +23,12 @@ from ..model import (
 )
 from ..legistar.types import GUID, LegistarFileUID
 from ..legistar.model import LegistarData
-from ..utils import JobWaiters, get_file_hash_async, aio_read_iter
+from ..utils import (
+    JobWaiters,
+    CompletionCounts,
+    get_file_hash_async,
+    aio_read_iter,
+)
 from .. import html_builder
 
 if TYPE_CHECKING:
@@ -544,7 +549,7 @@ class ClipGoogleClient(GoogleClient):
         super().__init__(root_conf)
         self.max_clips = max_clips
         self.scheduler_limit = scheduler_limit
-        self.num_uploaded = 0
+        self.completion_counts = CompletionCounts(max_clips, enable_log=True)
 
     @property
     def upload_dir(self) -> Path:
@@ -654,10 +659,12 @@ class ClipGoogleClient(GoogleClient):
             num_jobs += 1
 
         if not len(waiter):
+            self.completion_counts.num_completed += 1
             return True
         results = await waiter
         all_skipped = True not in results
         logger.success(f'Upload complete for clip "{clip.unique_name}"')
+        self.completion_counts.num_completed += 1
         return all_skipped
 
 
@@ -678,7 +685,7 @@ class ClipGoogleClient(GoogleClient):
             if upload_size != local_size:
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
             return False, upload_filename
-        if self.num_uploaded >= self.max_clips:
+        if self.completion_counts.full:
             return False, clip, set()
         coros: set[Coroutine[Any, Any, tuple[bool, Path]]] = set()
         for key, filename in clip.iter_paths(for_download=False):
@@ -704,7 +711,7 @@ class ClipGoogleClient(GoogleClient):
         """
         upload_dirs = set[Path]()
         clips_to_upload: list[Clip] = []
-        if self.num_uploaded >= self.max_clips:
+        if self.completion_counts.full:
             return
         async for job in self.upload_check_waiters:
             if job.exception is not None:
@@ -721,8 +728,8 @@ class ClipGoogleClient(GoogleClient):
             await self.prebuild_paths(*upload_dirs)
         for clip in clips_to_upload:
             await self.upload_clip_waiters.spawn(self.upload_clip(clip))
-            self.num_uploaded += 1
-            if self.num_uploaded >= self.max_clips:
+            self.completion_counts.num_queued += 1
+            if self.completion_counts.full:
                 break
 
     async def upload_all(self, clips: ClipCollection) -> None:
@@ -735,7 +742,7 @@ class ClipGoogleClient(GoogleClient):
             await self.upload_check_waiters.spawn(self.check_clip_needs_upload(clip))
             if len(self.upload_check_waiters) >= upload_check_limit:
                 await self.handle_upload_check_jobs()
-            if self.num_uploaded >= self.max_clips:
+            if self.completion_counts.full:
                 break
 
         await self.handle_upload_check_jobs()
@@ -884,7 +891,7 @@ class LegistarGoogleClient(GoogleClient):
         if legistar_data is None:
             legistar_data = LegistarData.load(self.root_conf.legistar.data_file)
         self.legistar_data = legistar_data
-        self.num_uploaded = 0
+        self.completion_counts = CompletionCounts(max_clips, enable_log=True)
 
     @property
     def upload_dir(self) -> Path:
@@ -999,10 +1006,12 @@ class LegistarGoogleClient(GoogleClient):
             # logger.warning(f'{sch.active_count=}, {len(sch)=}, {sch.pending_count=}, {len(waiters)=}')
 
         if not len(waiters):
+            self.completion_counts.num_completed += 1
             return True
         results = await waiters
         all_skipped = True not in results
         logger.info(f'Upload complete for guid: {guid}')
+        self.completion_counts.num_completed += 1
         return all_skipped
 
     async def check_item_needs_upload(self, guid: GUID) -> tuple[bool, GUID, set[Path]]:
@@ -1020,7 +1029,7 @@ class LegistarGoogleClient(GoogleClient):
             if upload_size != local_size:
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
             return False, upload_filename
-        if self.num_uploaded >= self.max_clips:
+        if self.completion_counts.full:
             return False, guid, set()
         coros: set[Coroutine[Any, Any, tuple[bool, Path]]] = set()
         it = self.legistar_data.iter_files_for_upload(guid)
@@ -1046,7 +1055,7 @@ class LegistarGoogleClient(GoogleClient):
         """
         upload_dirs = set[Path]()
         guids_to_upload: list[GUID] = []
-        if self.num_uploaded >= self.max_clips:
+        if self.completion_counts.full:
             return
         async for job in self.check_waiters:
             if job.exception is not None:
@@ -1062,8 +1071,8 @@ class LegistarGoogleClient(GoogleClient):
             await self.prebuild_paths(*upload_dirs)
         for guid in guids_to_upload:
             await self.item_waiters.spawn(self.upload_legistar_item(guid))
-            self.num_uploaded += 1
-            if self.num_uploaded >= self.max_clips:
+            self.completion_counts.num_queued += 1
+            if self.completion_counts.full:
                 break
 
     async def upload_all(self):
@@ -1080,10 +1089,10 @@ class LegistarGoogleClient(GoogleClient):
             await check_waiters.spawn(self.check_item_needs_upload(guid))
             if len(check_waiters) >= check_limit:
                 await self.handle_upload_check_jobs()
-            if self.num_uploaded >= self.max_clips:
+            if self.completion_counts.full:
                 break
         await self.handle_upload_check_jobs()
-        logger.info(f'all jobs scheduled, waiting ({len(item_waiters)=}), {len(check_waiters)=}, {self.num_uploaded=}')
+        logger.info(f'all jobs scheduled, waiting ({len(item_waiters)=}), {len(check_waiters)=}, {self.completion_counts}')
         await check_waiters
         await item_waiters
         logger.success('all jobs completed')
