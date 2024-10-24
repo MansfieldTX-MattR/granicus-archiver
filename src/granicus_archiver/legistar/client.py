@@ -65,11 +65,11 @@ class Client:
 
     async def open(self) -> None:
         self.session = ClientSession()
-        self.scheduler = aiojobs.Scheduler(limit=self._default_limit)
+        self.scheduler = aiojobs.Scheduler(limit=self._default_limit, pending_limit=1)
         self.waiter = JobWaiters(self.scheduler)
         self.download_scheduler = aiojobs.Scheduler(limit=4)
         self.downloader = Downloader(session=self.session, scheduler=self.download_scheduler)
-        self.completion_scheduler = aiojobs.Scheduler(limit=8)
+        self.completion_scheduler = aiojobs.Scheduler(limit=8, pending_limit=1)
         self._temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir = Path(self._temp_dir.name).resolve()
 
