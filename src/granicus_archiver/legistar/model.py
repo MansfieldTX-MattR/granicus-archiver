@@ -744,7 +744,10 @@ class DetailPageResult(Serializable):
         """Whether the item is hidden
         (if :attr:`agenda_status` is "Not Viewable by the Public")
         """
-        return self.agenda_status == 'Not Viewable by the Public'
+        return (
+            self.agenda_status == 'Not Viewable by the Public' or
+            self.minutes_status == 'Not Viewable by the Public'
+        )
 
     @property
     def is_future(self) -> bool:
