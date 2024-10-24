@@ -718,6 +718,16 @@ class DetailPageResult(Serializable):
         return self.minutes_status == 'Final' or self.minutes_status == 'Final-Addendum'
 
     @property
+    def is_addendum(self) -> bool:
+        """``True`` if :attr:`agenda_status` or :attr:`minutes_status` is
+        ``"Final-Addendum"``
+        """
+        return (
+            self.agenda_status == 'Final-Addendum' or
+            self.minutes_status == 'Final-Addendum'
+        )
+
+    @property
     def can_download(self) -> bool:
         """Whether this item may be safely downloaded
         """
