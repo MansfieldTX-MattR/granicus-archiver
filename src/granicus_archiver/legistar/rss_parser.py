@@ -10,7 +10,7 @@ from loguru import logger
 from yarl import URL
 from pyquery.pyquery import PyQuery
 
-from ..model import Serializable, Clip, CLIP_ID
+from ..model import Serializable, Clip, CLIP_ID, Location
 from .types import GUID, REAL_GUID, Category
 
 ItemDict = dict[GUID, 'FeedItem']
@@ -317,7 +317,7 @@ class Feed(Serializable):
     items_by_category: dict[Category, ItemDict]
     """Mapping of items by their :attr:`~FeedItem.category`"""
 
-    category_maps: dict[str, Category]
+    category_maps: dict[Location, Category]
     """A :class:`dict` of any custom mappings to match the
     :attr:`Clip.location <granicus_archiver.model.Clip.location>`
     fields to their appropriate :attr:`FeedItem.category`
@@ -328,7 +328,7 @@ class Feed(Serializable):
     def __init__(
         self,
         items: Iterable[FeedItem]|None = None,
-        category_maps: dict[str, Category]|None = None
+        category_maps: dict[Location, Category]|None = None
     ) -> None:
         if items is None:
             items = []
@@ -344,7 +344,7 @@ class Feed(Serializable):
     def from_feed(
         cls,
         doc_str: str|bytes,
-        category_maps: dict[str, Category]|None = None,
+        category_maps: dict[Location, Category]|None = None,
         overflow_allowed: bool = False
     ) -> Self:
         """Create an instance by parsing the supplied RSS data

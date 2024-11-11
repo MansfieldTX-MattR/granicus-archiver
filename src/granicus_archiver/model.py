@@ -39,6 +39,9 @@ ClipFileUploadKey = ClipFileKey | Literal['chapters', 'agenda_packet']
 
 Headers = MultiMapping[str]|dict[str, str]
 
+Location = NewType('Location', str)
+"""The "Location" (or folder) of a clip"""
+
 
 def set_timezone(tz: zoneinfo.ZoneInfo) -> None:
     ParseClipData.set_timezone(tz)
@@ -118,11 +121,11 @@ class ParseClipLinks(Serializable):
 class ParseClipData(Serializable):
     """Data for a clip parsed from granicus
     """
-    id: CLIP_ID     #: The (assumingly) primary key of the clip
-    location: str   #: The "Location" (category or folder would be better terms)
-    name: str       #: The clip name
-    date: int       #: POSIX timestamp of the clip
-    duration: int   #: Duration of the clip (in seconds)
+    id: CLIP_ID         #: The (assumingly) primary key of the clip
+    location: Location  #: The "Location" (category or folder would be better terms)
+    name: str           #: The clip name
+    date: int           #: POSIX timestamp of the clip
+    duration: int       #: Duration of the clip (in seconds)
     original_links: ParseClipLinks
     """The asset links as reported by granicus.  Some will be actually be
     redirects to a PDF viewer which will need to be resolved
@@ -922,7 +925,7 @@ class Clip(Serializable):
         return self.parse_data.unique_name
 
     @property
-    def location(self) -> str:
+    def location(self) -> Location:
         """Alias for :attr:`ParseClipData.location`"""
         return self.parse_data.location
 
@@ -1205,7 +1208,7 @@ class ClipIndex(Serializable):
     :class:`ClipsIndex`
     """
     id: CLIP_ID                 #: :attr:`Clip.id`
-    location: str               #: :attr:`Clip.location`
+    location: Location          #: :attr:`Clip.location`
     name: str                   #: :attr:`Clip.name`
     datetime: datetime.datetime #: :attr:`Clip.datetime`
     data_file: Path

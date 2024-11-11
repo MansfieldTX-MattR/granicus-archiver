@@ -17,6 +17,7 @@ from yaml import (
 
 from .model import Serializable
 if TYPE_CHECKING:
+    from .model import Location
     from .legistar.rss_parser import Category
 
 
@@ -112,7 +113,7 @@ class LegistarConfig(BaseConfig):
     reach the 100 item limit described in
     :meth:`.legistar.rss_parser.Feed.from_feed`
     """
-    category_maps: dict[str, Category] = field(default_factory=dict)
+    category_maps: dict[Location, Category] = field(default_factory=dict)
     """A :class:`dict` of any custom mappings to match the
     :attr:`Clip.location <.model.Clip.location>` fields to their appropriate
     :attr:`.legistar.rss_parser.FeedItem.category`
