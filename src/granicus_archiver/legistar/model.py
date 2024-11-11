@@ -965,7 +965,10 @@ class LegistarData(Serializable):
     :attr:`~LegistarFiles.guid` as keys
     """
 
+    real_guid_map: dict[REAL_GUID, GUID] = field(init=False)
     def __post_init__(self) -> None:
+        self.real_guid_map = {item.real_guid: item.feed_guid for item in self}
+        assert len(self.real_guid_map) == len(self.detail_results)
         for item in self.detail_results.values():
             clip_id = item.clip_id
             if clip_id is None:
@@ -1041,11 +1044,11 @@ class LegistarData(Serializable):
         """
         assert not item.is_future
         assert item.feed_guid not in self.detail_results
-        if item.real_guid in self.get_real_guids():
-            d = {item.real_guid: item.feed_guid for item in self}
-            oth_guid = d[item.real_guid]
+        oth_guid = self.real_guid_map.get(item.real_guid)
+        if oth_guid is not None:
             raise KeyError(f'real_guid exists: {item.feed_guid=}, {oth_guid=}')
         self.detail_results[item.feed_guid] = item
+        self.real_guid_map[item.real_guid] = item.feed_guid
         clip_id = item.links.get_clip_id_from_video()
         if clip_id is not None:
             self.items_by_clip_id[clip_id] = item
