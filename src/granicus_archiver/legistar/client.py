@@ -19,7 +19,7 @@ from ..utils import (
     is_same_filesystem,
 )
 from ..model import ClipCollection, Clip
-from .types import GUID, REAL_GUID, LegistarFileKey, LegistarFileUID
+from .types import GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
@@ -239,7 +239,9 @@ class Client:
             if clip.id in self.legistar_data.matched_guids:
                 continue
             item = self.legistar_data.find_match_for_clip_id(clip.id)
-            if item is None:
+            if item is NoClip:
+                continue
+            elif item is None:
                 item = self.get_clip_feed_match(clip)
                 if item is None:
                     continue

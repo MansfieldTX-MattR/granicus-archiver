@@ -18,7 +18,10 @@ from yarl import URL
 
 from ..model import CLIP_ID, Serializable, FileMeta
 from .rss_parser import FeedItem
-from .types import GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID
+from .types import (
+    GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID, Category,
+    NoClipT, NoClip,
+)
 from ..utils import remove_pdf_links
 
 
@@ -965,8 +968,16 @@ class LegistarData(Serializable):
     :attr:`~LegistarFiles.guid` as keys
     """
 
+    clip_id_overrides: dict[REAL_GUID, CLIP_ID|NoClipT] = field(default_factory=dict)
+    """Mapping of items manually-linked to :class:`Clips <.model.Clip>`
+    """
+
+    clip_id_overrides_rev: dict[CLIP_ID, REAL_GUID] = field(init=False)
     real_guid_map: dict[REAL_GUID, GUID] = field(init=False)
     def __post_init__(self) -> None:
+        self.clip_id_overrides_rev = {
+            v: k for k, v in self.clip_id_overrides.items() if v is not NoClip
+        }
         self.real_guid_map = {item.real_guid: item.feed_guid for item in self}
         assert len(self.real_guid_map) == len(self.detail_results)
         for item in self.detail_results.values():
@@ -1021,10 +1032,22 @@ class LegistarData(Serializable):
         guid = d[real_guid]
         return self[guid]
 
-    def find_match_for_clip_id(self, clip_id: CLIP_ID) -> DetailPageResult|None:
+    def find_match_for_clip_id(
+        self,
+        clip_id: CLIP_ID
+    ) -> DetailPageResult|None|NoClipT:
         """Find a :class:`DetailPageResult` match for the given *clip_id*
         """
-        return self.items_by_clip_id.get(clip_id)
+        if clip_id in self.clip_id_overrides_rev:
+            real_guid = self.clip_id_overrides_rev[clip_id]
+            return self.get_by_real_guid(real_guid)
+
+        item = self.items_by_clip_id.get(clip_id)
+        if item is not None and item.real_guid in self.clip_id_overrides:
+            _clip_id = self.clip_id_overrides[item.real_guid]
+            if _clip_id is NoClip:
+                return NoClip
+        return item
 
     def add_guid_match(self, clip_id: CLIP_ID, guid: GUID) -> None:
         """Add a ``Clip.id -> FeedItem`` match to :attr:`matched_guids`
@@ -1038,6 +1061,28 @@ class LegistarData(Serializable):
             assert self.matched_guids[clip_id] == guid
             return
         self.matched_guids[clip_id] = guid
+
+    def add_clip_match_override(
+        self,
+        real_guid: REAL_GUID,
+        clip_id: CLIP_ID|None|NoClipT
+    ) -> None:
+        """Add a manual override for the given :attr:`~DetailPageResult.real_guid`
+
+        Arguments:
+            real_guid: The :attr:`~DetailPageResult.real_guid` of the legistar
+                item
+            clip_id: The clip :attr:`.model.Clip.id` matching the item. If
+                :obj:`None` or :obj:`~.types.NoClip` is given, this signifies that
+                the item should not have a :class:`~.model.Clip` associated
+                with it.
+        """
+        if clip_id is None:
+            clip_id = NoClip
+        if clip_id is not NoClip:
+            assert clip_id not in self.clip_id_overrides_rev
+            self.clip_id_overrides_rev[clip_id] = real_guid
+        self.clip_id_overrides[real_guid] = clip_id
 
     def add_detail_result(self, item: DetailPageResult) -> None:
         """Add a parsed :class:`DetailPageResult` to :attr:`detail_results`
@@ -1054,11 +1099,25 @@ class LegistarData(Serializable):
             self.items_by_clip_id[clip_id] = item
 
     def iter_guid_matches(self) -> Iterator[tuple[CLIP_ID, DetailPageResult]]:
-        """Iterate over items added by the :meth:`add_guid_match` method as
-        :obj:`CLIP_ID` and :class:`DetailPageResult` pairs
+        """Iterate over items added by the :meth:`add_guid_match`,
+        :meth:`add_real_guid_match` and :meth:`add_clip_match_override` methods
+
+        Results are tuples of :obj:`CLIP_ID` and :class:`DetailPageResult`
         """
+        real_guids = set[REAL_GUID]()
         for clip_id, guid in self.matched_guids.items():
-            yield clip_id, self.detail_results[guid]
+            item = self[guid]
+            if item.real_guid in self.clip_id_overrides:
+                continue
+            real_guids.add(item.real_guid)
+            yield clip_id, item
+        for real_guid, clip_id in self.clip_id_overrides.items():
+            if clip_id is NoClip:
+                continue
+            assert real_guid not in real_guids
+            item = self.get_by_real_guid(real_guid)
+            assert item is not None
+            yield clip_id, item
 
     def get_folder_for_item(self, item: GUID|DetailPageResult) -> Path:
         """Get a local path to store files for a :class:`DetailPageResult`
@@ -1369,15 +1428,27 @@ class LegistarData(Serializable):
         filename.write_text(json.dumps(data, indent=indent))
 
     def serialize(self) -> dict[str, Any]:
+        overrides: dict[REAL_GUID, CLIP_ID|Literal['NoClip']] = {}
+        for key, val in self.clip_id_overrides.items():
+            if val is NoClip:
+                val = 'NoClip'
+            overrides[key] = val
         return dict(
             root_dir=str(self.root_dir),
             matched_guids=self.matched_guids,
             detail_results={k:v.serialize() for k,v in self.detail_results.items()},
+            clip_id_overrides=overrides,
             files={k:v.serialize() for k,v in self.files.items()},
         )
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
+        d: dict[REAL_GUID, CLIP_ID|Literal['NoClip']] = data.get('clip_id_overrides', {})
+        overrides: dict[REAL_GUID, CLIP_ID|NoClipT] = {}
+        for key, val in d.items():
+            if val == 'NoClip':
+                val = NoClip
+            overrides[key] = val
         return cls(
             root_dir=Path(data['root_dir']),
             matched_guids=data['matched_guids'],
@@ -1386,4 +1457,5 @@ class LegistarData(Serializable):
                 for k,v in data['detail_results'].items()
             },
             files={k:LegistarFiles.deserialize(v) for k,v in data['files'].items()},
+            clip_id_overrides=overrides,
         )
