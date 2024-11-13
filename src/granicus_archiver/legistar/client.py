@@ -23,7 +23,7 @@ from .types import GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
-    is_attachment_uid, uid_to_file_key,
+    is_attachment_uid, uid_to_file_key, make_path_legal,
 )
 from ..downloader import Downloader, DownloadResult, StupidZeroContentLengthError
 
@@ -486,8 +486,14 @@ class Client:
             assert filename.stat().st_size == meta.content_length
 
         asset_paths: set[Path] = set()
+        illegal_dirs: set[Path] = set()
         for files in self.legistar_data.files.values():
             for t in files.iter_url_paths_uid(self.legistar_data):
+                legal_dir = make_path_legal(t.filename.parent, is_dir=True)
+                if legal_dir != t.filename.parent:
+                    if t.filename.parent not in illegal_dirs:
+                        logger.warning(f'Illegal dir: {t.filename.parent}, {legal_dir=}')
+                    illegal_dirs.add(t.filename.parent)
                 if not t.complete:
                     assert not t.filename.exists()
                     continue
@@ -498,6 +504,7 @@ class Client:
                 assert t.filename.stat().st_size == meta.content_length
                 assert t.filename not in asset_paths
                 asset_paths.add(t.filename)
+        assert not len(illegal_dirs)
 
         root_dir = self.legistar_data.root_dir
         local_files: set[Path] = set()
