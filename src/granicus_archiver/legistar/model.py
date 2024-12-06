@@ -607,6 +607,15 @@ class DetailPageLinks(Serializable):
             clip_id = CLIP_ID(clip_id)
         return clip_id
 
+    def iter_uids(self) -> Iterator[tuple[LegistarFileUID, URL|None]]:
+        """Iterate over all files and attachments as
+        :obj:`~.types.LegistarFileUID`, :class:`~yarl.URL` tuples
+        """
+        for key, url in self:
+            yield file_key_to_uid(key), url
+        for att_key, url in self.attachments.items():
+            yield attachment_name_to_uid(att_key), url
+
     def __iter__(self) -> Iterator[tuple[LegistarFileKey, URL|None]]:
         for key in LegistarFileKeys:
             yield key, self[key]
