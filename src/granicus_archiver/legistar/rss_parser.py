@@ -139,6 +139,115 @@ def get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid:
     # rg = '-'.join(guid.split('-')[:num_segments])
     return REAL_GUID('-'.join(segments))
 
+def parse_dt_from_guid(guid: GUID) -> datetime.datetime:
+    dt_str = '-'.join(guid.split('-')[-6:])
+    dt_fmt = '%Y-%m-%d-%H-%M-%S'
+    return datetime.datetime.strptime(dt_str, dt_fmt)
+
+
+class GuidCompare:
+    """Helper to compare :obj:`GUID's <.types.GUID>`
+
+    Since the "GUID's" (loose term because they aren't really GUID's) contain
+    date/time information, it can actually be useful to determine whether
+    an update is needed from a feed item or not.
+
+    Instances can be compared using the ``==``, ``!=``, ``>``, ``>=``,
+    ``<`` and ``<=`` operators.
+
+    Using the following GUID:
+
+    >>> real_guid_a = 'F239FB22-A00A-6FF1-3E97-0F36043B96F6'
+    >>> a = f'{real_guid_a}-2023-01-01-12-30-00'
+    >>> b = f'{real_guid_a}-2024-01-01-12-30-00'
+
+    Both ``a`` and ``b`` use the same GUID, but ``a`` is one year behind ``b``
+
+    >>> GuidCompare(a) == a
+    True
+    >>> GuidCompare(a) != b
+    True
+    >>> GuidCompare(a) == b
+    False
+    >>> GuidCompare(a) > b
+    False
+    >>> GuidCompare(a) < b
+    True
+    >>> GuidCompare(b) > a
+    True
+
+    If the GUID portion does not match, equality checks will reflect that in
+    equality checks:
+
+    >>> real_guid_b = '8F6DD61F-3498-3FF1-12B9-38DBE1CA9B06'
+    >>> c = f'{real_guid_b}-2024-01-01-12-30-00'
+    >>> GuidCompare(a) == c
+    False
+    >>> GuidCompare(b) == c
+    False
+    >>> GuidCompare(c) == a
+    False
+    >>> GuidCompare(c) == b
+    False
+
+    ``<``, ``>`` checks however are not supported in this case:
+
+    >>> GuidCompare(c) > a
+    Traceback (most recent call last):
+        ...
+    TypeError: '>' not supported ...
+
+    """
+    __slots__ = ('guid', 'real_guid', 'dt')
+    def __init__(self, guid: GUID) -> None:
+        self.guid = guid
+        self.real_guid = get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid)
+        self.dt = parse_dt_from_guid(guid)
+
+    @classmethod
+    def _coerce_other(cls, other: Self|GUID) -> Self:
+        if not isinstance(other, GuidCompare):
+            other = cls(other)
+        return other
+
+    def __eq__(self, other: Self|GUID):
+        other = self._coerce_other(other)
+        return self.guid == other.guid
+
+    def __ne__(self, other: Self|GUID):
+        other = self._coerce_other(other)
+        return self.guid != other.guid
+
+    def __gt__(self, other: Self|GUID):
+        other = self._coerce_other(other)
+        if self.real_guid != other.real_guid:
+            return NotImplemented
+        return self.dt > other.dt
+
+    def __ge__(self, other: Self|GUID):
+        other = self._coerce_other(other)
+        if self.real_guid != other.real_guid:
+            return NotImplemented
+        return self.dt >= other.dt
+
+    def __lt__(self, other: Self|GUID):
+        other = self._coerce_other(other)
+        if self.real_guid != other.real_guid:
+            return NotImplemented
+        return self.dt < other.dt
+
+    def __le__(self, other: Self|GUID):
+        other = self._coerce_other(other)
+        if self.real_guid != other.real_guid:
+            return NotImplemented
+        return self.dt <= other.dt
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__}: {self}>'
+
+    def __str__(self) -> str:
+        return self.guid
+
 
 @dataclass
 class FeedItem(Serializable):
