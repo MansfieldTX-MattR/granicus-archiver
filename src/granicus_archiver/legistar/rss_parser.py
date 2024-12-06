@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Self, Iterator, Iterable, Any, Literal, ClassVar
+from typing_extensions import TypeIs
 
 import dataclasses
 from dataclasses import dataclass
@@ -89,6 +90,45 @@ def get_elem_text(elem: PyQuery, selector: str|None = None) -> str:
     txt = elem.text()
     assert isinstance(txt, str)
     return txt.strip(' ')
+
+
+def is_guid(item: str) -> TypeIs[GUID]:
+    """Check whether the given value is a valid :obj:`~.types.GUID`
+    """
+    num_real_guid_segments = 5
+    num_dt_segments = 6
+    dt_segment_lengths = [4, 2, 2, 2, 2, 2]
+    segments = item.split('-')
+    if len(segments) != num_real_guid_segments + num_dt_segments:
+        return False
+    if not is_real_guid('-'.join(segments[:num_real_guid_segments])):
+        return False
+    dt_segments = segments[-num_dt_segments:]
+    for segment, seg_len in zip(dt_segments, dt_segment_lengths):
+        if len(segment) != seg_len:
+            return False
+        if not segment.isdigit():
+            return False
+    return True
+
+def is_real_guid(item: str) -> TypeIs[REAL_GUID]:
+    """Check whether the given value is a valid :obj:`~.types.REAL_GUID`
+    """
+    segment_lengths = [8, 4, 4, 4, 12]
+    num_segments = 5
+    segments = item.split('-')
+    if len(segments) != num_segments:
+        return False
+    hex_str = f'0x{"".join(segments)}'
+    try:
+        _ = int(hex_str, 0)
+    except ValueError:
+        return False
+    for segment, seg_len in zip(segments, segment_lengths):
+        if len(segment) != seg_len:
+            return False
+    return True
+
 
 def get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid: GUID) -> REAL_GUID:
     segment_lengths = [8, 4, 4, 4, 12]
