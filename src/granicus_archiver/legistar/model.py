@@ -756,7 +756,7 @@ class DetailPageResult(Serializable):
     def can_download(self) -> bool:
         """Whether this item may be safely downloaded
         """
-        if self.agenda_final:
+        if self.agenda_final and self.minutes_final:
             return True
         if self.is_hidden or self.is_future:
             return False
