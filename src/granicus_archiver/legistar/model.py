@@ -1283,7 +1283,7 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
 
     def iter_guid_matches(self) -> Iterator[tuple[CLIP_ID, DetailPageResult]]:
         """Iterate over items added by the :meth:`add_guid_match`,
-        :meth:`add_real_guid_match` and :meth:`add_clip_match_override` methods
+        :meth:`add_guid_match` and :meth:`add_clip_match_override` methods
 
         Results are tuples of :obj:`CLIP_ID` and :class:`DetailPageResult`
         """
