@@ -1,6 +1,9 @@
 from __future__ import annotations
-from typing import NewType, Literal
+from typing import TypeVar, NewType, Literal, TYPE_CHECKING
 import enum
+
+if TYPE_CHECKING:
+    from .model import DetailPageResult
 
 GUID = NewType('GUID', str)
 """Globally-Unique ID (but not really in this case)"""
@@ -29,3 +32,6 @@ NoClipT = Literal[DoesNotExistEnum.DoesNotExist]
 """Type parameter for :obj:`NoClip`"""
 NoClip = DoesNotExistEnum.DoesNotExist
 """Used to signify an item that should have no :class:`~.model.Clip`"""
+
+_GuidT = TypeVar('_GuidT', GUID, REAL_GUID)
+_ItemT = TypeVar('_ItemT', bound='DetailPageResult')

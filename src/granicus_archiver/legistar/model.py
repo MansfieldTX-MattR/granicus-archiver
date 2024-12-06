@@ -17,10 +17,10 @@ from pyquery.pyquery import PyQuery
 from yarl import URL
 
 from ..model import CLIP_ID, Serializable, FileMeta
-from .rss_parser import FeedItem
+from .rss_parser import FeedItem, get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info
 from .types import (
     GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID, Category,
-    NoClipT, NoClip,
+    NoClipT, NoClip, _GuidT, _ItemT,
 )
 from ..utils import remove_pdf_links
 
@@ -944,7 +944,112 @@ class DetailPageResult(Serializable):
 
 
 @dataclass
-class LegistarData(Serializable):
+class AbstractLegistarModel(Serializable, Generic[_GuidT, _ItemT]):
+    root_dir: Path
+
+    @abstractmethod
+    def get_clip_id_for_guid(
+        self,
+        guid: _GuidT,
+        use_overrides: bool = True
+    ) -> CLIP_ID|None|NoClipT:
+        raise NotImplementedError
+
+    @abstractmethod
+    def ensure_no_future_items(self) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def ensure_unique_item_folders(self) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_match_for_clip_id(
+        self,
+        clip_id: CLIP_ID
+    ) -> _ItemT|None|NoClipT:
+        raise NotImplementedError
+
+    @abstractmethod
+    def is_clip_id_available(self, clip_id: CLIP_ID) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def is_guid_matched(self, guid: _GuidT) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def add_guid_match(self, clip_id: CLIP_ID, guid: _GuidT) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def add_clip_match_override(
+        self,
+        real_guid: REAL_GUID,
+        clip_id: CLIP_ID|None|NoClipT
+    ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def add_detail_result(self, item: _ItemT) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def iter_guid_matches(self) -> Iterator[tuple[CLIP_ID, _ItemT]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_folder_for_item(self, item: _GuidT|_ItemT) -> Path:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __len__(self) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __iter__(self) -> Iterator[_ItemT]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __contains__(self, key: _GuidT|_ItemT) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __getitem__(self, key: _GuidT) -> _ItemT:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get(self, key: _GuidT) -> _ItemT|None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def keys(self) -> Iterator[_GuidT]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def items(self) -> Iterator[tuple[_GuidT, _ItemT]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def item_dict(self) -> dict[_GuidT, _ItemT]:
+        raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
+    def load(
+        cls,
+        filename: PathLike,
+        root_dir: Path|None = None,
+    ) -> Self:
+        raise NotImplementedError
+
+    @abstractmethod
+    def save(self, filename: PathLike, indent: int|None = 2) -> None:
+        raise NotImplementedError
+
+
+@dataclass
+class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
     """Container for data gathered from Legistar
     """
     root_dir: Path
@@ -953,6 +1058,9 @@ class LegistarData(Serializable):
     matched_guids: dict[CLIP_ID, GUID] = field(default_factory=dict)
     """:attr:`Clips <.model.Clip.id>` that have been matched to
     :attr:`FeedItems <.rss_parser.FeedItem.guid>`
+    """
+    matched_real_guids: dict[CLIP_ID, REAL_GUID] = field(default_factory=dict)
+    """Similar to :attr:`matched_guids`, but uses :obj:`~.types.REAL_GUID`
     """
     detail_results: dict[GUID, DetailPageResult] = field(default_factory=dict)
     """Mapping of parsed :class:`DetailPageResult` items with their
@@ -975,6 +1083,10 @@ class LegistarData(Serializable):
     clip_id_overrides_rev: dict[CLIP_ID, REAL_GUID] = field(init=False)
     real_guid_map: dict[REAL_GUID, GUID] = field(init=False)
     def __post_init__(self) -> None:
+        self.matched_real_guids = {
+            k: get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(v)
+            for k, v in self.matched_guids.items()
+        }
         self.clip_id_overrides_rev = {
             v: k for k, v in self.clip_id_overrides.items() if v is not NoClip
         }
@@ -986,6 +1098,38 @@ class LegistarData(Serializable):
                 continue
             assert clip_id not in self.items_by_clip_id
             self.items_by_clip_id[clip_id] = item
+
+    def get_clip_id_for_guid(
+        self,
+        guid: GUID,
+        use_overrides: bool = True
+    ) -> CLIP_ID|None|NoClipT:
+        """Get the clip :attr:`~.model.Clip.id` linked to the given *guid*
+
+        Arguments:
+            guid: The item :attr:`~DetailPageResult.feed_guid`
+            use_overrides: Whether to use items in :attr:`clip_id_overrides`
+                (default is ``True``)
+
+        Returns one of:
+
+        - clip_id (:obj:`~.model.CLIP_ID`)
+            The matched :attr:`Clip.id <.model.Clip.id>` (if one was found)
+        - :obj:`~.types.NoClip`
+            If the item has been explicitly set to have no :class:`~.model.Clip`
+            associated with it
+        - :obj:`None`
+            If no match was found
+
+        """
+        item = self[guid]
+        if use_overrides and item.real_guid in self.clip_id_overrides:
+            return self.clip_id_overrides[item.real_guid]
+        if item.clip_id is not None:
+            return item.clip_id
+        matched_rev = {v:k for k,v in self.matched_real_guids.items()}
+        assert len(matched_rev) == len(self.matched_guids)
+        return matched_rev.get(item.real_guid)
 
     def get_future_items(self) -> Iterator[DetailPageResult]:
         """Iterate over any items in :attr:`detail_results` that are in the
@@ -1017,8 +1161,32 @@ class LegistarData(Serializable):
             s.add(p)
         assert len(item_paths) == len(set(item_paths))
 
-    def get_real_guids(self) -> set[REAL_GUID]:
-        return set([item.real_guid for item in self])
+    def is_clip_id_available(self, clip_id: CLIP_ID) -> bool:
+        """Check whether the given clip id is linked to an item (returns ``True``
+        if there is no link)
+        """
+        if clip_id in self.clip_id_overrides_rev:
+            return False
+        if clip_id in self.matched_guids:
+            return False
+        return True
+
+    def is_guid_matched(self, guid: GUID) -> bool:
+        """Check whether the item matching *guid* has a :class:`~.model.Clip`
+        associated with it
+        """
+        item = self[guid]
+        override = self.clip_id_overrides.get(item.real_guid)
+        if override is NoClip:
+            return True
+        if override is not None:
+            return True
+        if guid in self.matched_guids.values():
+            return True
+        real_guid = get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid)
+        if real_guid in self.matched_real_guids.values():
+            return True
+        return False
 
     def get_by_real_guid(self, real_guid: REAL_GUID) -> DetailPageResult|None:
         """Get the :class:`DetailPageResult` matching the given
@@ -1026,7 +1194,7 @@ class LegistarData(Serializable):
 
         If no match is found, ``None`` is returned.
         """
-        d = {item.real_guid: item.feed_guid for item in self}
+        d = self.real_guid_map
         if real_guid not in d:
             return None
         guid = d[real_guid]
@@ -1057,10 +1225,14 @@ class LegistarData(Serializable):
         :attr:`~DetailPageLinks.video` url to parse.
         """
         assert guid not in self.matched_guids.values()
+        real_guid = get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid)
+        assert real_guid not in self.matched_real_guids.values()
         if clip_id in self.matched_guids:
             assert self.matched_guids[clip_id] == guid
+            assert self.matched_real_guids[clip_id] == real_guid
             return
         self.matched_guids[clip_id] = guid
+        self.matched_real_guids[clip_id] = real_guid
 
     def add_clip_match_override(
         self,
@@ -1398,6 +1570,12 @@ class LegistarData(Serializable):
 
     def keys(self) -> Iterator[GUID]:
         yield from self.detail_results.keys()
+
+    def items(self) -> Iterator[tuple[GUID, DetailPageResult]]:
+        yield from self.detail_results.items()
+
+    def item_dict(self) -> dict[GUID, DetailPageResult]:
+        return self.detail_results
 
     @classmethod
     def load(
