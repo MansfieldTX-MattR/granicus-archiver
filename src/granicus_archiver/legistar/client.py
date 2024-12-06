@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import ClassVar, Self, TypedDict, NotRequired, Unpack, TYPE_CHECKING
+from typing import TypeVar, Generic, ClassVar, Self, Iterator, TYPE_CHECKING, cast
+
+from abc import ABC, abstractmethod
 from pathlib import Path
 import tempfile
 import asyncio
@@ -18,25 +20,36 @@ from ..utils import (
     remove_pdf_links,
     is_same_filesystem,
 )
-from ..model import ClipCollection, Clip
-from .types import GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip
+from ..model import ClipCollection, Clip, FileMeta
+from .types import (
+    GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip,
+    _GuidT, _ItemT,
+)
 from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
     is_attachment_uid, uid_to_file_key, make_path_legal,
+    FilePathURLComplete, AbstractFile, AbstractLegistarModel,
 )
 from ..downloader import Downloader, DownloadResult, StupidZeroContentLengthError
 
 
+_ModelT = TypeVar('_ModelT', bound=AbstractLegistarModel)
 
-class Client:
+
+class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
     temp_dir: Path
     _temp_dir: tempfile.TemporaryDirectory
     _default_limit: ClassVar[int] = 8
     session: ClientSession
     scheduler: aiojobs.Scheduler
     download_scheduler: aiojobs.Scheduler
-    waiter: JobWaiters[DetailPageResult]
+    waiter: JobWaiters[_ItemT]
+    legistar_data: AbstractLegistarModel[_GuidT, _ItemT]
+    incomplete_items: dict[_GuidT, FeedItem]
+    incomplete_existing_items: dict[_GuidT, FeedItem]
+    guid_collisions: dict[REAL_GUID, tuple[FeedItem, list[str]]]
+    ambiguous_matches: dict[_GuidT, tuple[_ItemT, Clip]]
     def __init__(
         self,
         clips: ClipCollection,
@@ -45,23 +58,38 @@ class Client:
         strip_pdf_links: bool = False
     ) -> None:
         self.clips = clips
-        self.data_filename = config.legistar.data_file
+        self.config = config
         self.feed_urls = config.legistar.feed_urls
         self.legistar_category_maps = config.legistar.category_maps
         self.allow_updates = allow_updates
         self.strip_pdf_links = strip_pdf_links
-        root_dir = config.legistar.out_dir
-        self.config = config
-        if self.data_filename.exists():
-            self.legistar_data = LegistarData.load(self.data_filename, root_dir=root_dir)
-        else:
-            self.legistar_data = LegistarData(root_dir=root_dir)
         self.all_feeds: dict[str, Feed] = {}
-        self.incomplete_items: dict[GUID, FeedItem] = {}
-        self.incomplete_existing_items: dict[GUID, FeedItem] = {}
-        self.guid_collisions: dict[REAL_GUID, tuple[FeedItem, list[str]]] = {}
-        self.ambiguous_matches: dict[GUID, tuple[DetailPageResult, Clip]] = {}
+        self.incomplete_items = {}
+        self.incomplete_existing_items = {}
+        self.guid_collisions = {}
+        self.ambiguous_matches = {}
         self.completion_counts = CompletionCounts(enable_log=True)
+        mcls = self._get_model_cls()
+        if self.data_filename.exists():
+            self.legistar_data = mcls.load(self.data_filename, root_dir=self.root_dir)
+        else:
+            self.legistar_data = mcls(root_dir=self.root_dir)
+
+    @classmethod
+    @abstractmethod
+    def _get_model_cls(cls) -> type[_ModelT]:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def root_dir(self) -> Path:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def data_filename(self) -> Path:
+        raise NotImplementedError
+
 
     async def open(self) -> None:
         self.session = ClientSession()
@@ -89,13 +117,6 @@ class Client:
     async def __aexit__(self, *args):
         await self.close()
 
-    def get_item_count(self) -> int:
-        return len(self.legistar_data)
-
-    def get_file_count(self) -> int:
-        root_dir = self.legistar_data.root_dir
-        return len([p for p in root_dir.glob('**/*.pdf')])
-
     async def parse_feed(self, name: str, feed_url: URL) -> tuple[str, Feed]:
         logger.info(f'parsing feed "{name}"')
         async with self.session.get(feed_url) as resp:
@@ -119,114 +140,114 @@ class Client:
         logger.debug(f'{len(feed)=}')
         return name, feed
 
-    async def parse_detail_page(self, feed_item: FeedItem) -> DetailPageResult:
+    async def parse_detail_page(self, feed_item: FeedItem) -> _ItemT:
         logger.debug(f'parse page: {feed_item.link}')
         async with self.session.get(feed_item.link) as resp:
             if not resp.ok:
                 resp.raise_for_status()
             resp_text = await resp.text()
-        return DetailPageResult.from_html(
-            html_str=resp_text,
-            feed_item=feed_item,
-        )
+            return self._create_detail_page(resp_text, feed_item)
+
+    @abstractmethod
+    def _create_detail_page(self, html_str: str|bytes, feed_item: FeedItem) -> _ItemT:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _add_detail_page_to_model(self, item: _ItemT) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _id_from_feed_item(self, feed_item: FeedItem) -> _GuidT:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _id_from_item(self, item: _ItemT) -> _GuidT:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _get_model_item(self, key: _GuidT) -> _ItemT|None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def check_item_update(self, feed_item: FeedItem) -> tuple[_ItemT|None, bool, bool]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _iter_model_items(self) -> Iterator[_ItemT]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _get_folder_for_item(self, item: _ItemT) -> Path:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _item_needs_download(self, item: _ItemT) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _iter_files_for_item(self, item: _ItemT) -> Iterator[FilePathURLComplete[LegistarFileUID]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _set_file_download_complete(
+        self,
+        item: _ItemT,
+        uid: LegistarFileUID,
+        metadata: FileMeta,
+        pdf_links_removed: bool
+    ) -> AbstractFile:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def handle_item_update(
+        self,
+        feed_item: FeedItem,
+        existing_item: _ItemT,
+        apply_actions: bool,
+        parsed_item: _ItemT|None = None
+    ) -> tuple[bool, list[str]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def check_files(self):
+        raise NotImplementedError
+
+    async def do_page_parse(self, feed_item: FeedItem) -> _ItemT|None:
+        try:
+            result = await self.parse_detail_page(feed_item)
+        except HiddenItemError:
+            result = None
+        except IncompleteItemError:
+            logger.warning(f'incomplete item: {feed_item.to_str()}')
+            self.incomplete_items[self._id_from_feed_item(feed_item)] = feed_item
+            result = None
+        return result
 
     async def parse_detail_pages(self, name: str, feed: Feed) -> tuple[str, bool]:
-        async def do_page_parse(feed_item: FeedItem) -> DetailPageResult|None:
-            try:
-                result = await self.parse_detail_page(feed_item)
-            except HiddenItemError:
-                result = None
-            except IncompleteItemError:
-                logger.warning(f'incomplete item: {feed_item.to_str()}')
-                self.incomplete_items[feed_item.guid] = feed_item
-                result = None
-            return result
-
-        async def handle_update(
-            feed_item: FeedItem,
-            existing_item: DetailPageResult,
-            apply_actions: bool
-        ) -> tuple[bool, list[str]]:
-            # NOTE: This is untested so the mutations are currently disabled
-            result = await do_page_parse(feed_item)
-            if result is None:
-                return False, []
-            update_result = existing_item.update(result)
-            changed, file_keys, attachment_keys, changed_attrs = update_result
-            assert changed_attrs is not None
-            if not changed:
-                assert not len(changed_attrs)
-                return False, []
-            item_files = self.legistar_data.files.get(existing_item.feed_guid)
-            actions = [
-                f'setattr(obj, "{key}", {val})'
-                for key, val in changed_attrs.items()
-            ]
-            if item_files is not None:
-                for file_key in file_keys:
-                    file_obj = item_files[file_key]
-                    if file_obj is None:
-                        continue
-                    filename = file_obj.filename
-                    actions.append(f'rm {filename}')
-                    actions.append(f'del files["{file_key}"]')
-                    if apply_actions:
-                        filename.unlink()
-                        del item_files.files[file_key]
-                for att_name in attachment_keys:
-                    attachment = item_files.attachments.get(att_name)
-                    if attachment is None:
-                        continue
-                    actions.append(f'rm {attachment.filename}')
-                    actions.append(f'del attachments["{att_name}"]')
-                    if apply_actions:
-                        attachment.filename.unlink()
-                        del item_files.attachments[att_name]
-
-            return True, actions
-
         logger.debug(f'parsing detail pages for "{name}"')
         changed = False
         try:
             for feed_item in feed:
                 if feed_item.is_future:
                     continue
-                parsed_item = self.legistar_data.get(feed_item.guid)
-                if parsed_item is None:
-                    similar_item = self.legistar_data.get_by_real_guid(feed_item.real_guid)
-                    if similar_item is not None:
-                        if self.allow_updates:
-                            logger.info(f'Updating item "{similar_item.feed_guid}"')
-                            _changed, actions = await handle_update(
-                                feed_item, similar_item, apply_actions=True,
-                            )
-                            logger.info(f'Update item: {actions=}')
-                            if _changed:
-                                changed = True
-                            continue
-                        else:
-                            _changed, actions = await handle_update(
-                                feed_item, similar_item.copy(), apply_actions=False,
-                            )
-                            if not _changed:
-                                continue
-                            logger.warning(f'existing item needs update: {feed_item.to_str()}, {actions=}')
-                            self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
-                            continue
-
+                parsed_item, exists, _changed = await self.check_item_update(feed_item)
+                if _changed:
+                    changed = True
+                if exists:
+                    continue
                 if parsed_item is not None:
                     if parsed_item.is_hidden:
                         continue
                     if not parsed_item.agenda_final and not parsed_item.is_in_past:
                         logger.warning(f'existing item not final: {feed_item.to_str()}')
-                        self.incomplete_existing_items[feed_item.guid] = feed_item
+                        self.incomplete_existing_items[self._id_from_feed_item(feed_item)] = feed_item
                     continue
-                result = await do_page_parse(feed_item)
+                result = await self.do_page_parse(feed_item)
                 if result is None:
                     continue
 
                 assert parsed_item is None
-                self.legistar_data.add_detail_result(result)
+                self._add_detail_page_to_model(result)
                 changed = True
         except Exception as exc:
             logger.exception(exc)
@@ -234,9 +255,10 @@ class Client:
         logger.debug('detail wait complete')
         return name, changed
 
-    def match_clips(self) -> None:
+    def match_clips(self) -> bool:
+        changed = False
         for clip in self.clips:
-            if clip.id in self.legistar_data.matched_guids:
+            if not self.legistar_data.is_clip_id_available(clip.id):
                 continue
             item = self.legistar_data.find_match_for_clip_id(clip.id)
             if item is NoClip:
@@ -246,13 +268,16 @@ class Client:
                 if item is None:
                     continue
                 logger.debug(f'match item from feed: {clip.unique_name=}, {item.feed_item.to_str()}')
-            if item.feed_guid in self.legistar_data.matched_guids.values():
+            guid = self._id_from_item(item)
+            if self.legistar_data.is_guid_matched(guid):
                 logger.warning(f'ambiguous feed match: {clip.unique_name=}, {item.feed_item.to_str()}')
-                self.ambiguous_matches[item.feed_guid] = (item, clip)
+                self.ambiguous_matches[guid] = (item, clip)
                 continue
-            self.legistar_data.add_guid_match(clip.id, item.feed_guid)
+            self.legistar_data.add_guid_match(clip.id, guid)
+            changed = True
+        return changed
 
-    def get_clip_feed_match(self, clip: Clip) -> DetailPageResult|None:
+    def get_clip_feed_match(self, clip: Clip) -> _ItemT|None:
         feed_item: FeedItem|None = None
         for feed in self.all_feeds.values():
             try:
@@ -261,13 +286,14 @@ class Client:
                 feed_item = None
             if feed_item is None or feed_item.is_future:
                 continue
-            parsed_item = self.legistar_data[feed_item.guid]
+            parsed_item = self._get_model_item(self._id_from_feed_item(feed_item))
+            assert parsed_item is not None
             if parsed_item.is_draft or parsed_item.is_hidden:
                 return None
             return parsed_item
 
 
-    async def parse_feeds(self):
+    async def parse_feeds(self) -> bool:
         feed_waiters = JobWaiters[tuple[str, Feed]](self.scheduler)
         for name, feed_url in self.feed_urls.items():
             await feed_waiters.spawn(self.parse_feed(name, feed_url))
@@ -277,18 +303,22 @@ class Client:
             name, feed = result.result
             self.all_feeds[name] = feed
 
+        changed = False
         for name, feed in self.all_feeds.items():
-            _, changed = await self.parse_detail_pages(name, feed)
+            _, _changed = await self.parse_detail_pages(name, feed)
             logger.success(f'feed parse complete for "{name}"')
-            if changed:
+            if _changed:
                 self.legistar_data.save(self.data_filename)
+                changed = True
+        return changed
 
     async def parse_all(self):
         self.legistar_data.ensure_no_future_items()
-        await self.parse_feeds()
+        items_changed = await self.parse_feeds()
         self.legistar_data.ensure_unique_item_folders()
-        self.match_clips()
-        self.legistar_data.save(self.data_filename)
+        clips_changed = self.match_clips()
+        if items_changed or clips_changed:
+            self.legistar_data.save(self.data_filename)
 
     def get_warning_items(self) -> str:
         """Get all parse warnings as a text block
@@ -324,13 +354,15 @@ class Client:
         return FeedItem.to_csv(*items)
 
     # @logger.catch
-    async def download_feed_item(self, guid: GUID) -> None:
+    async def download_feed_item(self, guid: _GuidT) -> None:
         loop = asyncio.get_running_loop()
         waiters = JobWaiters[tuple[LegistarFileUID, Path, DownloadResult]|None](self.download_scheduler)
         completion_waiters = JobWaiters(self.completion_scheduler)
         temp_dir = self.temp_dir / guid
         temp_dir.mkdir()
         chunk_size = 16384
+        detail_item = self._get_model_item(guid)
+        assert detail_item is not None
 
         @logger.catch(reraise=True)
         async def do_download(
@@ -388,8 +420,8 @@ class Client:
 
             if is_same_filesystem(temp_filename, abs_filename):
                 temp_filename.rename(abs_filename)
-                file_obj = self.legistar_data.set_uid_complete(
-                    guid, uid, meta, pdf_links_removed=self.strip_pdf_links,
+                file_obj = self._set_file_download_complete(
+                    detail_item, uid, meta, pdf_links_removed=self.strip_pdf_links,
                 )
                 assert file_obj.pdf_links_removed
                 assert file_obj.metadata.content_length == meta.content_length
@@ -403,16 +435,15 @@ class Client:
                         await dst_fd.write(chunk)
             logger.debug(f'copy complete for "{abs_filename}"')
             temp_filename.unlink()
-            file_obj = self.legistar_data.set_uid_complete(
-                guid, uid, meta, pdf_links_removed=self.strip_pdf_links,
+            file_obj = self._set_file_download_complete(
+                detail_item, uid, meta, pdf_links_removed=self.strip_pdf_links,
             )
             assert file_obj.pdf_links_removed
             assert file_obj.metadata.content_length == meta.content_length
 
-        detail_item = self.legistar_data[guid]
-        p = self.legistar_data.get_folder_for_item(detail_item)
+        p = self._get_folder_for_item(detail_item)
         logger.info(f'downloading files for {p.name}')
-        it = self.legistar_data.iter_url_paths_uid(guid)
+        it = self._iter_files_for_item(detail_item)
         for uid, abs_filename, url, is_complete in it:
             if is_complete:
                 continue
@@ -451,15 +482,12 @@ class Client:
         self.completion_counts.reset()
         self.legistar_data.root_dir.mkdir(exist_ok=True)
         waiters = JobWaiters(self.scheduler)
-        keys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet']
-        for guid in self.legistar_data.detail_results.keys():
-            detail_item = self.legistar_data[guid]
+        for detail_item in self._iter_model_items():
             if not detail_item.can_download:
                 continue
-            guid = detail_item.feed_guid
-            files = self.legistar_data.get_or_create_files(guid)
-            if files.get_is_complete(self.legistar_data, keys):
+            if not self._item_needs_download(detail_item):
                 continue
+            guid = self._id_from_item(detail_item)
             await waiters.spawn(self.download_feed_item(guid))
             self.completion_counts.num_queued += 1
             if self.completion_counts.full:
@@ -471,8 +499,162 @@ class Client:
         finally:
             self.legistar_data.save(self.data_filename)
 
+
+
+class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
+    @classmethod
+    def _get_model_cls(cls) -> type[LegistarData]:
+        return LegistarData
+
+    @property
+    def root_dir(self) -> Path:
+        return self.config.legistar.out_dir
+
+    @property
+    def data_filename(self) -> Path:
+        return self.config.legistar.data_file
+
+    @property
+    def _legistar_data(self) -> LegistarData:
+        return cast(LegistarData, self.legistar_data)
+
+    def get_item_count(self) -> int:
+        return len(self.legistar_data)
+
+    def get_file_count(self) -> int:
+        root_dir = self.legistar_data.root_dir
+        return len([p for p in root_dir.glob('**/*.pdf')])
+
+    def _create_detail_page(self, html_str: str | bytes, feed_item: FeedItem) -> DetailPageResult:
+        return DetailPageResult.from_html(
+            html_str=html_str,
+            feed_item=feed_item,
+        )
+
+    def _id_from_feed_item(self, feed_item: FeedItem) -> GUID:
+        return feed_item.guid
+
+    def _get_model_item(self, key: GUID) -> DetailPageResult|None:
+        return self.legistar_data.get(key)
+
+    def _add_detail_page_to_model(self, item: DetailPageResult) -> None:
+        self.legistar_data.add_detail_result(item)
+
+    def _id_from_item(self, item: DetailPageResult) -> GUID:
+        return item.feed_guid
+
+    def _iter_model_items(self) -> Iterator[DetailPageResult]:
+        yield from self.legistar_data
+
+    def _get_folder_for_item(self, item: DetailPageResult) -> Path:
+        return self.legistar_data.get_folder_for_item(item)
+
+    def _item_needs_download(self, item: DetailPageResult) -> bool:
+        if not item.can_download:
+            return False
+        keys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet']
+        guid = item.feed_guid
+        files = self._legistar_data.get_or_create_files(guid)
+        if files.get_is_complete(self._legistar_data, keys):
+            return False
+        return True
+
+    def _iter_files_for_item(self, item: DetailPageResult) -> Iterator[FilePathURLComplete[LegistarFileUID]]:
+        return self._legistar_data.iter_url_paths_uid(item.feed_guid)
+
+    def _set_file_download_complete(
+        self,
+        item: DetailPageResult,
+        uid: LegistarFileUID,
+        metadata: FileMeta,
+        pdf_links_removed: bool
+    ) -> AbstractFile:
+        return self._legistar_data.set_uid_complete(
+            item.feed_guid, uid, metadata, pdf_links_removed=pdf_links_removed,
+        )
+
+    async def handle_item_update(
+        self,
+        feed_item: FeedItem,
+        existing_item: DetailPageResult,
+        apply_actions: bool,
+        parsed_item: DetailPageResult|None = None
+    ) -> tuple[bool, list[str]]:
+        # NOTE: This is untested so the mutations are currently disabled
+        if parsed_item is not None:
+            result = parsed_item
+        else:
+            result = await self.do_page_parse(feed_item)
+        if result is None:
+            return False, []
+        update_result = existing_item.update(result)
+        changed, file_keys, attachment_keys, changed_attrs = update_result
+        assert changed_attrs is not None
+        if not changed:
+            assert not len(changed_attrs)
+            return False, []
+        item_files = self._legistar_data.files.get(existing_item.feed_guid)
+        actions = [
+            f'setattr(obj, "{key}", {val})'
+            for key, val in changed_attrs.items()
+        ]
+        if item_files is not None:
+            for file_key in file_keys:
+                file_obj = item_files[file_key]
+                if file_obj is None:
+                    continue
+                filename = file_obj.filename
+                actions.append(f'rm {filename}')
+                actions.append(f'del files["{file_key}"]')
+                if apply_actions:
+                    filename.unlink()
+                    del item_files.files[file_key]
+            for att_name in attachment_keys:
+                attachment = item_files.attachments.get(att_name)
+                if attachment is None:
+                    continue
+                actions.append(f'rm {attachment.filename}')
+                actions.append(f'del attachments["{att_name}"]')
+                if apply_actions:
+                    attachment.filename.unlink()
+                    del item_files.attachments[att_name]
+
+        return True, actions
+
+    async def check_item_update(self, feed_item: FeedItem) -> tuple[DetailPageResult|None, bool, bool]:
+        changed = False
+        parsed_item = self._legistar_data.get(feed_item.guid)
+        exists = parsed_item is not None
+        if parsed_item is not None:
+            return parsed_item, exists, changed
+
+        similar_item = self._legistar_data.get_by_real_guid(feed_item.real_guid)
+        exists = similar_item is not None
+        if similar_item is None:
+            return parsed_item, exists, changed
+
+        if self.allow_updates:
+            logger.info(f'Updating item "{similar_item.feed_guid}"')
+            tmp_item = similar_item.copy()
+            _changed, actions = await self.handle_item_update(
+                feed_item, tmp_item, apply_actions=True,
+            )
+            self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
+            logger.info(f'Update item: {actions=}')
+            if _changed:
+                self._legistar_data.detail_results[similar_item.feed_guid] = tmp_item
+                changed = True
+        else:
+            _changed, actions = await self.handle_item_update(
+                feed_item, similar_item.copy(), apply_actions=False,
+            )
+            if _changed:
+                logger.warning(f'existing item needs update: {feed_item.to_str()}, {actions=}')
+                self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
+        return parsed_item, exists, changed
+
     def check_files(self):
-        self.legistar_data.ensure_unique_item_folders()
+        self._legistar_data.ensure_unique_item_folders()
 
         for clip_id, detail_result in self.legistar_data.iter_guid_matches():
             clip = self.clips[clip_id]
@@ -487,8 +669,8 @@ class Client:
 
         asset_paths: set[Path] = set()
         illegal_dirs: set[Path] = set()
-        for files in self.legistar_data.files.values():
-            for t in files.iter_url_paths_uid(self.legistar_data):
+        for files in self._legistar_data.files.values():
+            for t in files.iter_url_paths_uid(self._legistar_data):
                 legal_dir = make_path_legal(t.filename.parent, is_dir=True)
                 if legal_dir != t.filename.parent:
                     if t.filename.parent not in illegal_dirs:
