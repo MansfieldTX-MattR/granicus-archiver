@@ -917,6 +917,9 @@ class DetailPageResult(Serializable):
         """
         return self.deserialize(self.serialize())
 
+    def to_str(self) -> str:
+        return self.feed_item.to_str()
+
     def update(self, other: Self) -> UpdateResult:
         """Update *self* with changed attributes in *other*
         """
@@ -1263,7 +1266,7 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
         assert item.feed_guid not in self.detail_results
         oth_guid = self.real_guid_map.get(item.real_guid)
         if oth_guid is not None:
-            raise KeyError(f'real_guid exists: {item.feed_guid=}, {oth_guid=}')
+            raise KeyError(f'real_guid exists: {item.to_str()=}, {oth_guid=}')
         self.detail_results[item.feed_guid] = item
         self.real_guid_map[item.real_guid] = item.feed_guid
         clip_id = item.links.get_clip_id_from_video()
