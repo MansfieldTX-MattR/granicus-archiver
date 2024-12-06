@@ -7,5 +7,6 @@
     :maxdepth: 2
 
     model
+    guid_model
     rss_parser
     types

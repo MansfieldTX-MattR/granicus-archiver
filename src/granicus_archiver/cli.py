@@ -15,6 +15,7 @@ from . import html_builder
 from .googledrive import auth as googleauth
 from .googledrive import client as googleclient
 from .legistar import client as legistar_client
+from .legistar import guid_client as legistar_guid_client
 from .legistar.model import LegistarData
 from . import set_local_timezone
 
@@ -371,6 +372,71 @@ def download_legistar(
             td_p = Path(td).resolve()
             assert td_p.parent == temp_dir.resolve()
     c = asyncio.run(legistar_client.amain(
+        config=obj.config,
+        max_clips=max_clips,
+        allow_updates=allow_updates,
+        strip_pdf_links=strip_pdf_links,
+    ))
+    if incomplete_csv is not None:
+        csv = c.get_incomplete_csv()
+        incomplete_csv.write_text(csv)
+        click.echo(f'incomplete items written to {incomplete_csv}')
+    else:
+        click.echo('')
+        click.echo(c.get_warning_items())
+
+@legistar.command(name='download-rguid')
+@click.option('--allow-updates/--no-allow-updates', default=False)
+@click.option(
+    '--max-clips', type=int, required=False, default=0, show_default=True,
+    help='Maximum number of clips to download agenda packets for. If zero, downloads are disabled',
+)
+@click.option(
+    '--strip-pdf-links/--no-strip-pdf-links', default=True, show_default=True,
+    help='Whether to remove embedded links from downloaded pdf files',
+)
+@click.option(
+    '--temp-dir',
+    type=click.Path(
+        file_okay=False,
+        dir_okay=True,
+        exists=True,
+        path_type=Path,
+    ),
+    help="Directory for temporary files. Only set this if you know what you're doing",
+)
+@click.option(
+    '--incomplete-csv',
+    type=click.Path(
+        file_okay=True,
+        dir_okay=False,
+        path_type=Path,
+    ),
+    help='Optional file to write incomplete items to (as CSV)',
+)
+@click.pass_obj
+def download_legistar_rguid(
+    obj: BaseContext,
+    allow_updates: bool,
+    max_clips: int,
+    strip_pdf_links: bool,
+    temp_dir: Path|None,
+    incomplete_csv: Path|None
+):
+    """Parse and download legistar files
+    """
+    if temp_dir is not None:
+        assert temp_dir.exists()
+        temp_dir_contents = [f for f in temp_dir.iterdir()]
+        if len(temp_dir_contents):
+            click.echo('\n'.join([str(f) for f in temp_dir_contents]))
+            click.confirm('Temp dir not empty. Continue?')
+        os.environ['TMPDIR'] = str(temp_dir)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            td_p = Path(td).resolve()
+            assert td_p.parent == temp_dir.resolve()
+    c = asyncio.run(legistar_guid_client.amain(
         config=obj.config,
         max_clips=max_clips,
         allow_updates=allow_updates,
