@@ -1248,12 +1248,20 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
             real_guid: The :attr:`~DetailPageResult.real_guid` of the legistar
                 item
             clip_id: The clip :attr:`.model.Clip.id` matching the item. If
-                :obj:`None` or :obj:`~.types.NoClip` is given, this signifies that
+                :obj:`~.types.NoClip` is given, this signifies that
                 the item should not have a :class:`~.model.Clip` associated
-                with it.
+                with it. If :obj:`None` is given, any previously added overrides
+                for *real_guid* will be removed.
         """
         if clip_id is None:
-            clip_id = NoClip
+            if real_guid not in self.clip_id_overrides:
+                return
+            real_clip_id = self.clip_id_overrides[real_guid]
+            if real_clip_id is not NoClip:
+                assert self.clip_id_overrides_rev[real_clip_id] == real_guid
+                del self.clip_id_overrides_rev[real_clip_id]
+            del self.clip_id_overrides[real_guid]
+            return
         if clip_id is not NoClip:
             assert clip_id not in self.clip_id_overrides_rev
             self.clip_id_overrides_rev[clip_id] = real_guid
