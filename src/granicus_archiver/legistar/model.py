@@ -1231,9 +1231,7 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
         real_guid = get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info(guid)
         assert real_guid not in self.matched_real_guids.values()
         if clip_id in self.matched_guids:
-            assert self.matched_guids[clip_id] == guid
-            assert self.matched_real_guids[clip_id] == real_guid
-            return
+            raise KeyError(f'clip id {clip_id} already matched')
         self.matched_guids[clip_id] = guid
         self.matched_real_guids[clip_id] = real_guid
 
