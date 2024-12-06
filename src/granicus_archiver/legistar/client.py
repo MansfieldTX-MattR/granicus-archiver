@@ -618,8 +618,82 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
                 if apply_actions:
                     attachment.filename.unlink()
                     del item_files.attachments[att_name]
+        dirs_changed, dir_actions = self.relocate_files(
+            feed_item, existing_item, apply_actions, parsed_item,
+        )
+        actions.extend(dir_actions)
 
+        assert len(actions) > 0
         return True, actions
+
+    def relocate_files(
+        self,
+        feed_item: FeedItem,
+        existing_item: DetailPageResult,
+        apply_actions: bool,
+        parsed_item: DetailPageResult|None = None
+    ) -> tuple[bool, list[str]]:
+        actions: list[str] = []
+        item_files = self._legistar_data.files.get(existing_item.feed_guid)
+        if item_files is None:
+            return False, actions
+        dirs_changed = False
+        new_dir_name = existing_item.get_unique_folder().name
+        existing_base_dir = self.legistar_data.get_folder_for_item(existing_item.feed_guid)
+        base_dir = existing_base_dir.with_name(new_dir_name)
+        att_dir: Path|None = None
+        existing_att_dir: Path|None = None
+
+        if existing_base_dir == base_dir:
+            return False, actions
+        if existing_base_dir.exists():
+            assert not base_dir.exists()
+            actions.append(f'mkdir "{base_dir}"')
+            if apply_actions:
+                base_dir.mkdir()
+        for file_key, existing_fobj in item_files:
+            if existing_fobj is None:
+                continue
+            logger.debug(f'{existing_fobj.filename=}')
+            if existing_fobj.filename.parent == base_dir:
+                continue
+            dirs_changed = True
+            new_filename = base_dir / existing_fobj.filename.name
+            assert not new_filename.exists()
+            actions.append(f'mv "{existing_fobj.filename}" "{new_filename}"')
+            if apply_actions:
+                existing_fobj.filename.rename(new_filename)
+                existing_fobj.filename = new_filename
+        for att_key, att_file in item_files.attachments.items():
+            if att_file is None:
+                continue
+            if att_dir is None:
+                existing_att_dir = att_file.filename.parent
+                att_dir = base_dir / item_files.build_attachment_filename(att_key).parent.name
+                if att_dir != existing_att_dir and not att_dir.exists():
+                    actions.append(f'mkdir "{att_dir}"')
+                    if apply_actions:
+                        att_dir.mkdir(parents=True)
+            if att_file.filename.parent == att_dir:
+                continue
+            dirs_changed = True
+            new_filename = att_dir / att_file.filename.name
+            assert not new_filename.exists()
+            actions.append(f'mv "{att_file.filename}" "{new_filename}"')
+            if apply_actions:
+                att_file.filename.rename(new_filename)
+                att_file.filename = new_filename
+        if dirs_changed:
+            assert existing_base_dir is not None
+            if existing_att_dir is not None and existing_att_dir.exists():
+                actions.append(f'rmdir "{existing_att_dir}"')
+                if apply_actions:
+                    existing_att_dir.rmdir()
+            if existing_base_dir.exists():
+                actions.append(f'rmdir "{existing_base_dir}"')
+                if apply_actions:
+                    existing_base_dir.rmdir()
+        return dirs_changed, actions
 
     async def check_item_update(self, feed_item: FeedItem) -> tuple[DetailPageResult|None, bool, bool]:
         changed = False
