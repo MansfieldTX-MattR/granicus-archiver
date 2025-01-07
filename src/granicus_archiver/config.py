@@ -51,9 +51,15 @@ class GoogleConfig(BaseConfig):
     legistar_drive_folder: Path
     """Root folder name to upload legistar items within Drive"""
 
+    rguid_legistar_drive_folder: Path
+    """Root folder name to upload rguid legistar items within Drive"""
+
     def update(self, **kwargs) -> bool:
         changed = False
-        keys = ['user_credentials_filename', 'drive_folder', 'legistar_drive_folder']
+        keys = [
+            'user_credentials_filename', 'drive_folder',
+            'legistar_drive_folder', 'rguid_legistar_drive_folder',
+        ]
         for key in keys:
             if key not in kwargs:
                 continue
@@ -71,6 +77,7 @@ class GoogleConfig(BaseConfig):
             user_credentials_filename=Path.home() / '.granicus-oauth-user.json',
             drive_folder=Path('granicus-archive/data/granicus'),
             legistar_drive_folder=Path('granicus-archive/data/legistar'),
+            rguid_legistar_drive_folder=Path('granicus-archive/data/legistar-rguid'),
         )
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
@@ -81,14 +88,19 @@ class GoogleConfig(BaseConfig):
             user_credentials_filename=str(self.user_credentials_filename),
             drive_folder=str(self.drive_folder),
             legistar_drive_folder=str(self.legistar_drive_folder),
+            rguid_legistar_drive_folder=str(self.rguid_legistar_drive_folder),
         )
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
+        rg_folder = data.get(
+            'rguid_legistar_drive_folder', 'granicus-archive/data/legistar-rguid'
+        )
         return cls(
             user_credentials_filename=Path(data['user_credentials_filename']),
             drive_folder=Path(data['drive_folder']),
             legistar_drive_folder=Path(data['legistar_drive_folder']),
+            rguid_legistar_drive_folder=Path(rg_folder),
         )
 
 @dataclass

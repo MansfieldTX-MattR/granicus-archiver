@@ -613,6 +613,21 @@ class RGuidLegistarData(AbstractLegistarModel[REAL_GUID, RGuidDetailResult]):
             item = self[item]
         return item.files.full_base_dir
 
+    def get_path_for_uid(self, guid: REAL_GUID, uid: LegistarFileUID) -> tuple[Path, FileMeta|None]:
+        item = self.detail_results[guid]
+        p = item.files.get_file_path(uid, absolute=True)
+        fobj = item.files.get(uid)
+        meta = None if fobj is None else fobj.metadata
+        return p, meta
+
+    def iter_files_for_upload(self, guid: REAL_GUID) -> Iterator[tuple[LegistarFileUID, Path, FileMeta, bool]]:
+        item = self.detail_results[guid]
+        for fobj in item.files:
+            p = item.files.get_file_path(fobj.uid, absolute=True)
+            is_attachment = isinstance(fobj, AttachmentFile)
+            yield fobj.uid, p, fobj.metadata, is_attachment
+
+
     def get(self, key: REAL_GUID) -> RGuidDetailResult|None:
         return self.detail_results.get(key)
 

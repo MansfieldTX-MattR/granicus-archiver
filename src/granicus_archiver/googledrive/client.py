@@ -3,6 +3,7 @@ from typing import (
     TypeVar, Generic, Self, Coroutine, TypedDict, Literal, Any, AsyncGenerator,
     overload, cast, TYPE_CHECKING
 )
+from abc import ABC, abstractmethod
 import mimetypes
 from pathlib import Path
 import asyncio
@@ -21,8 +22,9 @@ from ..model import (
     ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID,
     FileMeta as ClipFileMeta,
 )
-from ..legistar.types import GUID, LegistarFileUID
-from ..legistar.model import LegistarData
+from ..legistar.types import GUID, REAL_GUID, LegistarFileUID, _GuidT, _ItemT
+from ..legistar.model import AbstractLegistarModel, LegistarData, DetailPageResult
+from ..legistar.guid_model import RGuidLegistarData, RGuidDetailResult
 from ..utils import (
     JobWaiters,
     CompletionCounts,
@@ -869,13 +871,12 @@ class ClipGoogleClient(GoogleClient):
         changed = any(results)
         return changed
 
+_LegModelT = TypeVar('_LegModelT', bound=AbstractLegistarModel)
 
-class LegistarGoogleClient(GoogleClient):
-    """Client to upload items from :class:`~.legistar.model.LegistarData`
-    """
+class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegModelT], ABC):
     max_clips: int
     """Maximum number of items to upload"""
-    legistar_data: LegistarData
+    legistar_data: _LegModelT
     """A :class:`~.legistar.model.LegistarData` instance"""
     item_scheduler: aiojobs.Scheduler
     check_scheduler: aiojobs.Scheduler
@@ -884,27 +885,30 @@ class LegistarGoogleClient(GoogleClient):
         self,
         root_conf: Config,
         max_clips: int,
-        legistar_data: LegistarData|None = None
+        legistar_data: _LegModelT|None = None
     ) -> None:
         super().__init__(root_conf)
         self.max_clips = max_clips
         if legistar_data is None:
-            legistar_data = LegistarData.load(self.root_conf.legistar.data_file)
+            legistar_data = self._load_legistar_data()
         self.legistar_data = legistar_data
         self.completion_counts = CompletionCounts(max_clips, enable_log=True)
 
     @property
-    def upload_dir(self) -> Path:
-        """Root folder name to upload within Drive
-        (alias for :attr:`.config.GoogleConfig.legistar_drive_folder`)
-        """
-        return self.root_conf.google.legistar_drive_folder
+    @abstractmethod
+    def upload_dir(self) -> Path: ...
+
+    @abstractmethod
+    def _load_legistar_data(self) -> _LegModelT: ...
+
+    @abstractmethod
+    def _build_cache_key(self, guid: _GuidT, uid: LegistarFileUID) -> MetaCacheKey: ...
 
     async def __aenter__(self) -> Self:
         self.item_scheduler = aiojobs.Scheduler(limit=16)
         self.check_scheduler = aiojobs.Scheduler(limit=16, pending_limit=1)
         self.upload_scheduler = aiojobs.Scheduler(limit=32)
-        self.check_waiters = JobWaiters[tuple[bool, GUID, set[Path]]](
+        self.check_waiters = JobWaiters[tuple[bool, _GuidT, set[Path]]](
             scheduler=self.check_scheduler
         )
         self.item_waiters = JobWaiters[bool](scheduler=self.item_scheduler)
@@ -916,7 +920,7 @@ class LegistarGoogleClient(GoogleClient):
         await self.upload_scheduler.wait_and_close()
         return await super().__aexit__(*args)
 
-    def get_file_upload_path(self, guid: GUID, uid: LegistarFileUID) -> Path:
+    def get_file_upload_path(self, guid: _GuidT, uid: LegistarFileUID) -> Path:
         """Get the uploaded filename for a legistar asset (relative to :attr:`upload_dir`)
         """
         filename, _ = self.legistar_data.get_path_for_uid(guid, uid)
@@ -924,7 +928,7 @@ class LegistarGoogleClient(GoogleClient):
         filename = filename.relative_to(self.legistar_data.root_dir)
         return self.upload_dir / filename
 
-    def get_local_meta(self, guid: GUID, uid: LegistarFileUID) -> ClipFileMeta|None:
+    def get_local_meta(self, guid: _GuidT, uid: LegistarFileUID) -> ClipFileMeta|None:
         """Get the local file metadata for the given *guid* and *uid*
         """
         _, meta = self.legistar_data.get_path_for_uid(guid, uid)
@@ -932,7 +936,7 @@ class LegistarGoogleClient(GoogleClient):
 
     async def get_remote_meta(
         self,
-        guid: GUID,
+        guid: _GuidT,
         uid: LegistarFileUID
     ) -> tuple[FileMetaFull|None, bool]:
         """Get metadata for the filename matching *guid* and *uid* (if it exists)
@@ -948,7 +952,7 @@ class LegistarGoogleClient(GoogleClient):
                 - **is_cached** (:class:`bool`): Whether the metadata was retrieved from the
                   :attr:`~.GoogleClient.meta_cache`
         """
-        meta_key = ('legistar', guid, uid)
+        meta_key = self._build_cache_key(guid, uid)
         meta = self.find_cached_file_meta(meta_key)
         is_cached = meta is not None
         if meta is None:
@@ -960,7 +964,7 @@ class LegistarGoogleClient(GoogleClient):
 
     async def upload_legistar_file(
         self,
-        guid: GUID,
+        guid: _GuidT,
         uid: LegistarFileUID,
         filename: Path,
         upload_filename: Path,
@@ -972,11 +976,12 @@ class LegistarGoogleClient(GoogleClient):
             filename, upload_filename, folder_id=folder_id,
         )
         if meta is not None:
-            self.set_cached_file_meta(('legistar', guid, uid), meta)
+            meta_key = self._build_cache_key(guid, uid)
+            self.set_cached_file_meta(meta_key, meta)
             return True
         return False
 
-    async def upload_legistar_item(self, guid: GUID):
+    async def upload_legistar_item(self, guid: _GuidT):
         """Upload all files for the legistar item matching the given *guid*
         """
         waiters = JobWaiters[bool](scheduler=self.upload_scheduler)
@@ -1014,7 +1019,7 @@ class LegistarGoogleClient(GoogleClient):
         self.completion_counts.num_completed += 1
         return all_skipped
 
-    async def check_item_needs_upload(self, guid: GUID) -> tuple[bool, GUID, set[Path]]:
+    async def check_item_needs_upload(self, guid: _GuidT) -> tuple[bool, _GuidT, set[Path]]:
         """Check if the item matching *guid* has any local files that need to
         be uploaded
         """
@@ -1054,7 +1059,7 @@ class LegistarGoogleClient(GoogleClient):
         :meth:`~GoogleClient.prebuild_paths` before spawning the upload jobs
         """
         upload_dirs = set[Path]()
-        guids_to_upload: list[GUID] = []
+        guids_to_upload: list[_GuidT] = []
         if self.completion_counts.full:
             return
         async for job in self.check_waiters:
@@ -1124,14 +1129,14 @@ class LegistarGoogleClient(GoogleClient):
                 raise UploadError(f'Uploaded file hash mismatch for "{filename}"')
 
         async def check_file(
-            guid: GUID,
+            guid: _GuidT,
             uid: LegistarFileUID,
             filename: Path
         ) -> tuple[FileMetaFull|None, bool, Path]:
             meta, is_cached = await self.get_remote_meta(guid, uid)
             return meta, is_cached, filename
 
-        async def check_item(guid: GUID) -> bool:
+        async def check_item(guid: _GuidT) -> bool:
             changed = False
             hash_waiters = JobWaiters(scheduler=self.upload_scheduler)
             meta_waiters = JobWaiters[tuple[FileMetaFull|None, bool, Path]](scheduler=self.upload_scheduler)
@@ -1163,6 +1168,42 @@ class LegistarGoogleClient(GoogleClient):
         changed = any(results)
         return changed
 
+
+
+class LegistarGoogleClient(AbstractLegistarGoogleClient[GUID, DetailPageResult, LegistarData]):
+    """Client to upload items from :class:`~.legistar.model.LegistarData`
+    """
+
+    @property
+    def upload_dir(self) -> Path:
+        """Root folder name to upload within Drive
+        (alias for :attr:`.config.GoogleConfig.legistar_drive_folder`)
+        """
+        return self.root_conf.google.legistar_drive_folder
+
+    def _load_legistar_data(self) -> LegistarData:
+        return LegistarData.load(self.root_conf.legistar.data_file)
+
+    def _build_cache_key(self, guid: GUID, uid: LegistarFileUID) -> MetaCacheKey:
+        return ('legistar', guid, uid)
+
+
+class RGuidLegistarGoogleClient(AbstractLegistarGoogleClient[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
+    """Client to upload items from :class:`~.legistar.guid_model.RGuidLegistarData`
+    """
+    @property
+    def upload_dir(self) -> Path:
+        """Root folder name to upload within Drive
+        (alias for :attr:`.config.GoogleConfig.rguid_legistar_drive_folder`)
+        """
+        return self.root_conf.google.rguid_legistar_drive_folder
+
+    def _load_legistar_data(self) -> RGuidLegistarData:
+        fn = RGuidLegistarData._get_data_file(self.root_conf)
+        return RGuidLegistarData.load(fn)
+
+    def _build_cache_key(self, guid: REAL_GUID, uid: LegistarFileUID) -> MetaCacheKey:
+        return ('legistar_rguid', guid, uid)
 
 
 @logger.catch
@@ -1262,6 +1303,26 @@ async def upload_legistar(
 
 async def check_legistar_meta(root_conf: Config, check_hashes: bool) -> None:
     client = LegistarGoogleClient(root_conf=root_conf, max_clips=0)
+    async with client:
+        changed = await client.check_meta(enable_hashes=check_hashes)
+
+    if changed:
+        logger.info(f'Meta changed, saving cache file')
+        client.save_cache()
+    else:
+        logger.info('No changes detected')
+
+async def upload_legistar_rguid(
+    root_conf: Config,
+    max_clips: int
+) -> None:
+    client = RGuidLegistarGoogleClient(root_conf=root_conf, max_clips=max_clips)
+    async with client:
+        await client.upload_all()
+    client.save_cache()
+
+async def check_legistar_rguid_meta(root_conf: Config, check_hashes: bool) -> None:
+    client = RGuidLegistarGoogleClient(root_conf=root_conf, max_clips=0)
     async with client:
         changed = await client.check_meta(enable_hashes=check_hashes)
 

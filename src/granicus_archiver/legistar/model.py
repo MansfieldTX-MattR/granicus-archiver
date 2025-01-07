@@ -1015,6 +1015,15 @@ class AbstractLegistarModel(Serializable, Generic[_GuidT, _ItemT]):
         raise NotImplementedError
 
     @abstractmethod
+    def get_path_for_uid(self, guid: _GuidT, uid: LegistarFileUID) -> tuple[Path, FileMeta|None]: ...
+
+    @abstractmethod
+    def iter_files_for_upload(
+        self,
+        guid: _GuidT
+    ) -> Iterator[tuple[LegistarFileUID, Path, FileMeta, bool]]: ...
+
+    @abstractmethod
     def __len__(self) -> int:
         raise NotImplementedError
 

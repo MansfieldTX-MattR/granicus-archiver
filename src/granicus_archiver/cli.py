@@ -620,6 +620,11 @@ def upload_legistar(
                     'Granicus and Legistar drive folders match. Continue?',
                     abort=True,
                 )
+            elif google_conf.legistar_drive_folder == google_conf.rguid_legistar_drive_folder:
+                click.confirm(
+                    'Legistar and Legistar-rguid drive folders match. Continue?',
+                    abort=True,
+                )
             obj.config.save(obj.config_file)
     asyncio.run(googleclient.upload_legistar(
         root_conf=obj.config,
@@ -637,6 +642,59 @@ def check_legistar_uploads(obj: BaseContext, check_hashes: bool):
     """Check uploaded metadata and verify content hashes
     """
     asyncio.run(googleclient.check_legistar_meta(
+        root_conf=obj.config, check_hashes=check_hashes,
+    ))
+
+
+@legistar.command(name='upload-rguid')
+@click.option(
+    '--max-clips', type=int, default=0,
+    help='Maximum number of clips to upload',
+)
+@click.option(
+    '--drive-folder',
+    type=click.Path(path_type=Path),
+    help='Name of the root folder to upload to',
+)
+@click.pass_obj
+def upload_legistar_rguid(
+    obj: BaseContext,
+    drive_folder: Path|None,
+    max_clips: int
+):
+    """Upload all local content to Google Drive
+    """
+    if drive_folder is not None:
+        google_conf = obj.config.google
+        if drive_folder != google_conf.rguid_legistar_drive_folder:
+            google_conf.rguid_legistar_drive_folder = drive_folder
+            if google_conf.drive_folder == google_conf.rguid_legistar_drive_folder:
+                click.confirm(
+                    'Granicus and Legistar drive folders match. Continue?',
+                    abort=True,
+                )
+            elif google_conf.legistar_drive_folder == google_conf.rguid_legistar_drive_folder:
+                click.confirm(
+                    'Legistar and Legistar-rguid drive folders match. Continue?',
+                    abort=True,
+                )
+            obj.config.save(obj.config_file)
+    asyncio.run(googleclient.upload_legistar_rguid(
+        root_conf=obj.config,
+        max_clips=max_clips,
+    ))
+
+
+@legistar.command(name='check-uploads-rguid')
+@click.option(
+    '--check-hashes/--no-check-hashes', default=False,
+    help='If supplied, verify checksums of uploaded files',
+)
+@click.pass_obj
+def check_legistar_rguid_uploads(obj: BaseContext, check_hashes: bool):
+    """Check uploaded metadata and verify content hashes
+    """
+    asyncio.run(googleclient.check_legistar_rguid_meta(
         root_conf=obj.config, check_hashes=check_hashes,
     ))
 

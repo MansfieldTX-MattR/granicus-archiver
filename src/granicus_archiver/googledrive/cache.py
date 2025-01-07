@@ -3,23 +3,25 @@ from typing import TypeVar, Generic, Literal, Any, Iterator, Self, overload
 
 from .types import FileMetaFull
 from ..model import CLIP_ID, ClipFileUploadKey
-from ..legistar.types import GUID, LegistarFileUID
+from ..legistar.types import GUID, REAL_GUID, LegistarFileUID
 
 
-IdType = TypeVar('IdType', CLIP_ID, GUID)
+IdType = TypeVar('IdType', CLIP_ID, GUID, REAL_GUID)
 """Id of an item within the top-level of :class:`MetaDict`"""
 Kt = TypeVar('Kt', ClipFileUploadKey, LegistarFileUID)
 """Sub key for values within an item"""
 Vt = TypeVar('Vt', bound=FileMetaFull)
 
 
-MetaKey = Literal['clips', 'legistar']
+MetaKey = Literal['clips', 'legistar', 'legistar_rguid']
 """Top-level key for :class:`FileCache`"""
 ClipCacheKey = tuple[Literal['clips'], CLIP_ID, ClipFileUploadKey]
 """Cache key for clip items"""
 LegistarCacheKey = tuple[Literal['legistar'], GUID, LegistarFileUID]
 """Cache key for legistar items"""
-MetaCacheKey = ClipCacheKey|LegistarCacheKey
+RGuidLegistarCacheKey = tuple[Literal['legistar_rguid'], REAL_GUID, LegistarFileUID]
+"""Cache key for real guid legistar items"""
+MetaCacheKey = ClipCacheKey|LegistarCacheKey|RGuidLegistarCacheKey
 """Unique cache item key (union of :obj:`ClipCacheKey` and :obj:`LegistarCacheKey`)"""
 
 
@@ -107,15 +109,17 @@ class MetaDict(Generic[IdType, Kt, Vt]):
 
 _ClipMetaDict = MetaDict[CLIP_ID, ClipFileUploadKey, FileMetaFull]
 _LegistarMetaDict = MetaDict[GUID, LegistarFileUID, FileMetaFull]
+_RGuidLegistarMetaDict = MetaDict[REAL_GUID, LegistarFileUID, FileMetaFull]
 
 
 class FileCache:
     """Container for multiple :class:`MetaDict` objects
     """
-    _meta_keys: list[MetaKey] = ['clips', 'legistar']
+    _meta_keys: list[MetaKey] = ['clips', 'legistar', 'legistar_rguid']
     def __init__(self) -> None:
         self.clips = _ClipMetaDict()
         self.legistar = _LegistarMetaDict()
+        self.legistar_rguid = _RGuidLegistarMetaDict()
 
     def get(self, cache_key: MetaCacheKey) -> FileMetaFull|None:
         try:
@@ -130,24 +134,33 @@ class FileCache:
     def __getitem__(self, cache_key: Literal['clips']) -> _ClipMetaDict: ...
     @overload
     def __getitem__(self, cache_key: Literal['legistar']) -> _LegistarMetaDict: ...
-    def __getitem__(self, cache_key: MetaCacheKey|MetaKey) -> FileMetaFull|_ClipMetaDict|_LegistarMetaDict:
+    @overload
+    def __getitem__(self, cache_key: Literal['legistar_rguid']) -> _RGuidLegistarMetaDict: ...
+    def __getitem__(self, cache_key: MetaCacheKey|MetaKey) -> FileMetaFull|_ClipMetaDict|_LegistarMetaDict|_RGuidLegistarMetaDict:
         if not isinstance(cache_key, tuple):
             assert cache_key in self._meta_keys
             return getattr(self, cache_key)
         if cache_key[0] == 'clips':
             return self.clips[cache_key[1:]]
-        else:
+        elif cache_key[0] == 'legistar':
             return self.legistar[cache_key[1:]]
+        else:
+            assert cache_key[0] == 'legistar_rguid'
+            return self.legistar_rguid[cache_key[1:]]
 
     def __setitem__(self, cache_key: MetaCacheKey, value: FileMetaFull) -> None:
         if cache_key[0] == 'clips':
             self.clips[cache_key[1:]] = value
-        else:
+        elif cache_key[0] == 'legistar':
             self.legistar[cache_key[1:]] = value
+        else:
+            assert cache_key[0] == 'legistar_rguid'
+            self.legistar_rguid[cache_key[1:]] = value
 
     def update(self, other: Self) -> None:
         self.clips.update(other.clips)
         self.legistar.update(other.legistar)
+        self.legistar_rguid.update(other.legistar_rguid)
 
     def keys(self) -> Iterator[MetaKey]:
         yield from self._meta_keys
@@ -160,5 +173,7 @@ class FileCache:
         obj = cls()
         for key in cls._meta_keys:
             mdict = obj[key]
+            if key not in data:
+                continue
             mdict._items.update(data[key])
         return obj
