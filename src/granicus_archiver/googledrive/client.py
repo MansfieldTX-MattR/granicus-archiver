@@ -15,7 +15,7 @@ import aiojobs
 import aiofile
 
 from .types import *
-from .cache import FileCache, MetaCacheKey
+from .cache import FileCache, MetaCacheKey, MetaCount
 from .pathtree import PathNode
 from . import config
 from ..model import (
@@ -904,6 +904,29 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
     @abstractmethod
     def _build_cache_key(self, guid: _GuidT, uid: LegistarFileUID) -> MetaCacheKey: ...
 
+    @abstractmethod
+    def get_remote_counts(self) -> MetaCount: ...
+
+    def get_local_counts(self) -> MetaCount:
+        num_items = 0
+        num_files = 0
+        for guid in self.legistar_data.keys():
+            has_files = False
+            for _ in self.legistar_data.iter_files_for_upload(guid):
+                num_files += 1
+                has_files = True
+            if has_files:
+                num_items += 1
+        return MetaCount(num_items, num_files)
+
+    def log_counts(self) -> None:
+        local_counts = self.get_local_counts()
+        remote_counts = self.get_remote_counts()
+        logger.info(f'Local:     items={local_counts.items:6d}, files={local_counts.files:6d}')
+        logger.info(f'Remote:    items={remote_counts.items:6d}, files={remote_counts.files:6d}')
+        diff = MetaCount(local_counts.items - remote_counts.items, local_counts.files - remote_counts.files)
+        logger.info(f'To Upload: items={diff.items:6d}, files={diff.files:6d}')
+
     async def __aenter__(self) -> Self:
         self.item_scheduler = aiojobs.Scheduler(limit=16)
         self.check_scheduler = aiojobs.Scheduler(limit=16, pending_limit=1)
@@ -1187,6 +1210,10 @@ class LegistarGoogleClient(AbstractLegistarGoogleClient[GUID, DetailPageResult, 
     def _build_cache_key(self, guid: GUID, uid: LegistarFileUID) -> MetaCacheKey:
         return ('legistar', guid, uid)
 
+    def get_remote_counts(self) -> MetaCount:
+        counts = self.meta_cache.get_counts()
+        return counts.legistar
+
 
 class RGuidLegistarGoogleClient(AbstractLegistarGoogleClient[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
     """Client to upload items from :class:`~.legistar.guid_model.RGuidLegistarData`
@@ -1204,6 +1231,10 @@ class RGuidLegistarGoogleClient(AbstractLegistarGoogleClient[REAL_GUID, RGuidDet
 
     def _build_cache_key(self, guid: REAL_GUID, uid: LegistarFileUID) -> MetaCacheKey:
         return ('legistar_rguid', guid, uid)
+
+    def get_remote_counts(self) -> MetaCount:
+        counts = self.meta_cache.get_counts()
+        return counts.legistar_rguid
 
 
 @logger.catch
@@ -1297,9 +1328,11 @@ async def upload_legistar(
     max_clips: int
 ) -> None:
     client = LegistarGoogleClient(root_conf=root_conf, max_clips=max_clips)
+    client.log_counts()
     async with client:
         await client.upload_all()
     client.save_cache()
+    client.log_counts()
 
 async def check_legistar_meta(root_conf: Config, check_hashes: bool) -> None:
     client = LegistarGoogleClient(root_conf=root_conf, max_clips=0)
@@ -1317,9 +1350,11 @@ async def upload_legistar_rguid(
     max_clips: int
 ) -> None:
     client = RGuidLegistarGoogleClient(root_conf=root_conf, max_clips=max_clips)
+    client.log_counts()
     async with client:
         await client.upload_all()
     client.save_cache()
+    client.log_counts()
 
 async def check_legistar_rguid_meta(root_conf: Config, check_hashes: bool) -> None:
     client = RGuidLegistarGoogleClient(root_conf=root_conf, max_clips=0)

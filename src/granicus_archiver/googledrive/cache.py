@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TypeVar, Generic, Literal, Any, Iterator, Self, overload
+from typing import TypeVar, Generic, NamedTuple, Literal, Any, Iterator, Self, overload
 
 from .types import FileMetaFull
 from ..model import CLIP_ID, ClipFileUploadKey
@@ -44,6 +44,9 @@ class MetaDict(Generic[IdType, Kt, Vt]):
         except KeyError:
             result = None
         return result
+
+    def count(self) -> int:
+        return sum(len(d) for d in self._items.values())
 
     @overload
     def __getitem__(self, key: tuple[IdType, Kt]) -> Vt: ...
@@ -112,6 +115,17 @@ _LegistarMetaDict = MetaDict[GUID, LegistarFileUID, FileMetaFull]
 _RGuidLegistarMetaDict = MetaDict[REAL_GUID, LegistarFileUID, FileMetaFull]
 
 
+class MetaCount(NamedTuple):
+    items: int
+    files: int
+
+
+class CacheCounts(NamedTuple):
+    clips: MetaCount
+    legistar: MetaCount
+    legistar_rguid: MetaCount
+
+
 class FileCache:
     """Container for multiple :class:`MetaDict` objects
     """
@@ -120,6 +134,16 @@ class FileCache:
         self.clips = _ClipMetaDict()
         self.legistar = _LegistarMetaDict()
         self.legistar_rguid = _RGuidLegistarMetaDict()
+
+    def get_counts(self) -> CacheCounts:
+        counts: dict[MetaKey, MetaCount] = {}
+        for key in self._meta_keys:
+            mdict = self[key]
+            counts[key] = MetaCount(
+                items=len(mdict),
+                files=mdict.count(),
+            )
+        return CacheCounts(**counts)
 
     def get(self, cache_key: MetaCacheKey) -> FileMetaFull|None:
         try:
