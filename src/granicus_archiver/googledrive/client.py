@@ -10,6 +10,7 @@ import asyncio
 import json
 
 from aiogoogle.client import Aiogoogle
+from aiogoogle.excs import HTTPError as GoogleHTTPError
 from loguru import logger
 import aiojobs
 import aiofile
@@ -46,6 +47,10 @@ class UploadError(Exception):
     """Exception raised for errors during upload
     """
 
+
+class RateLimitError(GoogleHTTPError):
+    """Exception raised when a rate limit is encountered
+    """
 
 class SchedulersTD(TypedDict):
     general: aiojobs.Scheduler
@@ -191,7 +196,13 @@ class GoogleClient:
         """Send requests using :meth:`aiogoogle.client.Aiogoogle.as_user`
         casting their responses as *resp_type*
         """
-        response = await self.aiogoogle.as_user(*requests, full_res=full_res)
+        try:
+            response = await self.aiogoogle.as_user(*requests, full_res=full_res)
+        except GoogleHTTPError as exc:
+            if 'rate limit' in str(exc).lower():
+                msg = exc.args[0]
+                raise RateLimitError(msg, res=exc.res, req=exc.req)
+            raise
         return cast(_Rt, response)
 
     @overload
@@ -1113,19 +1124,23 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         if self.max_clips == 0:
             return
 
-        for guid in self.legistar_data.keys():
-            await check_waiters.spawn(self.check_item_needs_upload(guid))
-            if len(check_waiters) >= check_limit:
-                await self.handle_upload_check_jobs()
-            if self.completion_counts.full:
-                break
-        await self.handle_upload_check_jobs()
-        logger.info(f'all jobs scheduled, waiting ({len(item_waiters)=}), {len(check_waiters)=}, {self.completion_counts}')
-        await check_waiters
-        await item_waiters
-        logger.success('all jobs completed')
+        try:
+            for guid in self.legistar_data.keys():
+                await check_waiters.spawn(self.check_item_needs_upload(guid))
+                if len(check_waiters) >= check_limit:
+                    await self.handle_upload_check_jobs()
+                if self.completion_counts.full:
+                    break
+            await self.handle_upload_check_jobs()
+            logger.info(f'all jobs scheduled, waiting ({len(item_waiters)=}), {len(check_waiters)=}, {self.completion_counts}')
+            await check_waiters
+            await item_waiters
+            logger.success('all jobs completed')
+        except RateLimitError:
+            self.save_cache()
+            raise
 
-    @logger.catch
+    @logger.catch(reraise=True)
     async def check_meta(self, enable_hashes: bool) -> bool:
         """Check metadata for all available files stored on Drive
 
@@ -1183,11 +1198,14 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
 
         item_waiters = JobWaiters[bool](scheduler=self.check_scheduler)
         for guid in self.legistar_data.keys():
-            logger.info(f'check_item: {guid}')
             await item_waiters.spawn(check_item(guid))
 
         logger.success('all items scheduled')
-        results = await item_waiters
+        try:
+            results = await item_waiters
+        except RateLimitError:
+            self.save_cache()
+            raise
         changed = any(results)
         return changed
 
