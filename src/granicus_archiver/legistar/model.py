@@ -711,6 +711,13 @@ class DetailPageResult(Serializable):
     feed_item: FeedItem
     """The :class:`~.rss_parser.FeedItem` associated with this instance"""
 
+    last_fake_stupid_guid: GUID|None = None
+    """The last known guid with the stupid timestamp part
+
+    This is to avoid having to reparse the detail pages since Legistar apparently
+    likes to change ALL the guids at the beginning of every year. SMH this is ridiculous!
+    """
+
     @property
     def clip_id(self) -> CLIP_ID|None:
         """The :attr:`clip_id <.model.Clip.id>` parsed from
@@ -909,6 +916,7 @@ class DetailPageResult(Serializable):
             agenda_status=self.agenda_status,
             minutes_status=self.minutes_status,
             feed_item=self.feed_item.serialize(),
+            last_fake_stupid_guid=self.last_fake_stupid_guid,
         )
 
     @classmethod
@@ -917,6 +925,7 @@ class DetailPageResult(Serializable):
         kw['page_url'] = URL(kw['page_url'])
         kw['links'] = DetailPageLinks.deserialize(kw['links'])
         kw['feed_item'] = FeedItem.deserialize(kw['feed_item'])
+        kw['last_fake_stupid_guid'] = kw.get('last_fake_stupid_guid')
         obj = cls(**kw)
         assert isinstance(obj.links, DetailPageLinks)
         return obj

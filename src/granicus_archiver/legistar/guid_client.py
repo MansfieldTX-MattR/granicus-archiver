@@ -150,9 +150,10 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
             return None, exists, changed
         if existing_item.feed_guid == feed_item.guid:
             return existing_item, exists, changed
-        parsed_item = await self.parse_detail_page(feed_item)
-        if parsed_item.guid_compare < existing_item.guid_compare:
+        if existing_item.guid_compare >= feed_item.guid:
             return existing_item, exists, changed
+        parsed_item = await self.parse_detail_page(feed_item)
+        assert parsed_item.guid_compare >= existing_item.guid_compare
         # update_result = existing_item.update(parsed_item)
 
         if self.allow_updates:
@@ -171,6 +172,9 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
                 # return parsed_item
                 logger.warning(f'existing item needs update: {feed_item.to_str()}, {actions=}')
                 self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
+            else:
+                existing_item.feed_guid = feed_item.guid
+                changed = True
         return existing_item, exists, changed
 
     def check_files(self):

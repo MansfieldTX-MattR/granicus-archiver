@@ -25,7 +25,7 @@ from .types import (
     GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip,
     _GuidT, _ItemT,
 )
-from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError
+from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError, GuidCompare
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
     is_attachment_uid, uid_to_file_key, make_path_legal,
@@ -706,6 +706,9 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
         exists = similar_item is not None
         if similar_item is None:
             return parsed_item, exists, changed
+        if similar_item.last_fake_stupid_guid is not None:
+            assert GuidCompare(feed_item.guid) <= similar_item.last_fake_stupid_guid
+            return parsed_item, exists, changed
 
         if self.allow_updates:
             logger.info(f'Updating item "{similar_item.feed_guid}"')
@@ -716,8 +719,13 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
             self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
             logger.info(f'Update item: {actions=}')
             if _changed:
+                tmp_item.last_fake_stupid_guid = feed_item.guid
                 self._legistar_data.detail_results[similar_item.feed_guid] = tmp_item
                 changed = True
+            elif similar_item.last_fake_stupid_guid != feed_item.guid:
+                similar_item.last_fake_stupid_guid = feed_item.guid
+                changed = True
+            assert self._legistar_data.detail_results[similar_item.feed_guid].last_fake_stupid_guid == feed_item.guid
         else:
             _changed, actions = await self.handle_item_update(
                 feed_item, similar_item.copy(), apply_actions=False,
