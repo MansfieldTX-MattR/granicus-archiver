@@ -29,7 +29,7 @@ from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginate
 from .model import (
     LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
     is_attachment_uid, uid_to_file_key, make_path_legal,
-    FilePathURLComplete, AbstractFile, AbstractLegistarModel,
+    FilePathURLComplete, AbstractFile, AbstractLegistarModel, UpdateResult,
 )
 from ..downloader import Downloader, DownloadResult, StupidZeroContentLengthError
 
@@ -594,10 +594,20 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
             assert not len(changed_attrs)
             return False, []
         item_files = self._legistar_data.files.get(existing_item.feed_guid)
+        link_update: UpdateResult|None = changed_attrs.pop('links', None)
         actions = [
             f'setattr(obj, "{key}", {val})'
             for key, val in changed_attrs.items()
         ]
+        if link_update is not None:
+            assert link_update.changed
+            for link_key in link_update.link_keys:
+                new_value = getattr(existing_item.links, link_key)
+                actions.append(f'setattr(obj.links, "{link_key}", {new_value})')
+            for att_key in link_update.attachment_keys:
+                new_value = existing_item.links.attachments[att_key]
+                actions.append(f'obj.links.attachments["{att_key}"] = {new_value}')
+
         if item_files is not None:
             for file_key in file_keys:
                 file_obj = item_files[file_key]

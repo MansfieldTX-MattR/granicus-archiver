@@ -955,7 +955,11 @@ class DetailPageResult(Serializable):
             setattr(self, attr, oth_val)
             changed_attrs[attr] = oth_val
             changed = True
-        links_changed, file_keys, attachment_keys, _ = self.links.update(other.links)
+        link_update = self.links.update(other.links)
+        links_changed, file_keys, attachment_keys, _ = link_update
+        if links_changed:
+            logger.debug(f'links changed: {file_keys=}, {attachment_keys=}')
+            changed_attrs['links'] = link_update
         return UpdateResult(
             changed or links_changed,
             file_keys,
