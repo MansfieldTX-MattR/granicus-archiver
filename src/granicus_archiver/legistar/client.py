@@ -287,7 +287,8 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
             if feed_item is None or feed_item.is_future:
                 continue
             parsed_item = self._get_model_item(self._id_from_feed_item(feed_item))
-            assert parsed_item is not None
+            if parsed_item is None:
+                continue
             if parsed_item.is_draft or parsed_item.is_hidden:
                 return None
             return parsed_item
