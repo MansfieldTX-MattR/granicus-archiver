@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import ClassVar, Any, Self, TYPE_CHECKING
+from typing import ClassVar, Literal, Any, Self, TYPE_CHECKING
 from abc import ABC, abstractmethod
 from pathlib import Path
 from os import PathLike
@@ -20,9 +20,13 @@ if TYPE_CHECKING:
     from .model import Location
     from .legistar.rss_parser import Category
 
+GroupKey = Literal['root', 'google', 'legistar']
+""""""
 
 
 class BaseConfig(Serializable):
+    group_key: ClassVar[GroupKey]
+    """Unique key for :class:`BaseConfig` subclasses"""
 
     @abstractmethod
     def update(self, **kwargs) -> bool:
@@ -53,6 +57,8 @@ class GoogleConfig(BaseConfig):
 
     rguid_legistar_drive_folder: Path
     """Root folder name to upload rguid legistar items within Drive"""
+
+    group_key: ClassVar[GroupKey] = 'google'
 
     def update(self, **kwargs) -> bool:
         changed = False
@@ -133,6 +139,8 @@ class LegistarConfig(BaseConfig):
     The keys for this should be the ``location`` with the values set to the
     ``category``.
     """
+
+    group_key: ClassVar[GroupKey] = 'legistar'
 
     def is_feed_overflow_allowed(self, feed: str|URL) -> bool:
         """Check whether the given feed name or url is allowed to overflow
@@ -256,6 +264,8 @@ class Config(BaseConfig):
     local_timezone_name: str|None
     default_filename: ClassVar[Path] = Path.home() / '.granicus.conf.yaml'
 
+    group_key: ClassVar[GroupKey] = 'root'
+
     def __post_init__(self) -> None:
         assert self.out_dir != self.legistar.out_dir
         assert self.out_dir_abs != self.legistar.out_dir_abs
@@ -267,6 +277,14 @@ class Config(BaseConfig):
         if self.local_timezone_name is None:
             raise ValueError('local timezone not set')
         return ZoneInfo(self.local_timezone_name)
+
+    def get_group(self, key: GroupKey) -> BaseConfig:
+        """Get a :class:`BaseConfig` instance by its :attr:`~BaseConfig.group_key`
+        """
+        if key == 'root':
+            return self
+        obj = getattr(self, key)
+        return obj
 
     @classmethod
     def load(cls, filename: PathLike) -> Self:

@@ -1,4 +1,4 @@
-
+from typing import Literal
 import asyncio
 from pathlib import Path
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ import click
 from aiohttp import ClientSession
 from yarl import URL
 
-from .config import Config
+from .config import Config, GroupKey as ConfigGroupKey
 from .model import ClipCollection, AgendaTimestampCollection, ClipsIndex
 from . import client
 from . import html_builder
@@ -150,25 +150,33 @@ def drive(obj: BaseContext):
     pass
 
 @cli.command
+@click.option(
+    '--group',
+    type=click.Choice(choices=['root', 'google', 'legistar', 'all']),
+    default='all',
+    show_default=True,
+)
 @click.pass_obj
-def show_config(obj: BaseContext):
+def show_config(obj: BaseContext, group: ConfigGroupKey|Literal['all']):
     """Show the current configuration
     """
     from pprint import pformat
-    sub_keys = ['google', 'legistar']
+    sub_keys: list[ConfigGroupKey] = ['google', 'legistar']
     ser = obj.config.serialize()
     for key in sub_keys:
         del ser[key]
-    click.echo('Root Config:')
-    click.echo(pformat(ser))
-    click.echo('')
-
-    for key in sub_keys:
-        cfg = getattr(obj.config, key)
-        ser = cfg.serialize()
-        click.echo(f'{key.title()} Config:')
+    if group == 'all' or group == 'root':
+        click.echo('Root Config:')
         click.echo(pformat(ser))
         click.echo('')
+
+    for key in sub_keys:
+        if group == 'all' or group == key:
+            cfg = obj.config.get_group(key)
+            ser = cfg.serialize()
+            click.echo(f'{key.title()} Config:')
+            click.echo(pformat(ser))
+            click.echo('')
 
 
 @legistar.command
