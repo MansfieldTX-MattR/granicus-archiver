@@ -169,21 +169,27 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
 
         if self.allow_updates:
             logger.info(f'Updating item "{existing_item.feed_guid}"')
+            tmp_item = existing_item.copy()
             _changed, actions = await self.handle_item_update(
-                feed_item, existing_item, apply_actions=True, parsed_item=parsed_item,
+                feed_item, tmp_item, apply_actions=True, parsed_item=parsed_item,
             )
             logger.info(f'Update item: {actions=}')
             if _changed:
+                assert tmp_item.links == parsed_item.links
+                tmp_item.feed_guid = feed_item.guid
+                self._legistar_data.detail_results[existing_item.real_guid] = tmp_item
                 changed = True
         else:
+            tmp_item = existing_item.copy()
             _changed, actions = await self.handle_item_update(
-                feed_item, existing_item.copy(), apply_actions=False, parsed_item=parsed_item,
+                feed_item, tmp_item, apply_actions=False, parsed_item=parsed_item,
             )
             if _changed:
                 # return parsed_item
                 logger.warning(f'existing item needs update: {feed_item.to_str()}, {actions=}')
                 self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
             else:
+                assert existing_item.links == parsed_item.links
                 existing_item.feed_guid = feed_item.guid
                 changed = True
         return existing_item, exists, changed
