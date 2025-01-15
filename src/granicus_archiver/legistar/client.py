@@ -581,7 +581,9 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
         apply_actions: bool,
         parsed_item: DetailPageResult|None = None
     ) -> tuple[bool, list[str]]:
-        # NOTE: This is untested so the mutations are currently disabled
+        # NOTE: `existing_item` is a copy of the item from the model.
+        #      Modifications to it happen here and whether they're propagated
+        #      back happens in the caller (`check_item_update`).
         if parsed_item is not None:
             result = parsed_item
         else:
@@ -601,6 +603,8 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
             for key, val in changed_attrs.items()
         ]
         if link_update is not None:
+            # `existing_item.links` is also a copy, so no need to modify it.
+            # We're just logging the changes that would take place.
             assert link_update.changed
             for link_key in link_update.link_keys:
                 new_value = getattr(existing_item.links, link_key)
@@ -618,6 +622,9 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
                 actions.append(f'rm {filename}')
                 actions.append(f'del files["{file_key}"]')
                 if apply_actions:
+                    # This and the attachment deletion below are the only places
+                    # where we actually change anything.
+                    # Since the links changed, remove the files and the saved file meta.
                     filename.unlink()
                     del item_files.files[file_key]
             for att_name in attachment_keys:
@@ -718,7 +725,10 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
         if similar_item is None:
             return parsed_item, exists, changed
         if similar_item.last_fake_stupid_guid is not None:
-            assert GuidCompare(feed_item.guid) <= similar_item.last_fake_stupid_guid
+            # We're here because the fake guid doesn't exist in the model.
+            # Ensure the real guid of the feed item is newer than what's stored
+            # from the last update.
+            assert GuidCompare(feed_item.guid) >= similar_item.last_fake_stupid_guid
             return parsed_item, exists, changed
 
         if self.allow_updates:
