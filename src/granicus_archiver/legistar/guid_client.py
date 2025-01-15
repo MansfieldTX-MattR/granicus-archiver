@@ -15,7 +15,7 @@ from .types import REAL_GUID, LegistarFileUID
 from .rss_parser import FeedItem
 from .model import (
     make_path_legal, is_attachment_uid, uid_to_file_key, file_key_to_uid,
-    attachment_name_to_uid, FilePathURLComplete, AbstractFile,
+    attachment_name_to_uid, FilePathURLComplete, AbstractFile, UpdateResult,
 )
 from .guid_model import (
     RGuidLegistarData, RGuidDetailResult,
@@ -121,10 +121,21 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
         if not changed:
             assert not len(changed_attrs)
             return False, []
+        link_update: UpdateResult|None = changed_attrs.pop('links', None)
         actions = [
             f'setattr(obj, "{key}", {val})'
             for key, val in changed_attrs.items()
         ]
+        if link_update is not None:
+            # `existing_item.links` is also a copy, so no need to modify it.
+            # We're just logging the changes that would take place.
+            assert link_update.changed
+            for link_key in link_update.link_keys:
+                new_value = getattr(existing_item.links, link_key)
+                actions.append(f'setattr(obj.links, "{link_key}", {new_value})')
+            for att_key in link_update.attachment_keys:
+                new_value = existing_item.links.attachments[att_key]
+                actions.append(f'obj.links.attachments["{att_key}"] = {new_value}')
         link_uids = set[LegistarFileUID]()
         link_uids |= set([file_key_to_uid(k) for k in file_keys])
         link_uids |= set([attachment_name_to_uid(n) for n in attachment_keys])
