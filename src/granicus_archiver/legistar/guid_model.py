@@ -285,14 +285,7 @@ class RGuidDetailResult(DetailPageResult):
         """Update *self* with changed attributes in *other*
         """
         assert self.real_guid == other.real_guid
-        if self.guid_compare <= other.guid_compare:
-            return RGuidUpdateResult(
-                changed=False,
-                link_keys=[],
-                attachment_keys=[],
-                files={},
-                attributes={},
-            )
+        assert other.guid_compare >= self.guid_compare
         r = super().update(other)
         new_uids = set(other.files.keys()) - set(self.files.keys())
         files_changed: dict[LegistarFileUID, LegistarFile|AttachmentFile] = {}
