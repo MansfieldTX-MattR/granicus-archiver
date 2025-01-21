@@ -10,3 +10,4 @@ Reference
     downloader
     legistar/index
     googledrive/index
+    web/index
