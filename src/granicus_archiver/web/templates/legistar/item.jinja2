@@ -1,0 +1,6 @@
+{% extends "legistar/item-base.jinja2" %}
+
+{% block section_inner %}
+{{ super() }}
+<a class="btn btn-primary btn-lg" href="{{ url(change_view_name, guid=item_id) }}">Edit</a>
+{% endblock %}

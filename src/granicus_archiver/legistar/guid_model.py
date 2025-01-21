@@ -189,6 +189,9 @@ class RGuidLegistarFiles(Serializable):
     def keys(self) -> Iterator[LegistarFileUID]:
         yield from self.files.keys()
 
+    def items(self) -> Iterator[tuple[LegistarFileUID, LegistarFile|AttachmentFile]]:
+        yield from self.files.items()
+
     def __iter__(self) -> Iterator[LegistarFile|AttachmentFile]:
         yield from self.files.values()
 

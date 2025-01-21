@@ -1,0 +1,35 @@
+{%- from "includes/macros.jinja2" import mergeClasses -%}
+
+{% macro filter_select(elem_id, name, label, value=None) %}
+<label for="{{ elem_id }}" class="form-label">{{ label }}</label>
+<select
+  id="{{ elem_id }}"
+  name="{{ name }}"{% if value != None %} value="{{ value }}"{% endif %}
+  class="form-select form-select-sm"
+  onchange="this.form.submit()"
+>
+  {{ caller() }}
+</select>
+{% endmacro %}
+
+{% macro list_filter_form(extraClass=None) %}
+<nav class="{{ mergeClasses('navbar', 'bg-body-primary', extraClass) }}">
+  <form id="list_filter_form" class="d-flex" method="get">
+    <div class="row g-3 align-items-end">
+      <div class="col-auto">
+        {% call filter_select('clip_status_select', name='unassigned', label='Clip Status', value=1 if view_unassigned else '') %}
+          <option value=""{% if not view_unassigned %} selected{% endif %}>All</option>
+          <option value="1"{% if view_unassigned %} selected{% endif %}>Unassigned</option>
+        {% endcall %}
+      </div>
+      <div class="col-auto">
+        {% call filter_select('category_select', name='category', label='Category', value=current_category) %}
+          <option value=""{% if not current_category %} selected{% endif %}>All</option>
+          {% for category in all_categories %}
+          <option value="{{ category }}"{% if category == current_category %} selected{% endif %}>{{ category }}</option>
+          {% endfor %}
+        {% endcall %}
+      </div>
+  </form>
+</nav>
+{% endmacro %}

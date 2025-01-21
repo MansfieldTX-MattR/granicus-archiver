@@ -529,6 +529,16 @@ class LegistarFiles(Serializable):
             },
         )
 
+    def iter_all(self) -> Iterator[tuple[LegistarFileUID, LegistarFile|AttachmentFile]]:
+        for key, f in self:
+            if f is None:
+                continue
+            yield file_key_to_uid(key), f
+        for key, f in self.attachments.items():
+            if f is None:
+                continue
+            yield attachment_name_to_uid(key), f
+
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         # Handle legacy storage format with flat input of
@@ -1080,6 +1090,63 @@ class AbstractLegistarModel(Serializable, Generic[_GuidT, _ItemT]):
     @abstractmethod
     def save(self, filename: PathLike, indent: int|None = 2) -> None:
         raise NotImplementedError
+
+    def filter_by_category(
+        self,
+        *categories: Category,
+        items: dict[_GuidT, _ItemT]|None = None,
+    ) -> dict[_GuidT, _ItemT]:
+        """Filter items by :attr:`~.rss_parser.FeedItem.category`
+
+        Arguments:
+            *categories: One or many categories to filter by
+            items: Items to filter.  If not given, all existing items in
+                :attr:`detail_results` will be used.
+        """
+        if items is None:
+            items = self.item_dict()
+
+        filtered = {
+            k:v for k,v in items.items() if v.feed_item.category in categories
+        }
+        return filtered
+
+    def filter_by_dt_range(
+        self,
+        start_dt: datetime.datetime|None,
+        end_dt: datetime.datetime|None,
+        items: dict[_GuidT, _ItemT]|None = None,
+    ) -> dict[_GuidT, _ItemT]:
+        """Filter items by their :attr:`~.rss_parser.FeedItem.meeting_date`
+
+        Arguments:
+            start_dt: If given, items before this datetime will be filtered out
+            end_dt: If given, items after this datetime will be filtered out
+            items: Items to filter.  If not given, all existing items in
+                :attr:`detail_results` will be used.
+
+        .. note::
+
+            If *start_dt* or *end_dt* are not timezone-aware the
+            (no :attr:`~datetime.datetime.tzinfo`), the configured
+            :attr:`local timezone <.config.Config.local_timezone_name>` is
+            assumed.
+
+        """
+        if items is None:
+            items = self.item_dict()
+        if start_dt is not None and start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=FeedItem.get_timezone())
+        if end_dt is not None and end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=FeedItem.get_timezone())
+        filtered = {}
+        for guid, item in items.items():
+            if start_dt is not None and item.feed_item.meeting_date < start_dt:
+                continue
+            if end_dt is not None and item.feed_item.meeting_date > end_dt:
+                continue
+            filtered[guid] = item
+        return filtered
 
 
 @dataclass

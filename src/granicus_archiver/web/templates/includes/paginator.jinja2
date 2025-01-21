@@ -1,0 +1,70 @@
+{%- from "includes/macros.jinja2" import Link, mergeClasses with context -%}
+
+{%- macro pagelink_classes(is_active, is_disabled) -%}
+page-item{% if is_active %} active{% endif %}{% if is_disabled %} disabled{% endif %}
+{%- endmacro -%}
+
+{% macro PageLink(page, label=None, is_disabled=False) %}
+<li class="{{ pagelink_classes(page.active, is_disabled) }}"{% if page.active %} aria-current="page"{% endif %}>
+  <a class="page-link" href="{{ page.url }}">{{ label or page.page_num + 1 }}</a>
+</li>
+{% endmacro %}
+
+{% macro per_page_option(per_page) %}
+<option value="{{ per_page }}"{% if paginator.per_page == per_page %} selected{% endif %}>{{ per_page }}</option>
+{% endmacro %}
+
+
+{% macro Paginator(label="", extraClass=None) %}
+{%- set page = paginator.current_page -%}
+<nav class="row align-items-end mx-3 my-4" aria-label="{{ label }}">
+  <div class="col-auto">
+    <ul class="pagination mb-0">
+      {% if page.has_prev -%}
+        {{ PageLink(page.prev_page, label='Previous', is_disabled=not page.has_prev) }}
+      {%- else -%}
+        <li class="page-item disabled">
+          <span class="page-link">Previous</span>
+        </li>
+      {%- endif %}
+      {% for p in paginator.iter_pages() -%}
+        {{ PageLink(p) }}
+      {%- endfor %}
+      {% if page.has_next -%}
+        {{ PageLink(page.next_page, label='Next', is_disabled=not page.has_next) }}
+      {%- else -%}
+        <li class="page-item disabled">
+          <span class="page-link">Next</span>
+        </li>
+      {%- endif %}
+    </ul>
+  </div>
+  <div class="col-auto align-self-center">
+    <span class="small">
+      Showing {{ page.start_index + 1 }} - {{ page.end_index }} of {{ paginator.total_items }} items
+    </span>
+  </div>
+  <div class="col-auto">
+    <div class="row px-3 g-3 align-items-center">
+      <div class="col-auto">
+        <label for="paginator_per_page" class="col-form-label">Per Page</label>
+      </div>
+      <div class="col-auto">
+        {% set per_page_options = [10, 25, 50, 100] %}
+        <select
+          id="paginator_per_page"
+          name="per_page"
+          class="form-select"
+          form="list_filter_form"
+          value="{{ paginator.per_page }}"
+          onchange="this.form.submit()"
+        >
+        {% for i in per_page_options %}
+          {{ per_page_option(i) }}
+        {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+</nav>
+{% endmacro %}

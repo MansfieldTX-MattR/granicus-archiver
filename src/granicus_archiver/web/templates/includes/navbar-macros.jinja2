@@ -1,0 +1,77 @@
+{% from "includes/macros.jinja2" import Link, mergeClasses with context %}
+
+{% macro navBar(toggleId='navbarSupportedContent') -%}
+<nav class="navbar navbar-expand-lg bg-body-tertiary">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#">Navbar</a>
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-coreui-toggle="collapse"
+      data-coreui-target="#{{ toggleId }}"
+      aria-controls="{{ toggleId }}"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="{{ toggleId }}">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        {{ caller() }}
+      </ul>
+    </div>
+  </div>
+</nav>
+{%- endmacro %}
+
+
+{% macro headerNav() -%}
+<header class="header">
+  <a class="header-brand" href="#">
+    Brand
+  </a>
+  <button class="header-toggler" type="button">
+    <span class="header-toggler-icon"></span>
+  </button>
+  <ul class="header-nav mr-auto">
+    {{ caller() }}
+  </ul>
+</header>
+{%- endmacro %}
+
+
+{% macro navItem(extraClass=None) -%}
+  <li class="{{ mergeClasses('nav-item', extraClass) }}">
+    {{ caller() }}
+  </li>
+{%- endmacro %}
+
+
+{% macro navLink(href, text) %}
+  {% call navItem() -%}
+  {{ Link(href, text, extraClass="nav-link") }}
+  {%- endcall %}
+{% endmacro %}
+
+
+{% macro navDropdown(title) -%}
+{% call navItem("dropdown") %}
+<a class="nav-link dropdown-toggle" href="#" role="button" data-coreui-toggle="dropdown" aria-expanded="false">
+  {{ title }}
+</a>
+<ul class="dropdown-menu">
+  {{ caller() }}
+</ul>
+{% endcall %}
+{%- endmacro %}
+
+
+{% macro navDropdownItem(href, text) -%}
+<li>
+  {{ Link(href, text, extraClass="dropdown-item") }}
+</li>
+{%- endmacro %}
+
+{% macro navDropdownDivider() -%}
+<li><hr class="dropdown-divider"></li>
+{%- endmacro %}

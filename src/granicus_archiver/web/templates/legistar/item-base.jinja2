@@ -1,0 +1,49 @@
+{% extends "base.jinja2" %}
+{% from "includes/macros.jinja2" import Link, Section with context %}
+
+{% macro desc_list(title, value=None) %}
+<dt class="col-sm-2">{{ title }}</dt>
+<dd class="col-sm-10">{% if value %}{{ value }}{% else %}{{ caller() }}{% endif %}</dd>
+{% endmacro %}
+
+{% block main %}
+<main class="container-fluid">
+  <div id="itemId" class="invisible" data-item-id="{{ item_id }}"></div>
+  <div id="itemType" class="invisible" data-item-type="{{ change_view_name }}"></div>
+  {% call Section(item.feed_item.title, extraClass='mt-5') %}
+  {% block section %}
+    <div class="row">
+      <div class="col-lg-6 mb-4">
+        {% block section_inner %}
+        <dl class="row">
+          {{ desc_list('Category', item.feed_item.category) }}
+          {{ desc_list('Date', item.feed_item.meeting_date|datetime_format) }}
+          {{ desc_list('Agenda Status', item.agenda_status) }}
+          {{ desc_list('Minutes Status', item.minutes_status) }}
+          {{ desc_list('Location', item.location) }}
+          {% call desc_list('Link') %}
+            <a href="{{ item.feed_item.link }}">{{ item.feed_item.link }}</a>
+          {% endcall %}
+          {% call desc_list('Files') %}
+            <ul class="list-group">
+            {% for file_data in file_iter %}
+              <li class="list-group-item">
+                <a href="{{ static_path(file_static_key, file_data.filename) }}">{{ file_data.name|snake_case_to_title }}</a>
+              </li>
+            {% endfor %}
+            </ul>
+          {% endcall %}
+          {% call desc_list('Clip') %}
+            {% if clip %}<a href="{{ url('clip_item', clip_id=clip_id) }}">{{ clip_id }}</a>{% else %}{{ clip_id }}{% endif %}
+          {% endcall %}
+        </dl>
+        {% endblock section_inner %}
+      </div>
+      <div class="col">
+        {% include "includes/video-embed.jinja2" %}
+      </div>
+    </div>
+  {% endblock section %}
+  {% endcall %}
+</main>
+{% endblock %}
