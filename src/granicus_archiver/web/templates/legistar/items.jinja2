@@ -1,7 +1,5 @@
-{% extends "base.jinja2" %}
-{%- from "includes/macros.jinja2" import Link, Section, mergeClasses with context -%}
-{%- from "includes/list-filter-form.jinja2" import list_filter_form with context -%}
-{%- from "includes/paginator.jinja2" import Paginator with context -%}
+{% extends "item-list-base.jinja2" %}
+{%- from "includes/macros.jinja2" import Link with context -%}
 
 
 {% macro agenda_status(status) -%}
@@ -35,56 +33,29 @@
 </style>
 {% endblock %}
 
+{% set item_list_title = 'Legistar Items' %}
+{% set column_names = ['Title', 'Location', 'Date', 'Clip', 'Agenda', 'Minutes'] %}
 
-{% block main %}
-<main>
-  <div id="itemListType" class="invisible" data-item-type="{{ item_view_name }}"></div>
-    {% call Section('Legistar Items') %}
-    {{ list_filter_form('mt-4') }}
-    {% if paginator.paginating and paginator.per_page >= 50 %}
-    {{ Paginator() }}
-    {% endif %}
-    <div class="row mt-3 mx-2">
-      <div class="col align-self-start">
-        <table class="item-table table table-striped table-bordered">
-          <thead><tr>
-            <th scope="col">Title</th>
-            <th scope="col">Location</th>
-            <th scope="col">Category</th>
-            <th scope="col">Date</th>
-            <th scope="col">Clip</th>
-            <th scope="col">Agenda</th>
-            <th scope="col">Minutes</th>
-          </tr></thead>
-          <tbody>
-          {% for item_id, item in paginator -%}
-            <tr class="table-item">
-              <th scope="row">
-                <span class="d-flex justify-content-around align-self-start">
-                  <span class="flex-fill">{{ Link(url(item_view_name, guid=item_id), item.feed_item.title) }}</span>
-                  <span class="text-end fw-light small"><a href="{{ url(item_edit_view_name, guid=item_id, query_={'prev':request.url.__str__()}) }}">Edit</a></span>
-                </span>
-              </th>
-              <td class="item-location"><span class="text-wrap">{{ item.location }}</span></td>
-              <td>{{ item.feed_item.category }}</td>
-              <td class="item-date">{{ item.feed_item.meeting_date|datetime_format }}</td>
-              <td>
-                {%- set clip_id = item_clip_ids[item_id] -%}
-                {% if clip_id == 'None' %}--{% elif clip_id == 'NoClip' %}(noclip){% else %}{{ Link(url('clip_item', clip_id=clip_id), clip_id)}}{% endif %}
-              </td>
-              <td>
-                {{ agenda_status(item.agenda_status) }}
-              </td>
-              <td>
-                {{ agenda_status(item.minutes_status) }}
-              </td>
-            </tr>
-          {%- endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% if paginator.paginating %}{{ Paginator() }}{% endif %}
-    {% endcall %}
-</main>
+{% block table_row_item %}
+<tr class="table-item">
+  <th scope="row">
+    <span class="d-flex justify-content-around align-self-start">
+      <span class="flex-fill">{{ Link(url(item_view_name, guid=item_id), item.feed_item.title) }}</span>
+      <span class="text-end fw-light small"><a href="{{ url(item_edit_view_name, guid=item_id, query_={'prev':request.url.__str__()}) }}">Edit</a></span>
+    </span>
+  </th>
+  <td class="item-location"><span class="text-wrap">{{ item.location }}</span></td>
+  <td>{{ item.feed_item.category }}</td>
+  <td class="item-date">{{ item.feed_item.meeting_date|datetime_format }}</td>
+  <td>
+    {%- set clip_id = item_clip_ids[item_id] -%}
+    {% if clip_id == 'None' %}--{% elif clip_id == 'NoClip' %}(noclip){% else %}{{ Link(url('clip_item', clip_id=clip_id), clip_id)}}{% endif %}
+  </td>
+  <td>
+    {{ agenda_status(item.agenda_status) }}
+  </td>
+  <td>
+    {{ agenda_status(item.minutes_status) }}
+  </td>
+</tr>
 {% endblock %}

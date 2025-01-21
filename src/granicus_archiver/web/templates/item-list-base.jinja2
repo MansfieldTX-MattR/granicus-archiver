@@ -1,0 +1,37 @@
+{% extends "base.jinja2" %}
+{%- from "includes/macros.jinja2" import Link, Section, mergeClasses with context -%}
+{%- from "includes/list-filter-form.jinja2" import list_filter_form with context -%}
+{%- from "includes/paginator.jinja2" import Paginator with context -%}
+
+{% block main %}
+<main>
+  <div id="itemListType" class="invisible" data-item-type="{{ item_view_name }}"></div>
+  {% call Section(item_list_title) %}
+    {{ list_filter_form('mt-4') }}
+    {% if paginator.paginating and paginator.per_page >= 50 %}
+    {{ Paginator() }}
+    {% endif %}
+    <div class="row mt-3 mx-2">
+      <div class="col align-self-start">
+        <table class="item-table table table-striped table-bordered">
+          {% block table_main %}
+          <thead><tr>
+            {% block table_head scoped %}
+            {% for column_name in column_names %}
+            <th scope="col">{{ column_name }}</th>
+            {% endfor %}
+            {% endblock %}
+          </tr></thead>
+          <tbody>
+          {% block table_body %}
+          {% for item_id, item in paginator -%}{% block table_row_item scoped required %}{% endblock %}{% endfor %}
+          {% endblock table_body %}
+          </tbody>
+          {% endblock table_main %}
+        </table>
+      </div>
+    </div>
+  {% if paginator.paginating %}{{ Paginator() }}{% endif %}
+  {% endcall %}
+</main>
+{% endblock %}

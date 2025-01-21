@@ -1,51 +1,24 @@
-{% extends "base.jinja2" %}
-{%- from "includes/macros.jinja2" import Link, Section, mergeClasses with context -%}
-{%- from "includes/list-filter-form.jinja2" import list_filter_form with context -%}
-{%- from "includes/paginator.jinja2" import Paginator with context -%}
+{% extends "item-list-base.jinja2" %}
+{%- from "includes/macros.jinja2" import Link with context -%}
 
+{% set item_list_title = 'Clips' %}
+{% set column_names = ['Name', 'Category', 'Date', 'Legistar Item'] %}
 
-{% block main %}
-<main>
-  {# <h1>Clips</h1>
-  <section class="container-fluid"> #}
-  {% call Section('Clips') %}
-    {{ list_filter_form('mt-4') }}
-    {% if paginator.paginating and paginator.per_page >= 50 %}
-    {{ Paginator() }}
-    {% endif %}
-    <div class="row mt-3 mx-2">
-      <div class="col align-self-start">
-        <table class="table table-striped table-bordered mt-3 ms-2">
-          <thead><tr>
-            <th scope="col">Name</th>
-            <th scope="col">Category</th>
-            <th scope="col">Date</th>
-            <th scope="col">Legistar Item</th>
-          </tr></thead>
-          <tbody>
-          {% for clip_id, clip in paginator %}
-            <tr>
-              <th scope="row">{{ Link(url('clip_item', clip_id=clip.id), clip.name) }}</th>
-              <td>{{ clip.location }}</td>
-              <td>{{ clip.datetime|datetime_format }}</td>
-              <td>
-                {% set guid = clip_guids[clip.id] %}
-                {% if guid == 'None' -%}
-                --
-                {%- elif guid == 'NoClip' -%}
-                (noclip)
-                {%- else -%}
-                {{ Link(url('legistar_item', guid=guid), 'Item') }}
-                {%- endif %}
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% if paginator.paginating %}{{ Paginator() }}{% endif %}
-  {% endcall %}
-  {# </section> #}
-</main>
+{% block table_row_item %}
+{% set clip = item %}
+<tr>
+  <th scope="row">{{ Link(url('clip_item', clip_id=clip.id), clip.name) }}</th>
+  <td>{{ clip.location }}</td>
+  <td>{{ clip.datetime|datetime_format }}</td>
+  <td>
+    {% set guid = clip_guids[clip.id] %}
+    {% if guid == 'None' -%}
+    --
+    {%- elif guid == 'NoClip' -%}
+    (noclip)
+    {%- else -%}
+    {{ Link(url('legistar_item', guid=guid), 'Item') }}
+    {%- endif %}
+  </td>
+</tr>
 {% endblock %}
