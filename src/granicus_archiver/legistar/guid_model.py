@@ -368,6 +368,9 @@ class RGuidLegistarData(AbstractLegistarModel[REAL_GUID, RGuidDetailResult]):
         # TODO: This should be stored in Config
         return cls._get_root_dir(config) / 'data.json'
 
+    def get_guid_for_detail_result(self, item: RGuidDetailResult) -> REAL_GUID:
+        return item.real_guid
+
     def get_clip_id_for_guid(
         self,
         guid: REAL_GUID,

@@ -983,6 +983,10 @@ class AbstractLegistarModel(Serializable, Generic[_GuidT, _ItemT]):
     root_dir: Path
 
     @abstractmethod
+    def get_guid_for_detail_result(self, item: _ItemT) -> _GuidT:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_clip_id_for_guid(
         self,
         guid: _GuidT,
@@ -1199,6 +1203,9 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
                 continue
             assert clip_id not in self.items_by_clip_id
             self.items_by_clip_id[clip_id] = item
+
+    def get_guid_for_detail_result(self, item: DetailPageResult) -> GUID:
+        return item.feed_guid
 
     def get_clip_id_for_guid(
         self,

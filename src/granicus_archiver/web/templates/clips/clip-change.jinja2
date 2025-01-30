@@ -18,6 +18,17 @@
     {% endfor %}
     </select>
   </div>
+  <div class="mb-3">
+    <label for="real_guid_input" class="form-label">RGuid Legistar Item</label>
+    {% set item_guid = form_data['real_guid'] %}
+    <select id="real_guid_input" class="form-select" name="real_guid" value="{{ item_guid }}">
+      {{ selectOption('None', '---', item_guid) }}
+      {{ selectOption('NoClip', 'No Clip', item_guid)}}
+    {% for item in item_options %}
+      {{ selectOption(item.real_guid, item.to_str().split(': ')[1], item_guid) }}
+    {% endfor %}
+    </select>
+  </div>
   <button type="submit" class="btn btn-primary">Submit</button>
 </form>
 {% endblock %}

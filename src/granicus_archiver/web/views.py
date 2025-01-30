@@ -37,6 +37,7 @@ ClipIdOrNoneStr = CLIP_ID|Literal['None']|Literal['NoClip']
 """Type variable for a clip id"""
 GuidOrNoneStr = GUID|Literal['None']|Literal['NoClip']
 """Type variable for a guid"""
+RealGuidOrNoneStr = REAL_GUID|Literal['None']|Literal['NoClip']
 
 routes = web.RouteTableDef()
 
@@ -93,6 +94,22 @@ def guid_from_str(value: GuidOrNoneStr) -> GUID|None|NoClipT:
     if value == 'NoClip':
         return NoClip
     return GUID(value)
+
+def real_guid_to_str(guid: REAL_GUID|RGuidDetailResult|None|NoClipT) -> RealGuidOrNoneStr:
+    if guid is None:
+        return 'None'
+    if guid is NoClip:
+        return 'NoClip'
+    if isinstance(guid, RGuidDetailResult):
+        guid = guid.real_guid
+    return guid
+
+def real_guid_from_str(value: RealGuidOrNoneStr) -> REAL_GUID|None|NoClipT:
+    if value == 'None':
+        return None
+    if value == 'NoClip':
+        return NoClip
+    return REAL_GUID(value)
 
 def id_equal(a: _ID_Type|None|NoClipT, b: _ID_Type|None|NoClipT) -> bool:
     if a is None or b is None:
@@ -254,6 +271,12 @@ class ClipViewContext(TypedDict):
     """The associated legistar item, or ``None`` if no match is found"""
     legistar_guid: GUID|NoClipT|None
     """The associated legistar item guid, if one exists"""
+    legistar_rguid_item: RGuidDetailResult|NoClipT|None
+    """The associated real-guid legistar item, or ``None`` if no match is found"""
+    legistar_rguid_item_id: REAL_GUID|NoClipT|None
+    """Item id for :attr:`legistar_rguid_item`"""
+
+
 
 
 ClipViewContextT = TypeVar('ClipViewContextT', bound=ClipViewContext)
@@ -263,12 +286,14 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
     """
     template_name = 'clips/clip.jinja2'
     legistar_item: DetailPageResult|NoClipT|None
+    legistar_rguid_item: RGuidDetailResult|NoClipT|None
 
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
         clip_id = CLIP_ID(self.request.match_info['clip_id'])
         self.clip = self.clips[clip_id]
         self.legistar_item = self.legistar_data.find_match_for_clip_id(clip_id)
+        self.legistar_rguid_item = self.legistar_data_rguid.find_match_for_clip_id(clip_id)
 
     @property
     def clips(self) -> ClipCollection:
@@ -279,10 +304,20 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
         return self.request.app[LegistarDataKey]
 
     @property
+    def legistar_data_rguid(self) -> RGuidLegistarData:
+        return self.request.app[RGuidLegistarDataKey]
+
+    @property
     def legistar_guid(self) -> GUID|None|NoClipT:
         if self.legistar_item is None or self.legistar_item is NoClip:
             return self.legistar_item
         return self.legistar_item.feed_guid
+
+    @property
+    def legistar_rguid_item_id(self) -> REAL_GUID|NoClipT|None:
+        if self.legistar_rguid_item is None or self.legistar_rguid_item is NoClip:
+            return self.legistar_rguid_item
+        return self.legistar_rguid_item.real_guid
 
     async def get_context_data(self) -> ClipViewContext:
         """Get the context data for this view
@@ -291,6 +326,8 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
             'clip': self.clip,
             'legistar_item': self.legistar_item,
             'legistar_guid': self.legistar_guid,
+            'legistar_rguid_item': self.legistar_rguid_item,
+            'legistar_rguid_item_id': self.legistar_rguid_item_id,
         }
 
 
@@ -309,6 +346,11 @@ class ClipEditForm(TypedDict):
     A special value of ``"NoClip"`` will specify :data:`~.types.NoClip`
     for the item.
     """
+    real_guid: RealGuidOrNoneStr
+    """The associated real-guid legistar item guid or ``None``.
+    A special value of ``"NoClip"`` will specify :data:`~.types.NoClip`
+    for the item.
+    """
 
 
 class ClipEditViewContext(ClipViewContext):
@@ -318,6 +360,8 @@ class ClipEditViewContext(ClipViewContext):
     """The :class:`form <ClipEditForm>` data"""
     item_options: Iterable[DetailPageResult]
     """An iterable of possible choices to assign to the clip"""
+    rguid_item_options: Iterable[RGuidDetailResult]
+    """An iterable of possible choices to assign to the clip (real-guid)"""
 
 
 @routes.view('/clips/clip-edit/{clip_id}/', name='clip_item_change')
@@ -329,6 +373,7 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
     def get_form_initial(self) -> ClipEditForm:
         return {
             'guid': guid_to_str(self.legistar_item),
+            'real_guid': real_guid_to_str(self.legistar_rguid_item),
         }
 
     async def get_form_data(self) -> ClipEditForm:
@@ -339,32 +384,52 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
             assert isinstance(_guid, str)
             if _guid != 'None' and _guid != 'NoClip':
                 _guid = GUID(_guid)
+            _real_guid = raw['real_guid']
+            assert isinstance(_real_guid, str)
+            if _real_guid != 'None' and _real_guid != 'NoClip':
+                _real_guid = REAL_GUID(_real_guid)
             data = {
                 'guid': _guid,
+                'real_guid': _real_guid,
             }
         else:
             data = self.get_form_initial()
         return data
 
     def get_item_options(self) -> Iterable[DetailPageResult]:
-        legistar_data = self.legistar_data
-        category_maps = self.get_config().legistar.category_maps
-        cat = category_maps.get(self.clip.location)
-        items = []
-        item_guids = set[GUID]()
-        if self.legistar_item is not None and self.legistar_item is not NoClip:
-            items.append(self.legistar_item)
-            item_guids.add(self.legistar_item.feed_guid)
-        for item in self.legistar_data:
-            if item.feed_guid in item_guids:
+        return self._get_item_options(self.legistar_data, DetailPageResult)
+
+    def get_rguid_item_options(self) -> Iterable[RGuidDetailResult]:
+        return self._get_item_options(self.legistar_data_rguid, RGuidDetailResult)
+
+    def _get_item_options[
+        IdT: (GUID, REAL_GUID), ItemT: (DetailPageResult, RGuidDetailResult)
+    ](
+        self,
+        legistar_data: AbstractLegistarModel[IdT, ItemT],
+        item_type: type[ItemT]
+    ) -> Iterable[ItemT]:
+        items: list[ItemT] = []
+        item_guids = set[IdT]()
+        if item_type is DetailPageResult:
+            legistar_item = self.legistar_item
+        else:
+            legistar_item = self.legistar_rguid_item
+        legistar_item = cast(ItemT, legistar_item)
+        if legistar_item is not None and legistar_item is not NoClip:
+            items.append(legistar_item)
+            item_guids.add(legistar_data.get_guid_for_detail_result(legistar_item))
+        for item in legistar_data:
+            item_id = legistar_data.get_guid_for_detail_result(item)
+            if item_id in item_guids:
                 continue
-            if legistar_data.is_guid_matched(item.feed_guid):
+            if legistar_data.is_guid_matched(item_id):
                 continue
             delta = self.clip.datetime - item.feed_item.meeting_date
             if abs(delta) > datetime.timedelta(days=90):
                 continue
             items.append(item)
-            item_guids.add(item.feed_guid)
+            item_guids.add(item_id)
         return items
 
     async def get_context_data(self) -> ClipEditViewContext:
@@ -374,8 +439,11 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
             'clip': self.clip,
             'legistar_item': self.legistar_item,
             'legistar_guid': self.legistar_guid,
+            'legistar_rguid_item': self.legistar_rguid_item,
+            'legistar_rguid_item_id': self.legistar_rguid_item_id,
             'form_data': await self.get_form_data(),
             'item_options': self.get_item_options(),
+            'rguid_item_options': self.get_rguid_item_options(),
         }
 
     @read_only_guard
@@ -385,21 +453,36 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
         form_initial = self.get_form_initial()
         form_data = context['form_data']
         guid = guid_from_str(form_data['guid'])
-        changed = id_equal(guid, self.legistar_guid)
-        logger.info(f'{guid=}, {self.legistar_guid=}, {changed=}')
+        guid_changed = id_equal(guid, self.legistar_guid)
+        logger.info(f'{guid=}, {self.legistar_guid=}, {guid_changed=}')
+        real_guid = real_guid_from_str(form_data['real_guid'])
+        real_guid_changed = id_equal(real_guid, self.legistar_rguid_item_id)
+        logger.info(f'{real_guid=}, {self.legistar_rguid_item_id=}, {real_guid_changed=}')
         # raise web.HTTPFound(next_url)
-        if not changed:
+        if not guid_changed and not real_guid_changed:
             raise web.HTTPFound(next_url)
-        if guid is None or guid is NoClip:
-            current_guid = self.legistar_guid
-            assert isinstance(current_guid, str)
-            item = self.legistar_data[current_guid]
-            logger.debug(f'unlinking item: {item.real_guid=}')
-            # self.legistar_data.add_clip_match_override(item.real_guid, guid)
-        else:
-            item = self.legistar_data[guid]
-            logger.debug(f'setting clip match: {item.real_guid=}')
-            # self.legistar_data.add_clip_match_override(item.real_guid, self.clip.id)
+        if guid_changed:
+            if guid is None or guid is NoClip:
+                current_guid = self.legistar_guid
+                assert isinstance(current_guid, str)
+                item = self.legistar_data[current_guid]
+                logger.debug(f'unlinking item: {item.real_guid=}')
+                # self.legistar_data.add_clip_match_override(item.real_guid, guid)
+            else:
+                item = self.legistar_data[guid]
+                logger.debug(f'setting clip match: {item.real_guid=}')
+                # self.legistar_data.add_clip_match_override(item.real_guid, self.clip.id)
+        if real_guid_changed:
+            if real_guid is None or real_guid is NoClip:
+                current_guid = self.legistar_rguid_item_id
+                assert isinstance(current_guid, str)
+                item = self.legistar_data_rguid[current_guid]
+                logger.debug(f'unlinking item: {item.real_guid=}')
+                # self.legistar_data_rguid.add_clip_match_override(item.real_guid, real_guid)
+            else:
+                item = self.legistar_data_rguid[real_guid]
+                logger.debug(f'setting clip match: {item.real_guid=}')
+                # self.legistar_data_rguid.add_clip_match_override(item.real_guid, self.clip.id)
         conf_file = self.get_config()
         # self.legistar_data.save(conf_file.legistar.data_file)
         raise web.HTTPFound(next_url)
