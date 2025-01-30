@@ -12,7 +12,9 @@
   {% set vid_file = clip.files.video %}
   <section class="container-fluid mt-5">
     <div class="row">
+      {% block section_inner %}
       <div class="col">
+        {% block section_inner_column %}
         <dl class="row">
           {{ desc_list('Name', clip.name) }}
           {{ desc_list('Category', clip.location) }}
@@ -23,7 +25,9 @@
             {% if legistar_item %}<a href="{{ url('legistar_item', guid=legistar_guid) }}">{{ legistar_guid }}</a>{% else %}{{ legistar_guid }}{% endif %}
           {% endcall %}
         </dl>
+        {% endblock section_inner_column %}
       </div>
+      {% endblock section_inner %}
       <div class="col">
         {% include "includes/video-embed.jinja2" %}
       </div>

@@ -4,7 +4,8 @@
 <option value="{{ value }}"{% if value == selected_value %} selected{% endif %}>{{ text }}</option>
 {% endmacro %}
 
-{% block section_end %}
+{% block section_inner_column %}
+{{ super() }}
 <form class="mt-3 px-2 py-2 border" method="post">
   <div class="mb-3">
     <label for="guid_input" class="form-label">Clip Id</label>
