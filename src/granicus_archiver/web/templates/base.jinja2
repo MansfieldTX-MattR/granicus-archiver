@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% block head -%}
+  {% block head_meta -%}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {%- endblock head_meta %}
+  {% block head_css -%}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/@coreui/coreui@5.2.0/dist/css/coreui.min.css" rel="stylesheet" integrity="sha384-u3h5SFn5baVOWbh8UkOrAaLXttgSF0vXI15ODtCSxl0v/VKivnCN6iHCcvlyTL7L" crossorigin="anonymous">
+  {%- endblock head_css %}
+  {%- endblock head %}
+</head>
+<body data-coreui-theme="dark">
+  {% block body -%}
+  {% block header %}{% include "includes/navbar.jinja2" %}{% endblock %}
+  {% block main %}{% endblock %}
+  {% block js_foot -%}
+  <script src="https://cdn.jsdelivr.net/npm/@coreui/coreui@5.2.0/dist/js/coreui.bundle.min.js" integrity="sha384-JdRP5GRWP6APhoVS1OM/pOKMWe7q9q8hpl+J2nhCfVJKoS+yzGtELC5REIYKrymn" crossorigin="anonymous"></script>
+  <script src="{{ static_path('assets', 'utils.js') }}"></script>
+  <script src="{{ static_path('assets', 'videoTracks.js') }}"></script>
+  {%- endblock js_foot %}
+  {%- endblock body %}
+</body>
+</html>

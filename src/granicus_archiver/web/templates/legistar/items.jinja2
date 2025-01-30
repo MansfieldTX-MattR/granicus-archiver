@@ -1,0 +1,61 @@
+{% extends "item-list-base.jinja2" %}
+{%- from "includes/macros.jinja2" import Link with context -%}
+
+
+{% macro agenda_status(status) -%}
+{%- set text_class = 'text-body' -%}
+{%- if status.startswith('Final') -%}
+{% set badge_class = 'text-bg-success' %}{% set icon_class = 'bi-check-circle' %}{% set label = status.split('-')[0] %}{% set text_class = '' %}
+{%- elif status == 'Draft' -%}
+{% set badge_class = 'text-bg-secondary' %}{% set icon_class = 'bi-hourglass-split' %}{% set label = status %}
+{%- else -%}
+{% set badge_class = 'text-bg-danger' %}{% set icon_class = 'bi-ban text-danger text-body' %}{% set label = 'Hidden' %}
+{%- endif -%}
+<span class="badge {{ badge_class }}">
+  <i class="bi {{ icon_class }} pe-1"></i>
+  <span class="{{ text_class }}">{{ label }}</span>
+</span>
+{%- endmacro %}
+
+
+{% block head_css %}
+{{ super() }}
+<style>
+  table.item-table tbody {
+    font-size: .9em;
+  }
+  .table-item > .item-location,.item-date {
+    font-size: .85em;
+  }
+  .table-item > .item-location {
+    max-width: 30vw;
+  }
+</style>
+{% endblock %}
+
+{% set item_list_title = 'Legistar Items' %}
+{% set column_names = ['Title', 'Location', 'Date', 'Clip', 'Agenda', 'Minutes'] %}
+
+{% block table_row_item %}
+<tr class="table-item">
+  <th scope="row">
+    <span class="d-flex justify-content-around align-self-start">
+      <span class="flex-fill">{{ Link(url(item_view_name, guid=item_id), item.feed_item.title) }}</span>
+      <span class="text-end fw-light small"><a href="{{ url(item_edit_view_name, guid=item_id, query_={'prev':request.url.__str__()}) }}">Edit</a></span>
+    </span>
+  </th>
+  <td class="item-location"><span class="text-wrap">{{ item.location }}</span></td>
+  <td>{{ item.feed_item.category }}</td>
+  <td class="item-date">{{ item.feed_item.meeting_date|datetime_format }}</td>
+  <td>
+    {%- set clip_id = item_clip_ids[item_id] -%}
+    {% if clip_id == 'None' %}--{% elif clip_id == 'NoClip' %}(noclip){% else %}{{ Link(url('clip_item', clip_id=clip_id), clip_id)}}{% endif %}
+  </td>
+  <td>
+    {{ agenda_status(item.agenda_status) }}
+  </td>
+  <td>
+    {{ agenda_status(item.minutes_status) }}
+  </td>
+</tr>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "item-list-base.jinja2" %}
+{%- from "includes/macros.jinja2" import Link with context -%}
+
+{% set item_list_title = 'Clips' %}
+{% set column_names = ['Name', 'Category', 'Date', 'Legistar Item'] %}
+
+{% block table_row_item %}
+{% set clip = item %}
+<tr>
+  <th scope="row">{{ Link(url('clip_item', clip_id=clip.id), clip.name) }}</th>
+  <td>{{ clip.location }}</td>
+  <td>{{ clip.datetime|datetime_format }}</td>
+  <td>
+    {% set guid = clip_guids[clip.id] %}
+    {% if guid == 'None' -%}
+    --
+    {%- elif guid == 'NoClip' -%}
+    (noclip)
+    {%- else -%}
+    {{ Link(url('legistar_item', guid=guid), 'Item') }}
+    {%- endif %}
+  </td>
+</tr>
+{% endblock %}

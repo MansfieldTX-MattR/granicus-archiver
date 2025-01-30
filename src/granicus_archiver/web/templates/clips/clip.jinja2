@@ -1,0 +1,40 @@
+{% extends "base.jinja2" %}
+
+{% macro desc_list(title, value=None) %}
+  <dt class="col-sm-2">{{ title }}</dt>
+  <dd class="col-sm-10">{% if value %}{{ value }}{% else %}{{ caller() }}{% endif %}</dd>
+{% endmacro %}
+
+
+{% block main %}
+<main class="container-fluid">
+  <h1>{{ clip.name }}</h1>
+  {% set vid_file = clip.files.video %}
+  <section class="container-fluid mt-5">
+    <div class="row">
+      {% block section_inner %}
+      <div class="col">
+        {% block section_inner_column %}
+        <dl class="row">
+          {{ desc_list('Name', clip.name) }}
+          {{ desc_list('Category', clip.location) }}
+          {{ desc_list('Date', clip.datetime|datetime_format) }}
+          {{ desc_list('Duration', clip.duration|duration_format) }}
+          {{ desc_list('Id', clip.id) }}
+          {% call desc_list('Item') %}
+            {% if legistar_item %}<a href="{{ url('legistar_item', guid=legistar_guid) }}">{{ legistar_guid }}</a>{% else %}{{ legistar_guid }}{% endif %}
+          {% endcall %}
+        </dl>
+        {% endblock section_inner_column %}
+      </div>
+      {% endblock section_inner %}
+      <div class="col">
+        {% include "includes/video-embed.jinja2" %}
+      </div>
+    </div>
+    {% block section_end %}
+    <a class="btn btn-primary btn-lg" href="{{ url('clip_item_change', clip_id=clip.id) }}">Edit</a>
+    {% endblock %}
+  </section>
+</main>
+{% endblock %}

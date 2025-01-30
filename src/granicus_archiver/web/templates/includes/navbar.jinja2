@@ -1,0 +1,9 @@
+{%- from "includes/macros.jinja2" import Link with context -%}
+{%- from "includes/navbar-macros.jinja2" import navBar, headerNav, navLink with context -%}
+
+{% call navBar() %}
+    {{ navLink(url('home'), 'Home') }}
+    {{ navLink(url('legistar_items'), 'Legistar Items') }}
+    {{ navLink(url('rguid_legistar_items'), 'Legistar (Real GUID)') }}
+    {{ navLink(url('clip_list'), 'Clips') }}
+{% endcall %}

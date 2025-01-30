@@ -189,6 +189,9 @@ class RGuidLegistarFiles(Serializable):
     def keys(self) -> Iterator[LegistarFileUID]:
         yield from self.files.keys()
 
+    def items(self) -> Iterator[tuple[LegistarFileUID, LegistarFile|AttachmentFile]]:
+        yield from self.files.items()
+
     def __iter__(self) -> Iterator[LegistarFile|AttachmentFile]:
         yield from self.files.values()
 
@@ -364,6 +367,9 @@ class RGuidLegistarData(AbstractLegistarModel[REAL_GUID, RGuidDetailResult]):
     def _get_data_file(cls, config: Config) -> Path:
         # TODO: This should be stored in Config
         return cls._get_root_dir(config) / 'data.json'
+
+    def get_guid_for_detail_result(self, item: RGuidDetailResult) -> REAL_GUID:
+        return item.real_guid
 
     def get_clip_id_for_guid(
         self,

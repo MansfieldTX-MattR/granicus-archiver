@@ -1,0 +1,28 @@
+
+{%- macro mergeClasses() -%}
+{% for arg in varargs %}{% if not loop.first %} {% endif %}{% if arg %}{{ arg }}{% endif %}{% endfor %}
+{%- endmacro -%}
+
+{% macro Section(title, level=1, extraClass=None) %}
+<h{{ level }} class="ms-3 mt-2">{{ title }}</h{{ level }}>
+<section class="{{ mergeClasses('container-fluid', extraClass) }}">
+  {% if caller %}{{ caller() }}{% endif %}
+</section>
+{% endmacro %}
+
+
+{% macro Link(href, text=None, extraClass=None, auto_active=True) -%}
+{%- if not auto_active -%}
+{%- set is_active = kwargs['force_active'] -%}
+{%- else -%}
+{%- set is_active = request.rel_url.path == href.path -%}
+{%- endif -%}
+{%- set activeClass = 'active' if is_active else None -%}
+  <a href="{{ href }}" class="{{ mergeClasses(extraClass, activeClass) }}"{% if is_active %} aria-current="true"{% endif %}>
+    {%- if text -%}
+    {{ text }}
+    {%- elif caller -%}
+    {{ caller() }}
+    {%- endif -%}
+  </a>
+{%- endmacro %}

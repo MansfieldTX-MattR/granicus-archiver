@@ -438,7 +438,8 @@ class FeedItem(Serializable):
         return cls(**kw)
 
     def to_str(self) -> str:
-        return f'"{self.link}": {self.title} @ {self.meeting_date.date()}'
+        dt = self.meeting_date.astimezone(self.get_timezone())
+        return f'"{self.link}": {self.title} @ {dt.date()}'
 
 
 class Feed(Serializable):
@@ -526,7 +527,11 @@ class Feed(Serializable):
             d[item.guid] = item
         return result
 
-    def find_clip_match(self, clip: Clip) -> FeedItem:
+    def find_clip_match(
+        self,
+        clip: Clip,
+        search_delta: datetime.timedelta = datetime.timedelta(hours=4)
+    ) -> FeedItem:
         """Attempt to match the given clip to a :class:`FeedItem`
 
         The :attr:`Clip.location <granicus_archiver.model.Clip.location>` is
@@ -557,7 +562,7 @@ class Feed(Serializable):
         if min_delta not in deltas:
             min_delta = -min_delta
         dt_key = deltas[min_delta]
-        if abs(min_delta) > datetime.timedelta(hours=4):
+        if abs(min_delta) > search_delta:
             _dt_key = dt_key.astimezone(clip.datetime.tzinfo)
             raise DatetimeError(clip.id, f'No datetime in range: {clip.name=}, {clip.datetime=}, {_dt_key=}')
             # raise ValueError('No datetime in range')
