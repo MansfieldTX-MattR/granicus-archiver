@@ -102,6 +102,12 @@ class GoogleConfig(BaseConfig):
     rguid_legistar_drive_folder: Path
     """Root folder name to upload rguid legistar items within Drive"""
 
+    folder_cache_file: Path
+    """Path to store folder cache"""
+
+    meta_cache_file: Path
+    """Path to store metadata cache"""
+
     group_key: ClassVar[GroupKey] = 'google'
 
     def update(self, **kwargs) -> bool:
@@ -128,6 +134,8 @@ class GoogleConfig(BaseConfig):
             drive_folder=Path('granicus-archive/data/granicus'),
             legistar_drive_folder=Path('granicus-archive/data/legistar'),
             rguid_legistar_drive_folder=Path('granicus-archive/data/legistar-rguid'),
+            folder_cache_file=get_app_cache('google-folder-cache.json'),
+            meta_cache_file=get_app_cache('google-meta-cache.json'),
         )
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
@@ -139,6 +147,8 @@ class GoogleConfig(BaseConfig):
             drive_folder=str(self.drive_folder),
             legistar_drive_folder=str(self.legistar_drive_folder),
             rguid_legistar_drive_folder=str(self.rguid_legistar_drive_folder),
+            folder_cache_file=str(self.folder_cache_file),
+            meta_cache_file=str(self.meta_cache_file),
         )
 
     @classmethod
@@ -146,11 +156,17 @@ class GoogleConfig(BaseConfig):
         rg_folder = data.get(
             'rguid_legistar_drive_folder', 'granicus-archive/data/legistar-rguid'
         )
+        for key in ['folder_cache_file', 'meta_cache_file']:
+            if key not in data:
+                obj = cls.build_defaults()
+                data[key] = getattr(obj, key)
         return cls(
             user_credentials_filename=Path(data['user_credentials_filename']),
             drive_folder=Path(data['drive_folder']),
             legistar_drive_folder=Path(data['legistar_drive_folder']),
             rguid_legistar_drive_folder=Path(rg_folder),
+            folder_cache_file=Path(data['folder_cache_file']),
+            meta_cache_file=Path(data['meta_cache_file']),
         )
 
 @dataclass

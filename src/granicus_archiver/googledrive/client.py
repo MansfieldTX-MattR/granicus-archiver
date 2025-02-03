@@ -81,14 +81,20 @@ class GoogleClient:
     meta_cache: FileCache
     """Cache for uploaded file metadata
     """
-    CACHE_FILE = Path(__file__).resolve().parent / 'folder-cache.json'
-    META_CACHE_FILE = Path(__file__).resolve().parent / 'meta-cache.json'
 
     def __init__(self, root_conf: Config) -> None:
         self.root_conf = root_conf
         self.folder_cache = {}
         self.meta_cache = FileCache()
         self.load_cache()
+
+    @property
+    def folder_cache_file(self) -> Path:
+        return self.root_conf.google.folder_cache_file
+
+    @property
+    def meta_cache_file(self) -> Path:
+        return self.root_conf.google.meta_cache_file
 
     async def __aenter__(self) -> Self:
         self.cache_lock = asyncio.Lock()
@@ -112,12 +118,12 @@ class GoogleClient:
         return filename
 
     def load_cache(self):
-        if self.CACHE_FILE.exists():
-            d = json.loads(self.CACHE_FILE.read_text())
+        if self.folder_cache_file.exists():
+            d = json.loads(self.folder_cache_file.read_text())
             d = {Path(k): v for k,v in d.items()}
             self.folder_cache.update(d)
-        if self.META_CACHE_FILE.exists():
-            d = json.loads(self.META_CACHE_FILE.read_text())
+        if self.meta_cache_file.exists():
+            d = json.loads(self.meta_cache_file.read_text())
             meta_cache = FileCache.deserialize(d)
             self.meta_cache.update(meta_cache)
 
@@ -125,13 +131,15 @@ class GoogleClient:
         """Save :attr:`folder_cache` and :attr:`meta_cache` to disk
         """
         self.save_folder_cache()
-        self.META_CACHE_FILE.write_text(
+        self.meta_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        self.meta_cache_file.write_text(
             json.dumps(self.meta_cache.serialize(), indent=2)
         )
 
     def save_folder_cache(self):
         d = {str(k):v for k,v in self.folder_cache.items()}
-        self.CACHE_FILE.write_text(json.dumps(d, indent=2))
+        self.folder_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        self.folder_cache_file.write_text(json.dumps(d, indent=2))
 
     def find_folder_cache(self, folder: Path) -> tuple[list[FileId], Path]|None:
         """Search for cached Drive folders previously found by :meth:`find_folder`
