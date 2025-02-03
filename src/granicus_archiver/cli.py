@@ -29,6 +29,7 @@ class BaseContext:
     '-c', '--config-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
     default=Config.default_filename,
+    show_default=True,
 )
 @click.option(
     '-o', '--out-dir',

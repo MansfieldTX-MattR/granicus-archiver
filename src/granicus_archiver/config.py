@@ -14,6 +14,8 @@ from yaml import (
     CLoader as YamlLoader,
     CDumper as YamlDumper,
 )
+from loguru import logger
+from appdirs import AppDirs
 
 from .model import Serializable
 if TYPE_CHECKING:
@@ -22,6 +24,27 @@ if TYPE_CHECKING:
 
 GroupKey = Literal['root', 'google', 'legistar']
 """"""
+
+
+APP_NAME = 'granicus-archiver'
+APP_AUTHOR = 'granicus-archiver'
+
+APP_DIRS = AppDirs(APP_NAME, APP_AUTHOR)
+
+
+def get_app_config(*parts: Path|str) -> Path:
+    """Get the user config directory for the app
+
+    Any arguments (if provided) will be joined to the path
+    """
+    return Path(APP_DIRS.user_config_dir, *parts)
+
+def get_app_cache(*parts: Path|str) -> Path:
+    """Get the user cache directory for the app
+
+    Any arguments (if provided) will be joined to the path
+    """
+    return Path(APP_DIRS.user_cache_dir, *parts)
 
 
 class BaseConfig(Serializable):
@@ -263,15 +286,33 @@ class Config(BaseConfig):
 
     local_timezone_name: str|None
     """Local timezone name for all granicus / legistar items"""
-    default_filename: ClassVar[Path] = Path.home() / '.granicus.conf.yaml'
+    default_filename: ClassVar[Path] = get_app_config('config.yaml')
 
     group_key: ClassVar[GroupKey] = 'root'
+
+    app_dirs: ClassVar[AppDirs] = AppDirs(APP_NAME, APP_AUTHOR)
 
     def __post_init__(self) -> None:
         assert self.out_dir != self.legistar.out_dir
         assert self.out_dir_abs != self.legistar.out_dir_abs
         assert self.data_file != self.legistar.data_file
         assert self.data_file.resolve() != self.legistar.data_file.resolve()
+
+    @classmethod
+    def get_app_config(cls, *parts: Path|str) -> Path:
+        """Get the user config directory for the app
+
+        Any arguments (if provided) will be joined to the path
+        """
+        return get_app_config(*parts)
+
+    @classmethod
+    def get_app_cache(cls, *parts: Path|str) -> Path:
+        """Get the user cache directory for the app
+
+        Any arguments (if provided) will be joined to the path
+        """
+        return get_app_cache(*parts)
 
     @property
     def local_timezone(self) -> ZoneInfo:
@@ -293,6 +334,9 @@ class Config(BaseConfig):
         """
         if not isinstance(filename, Path):
             filename = Path(filename)
+        if not filename.exists():
+            logger.warning(f'Config file {filename} does not exist. Using defaults')
+            return cls.build_defaults()
         data = yaml_load(filename.read_text(), Loader=YamlLoader)
         return cls.deserialize(data)
 
@@ -301,6 +345,7 @@ class Config(BaseConfig):
         """
         if not isinstance(filename, Path):
             filename = Path(filename)
+        filename.parent.mkdir(parents=True, exist_ok=True)
         s = yaml_dump(self.serialize(), Dumper=YamlDumper)
         filename.write_text(s)
 
