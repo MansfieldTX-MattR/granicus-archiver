@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, Generic, Coroutine, Iterator, Generator, Sized, Iterable,
-    Container, Awaitable, AsyncIterable, AsyncGenerator, Literal, Any,
+    TypeVar, Generic, NewType, Coroutine, Iterator, Generator, Sized, Iterable,
+    Container, Awaitable, AsyncIterable, AsyncGenerator, Literal, Any, overload,
 )
 import hashlib
 from pathlib import Path
@@ -11,6 +11,11 @@ import aiojobs
 import aiofile
 from pypdf import PdfWriter
 
+HashType = Literal['md5', 'sha1', 'sha256']
+MD5Hash = NewType('MD5Hash', str)
+SHA1Hash = NewType('SHA1Hash', str)
+SHA256Hash = NewType('SHA256Hash', str)
+HashValueT = MD5Hash|SHA1Hash|SHA256Hash
 T = TypeVar('T')
 
 RETURN_WHEN = Literal['FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED']
@@ -311,15 +316,55 @@ def is_same_filesystem(a: Path, b: Path) -> bool:
     return find_mount_point(a) == find_mount_point(b)
 
 
-HashType = Literal['md5', 'sha1', 'sha256']
+@overload
+def _typed_hash_value(hash_type: Literal['md5'], value: str) -> MD5Hash: ...
+@overload
+def _typed_hash_value(hash_type: Literal['sha1'], value: str) -> SHA1Hash: ...
+@overload
+def _typed_hash_value(hash_type: Literal['sha256'], value: str) -> SHA256Hash: ...
+def _typed_hash_value(hash_type: HashType, value: str) -> HashValueT:
+    if hash_type == 'md5':
+        return MD5Hash(value)
+    elif hash_type == 'sha1':
+        return SHA1Hash(value)
+    elif hash_type == 'sha256':
+        return SHA256Hash(value)
+    raise ValueError(f'unsupported hash type: {hash_type}')
 
-def get_file_hash(p: Path, hash_type: HashType) -> str:
+@overload
+def get_file_hash(p: Path, hash_type: Literal['md5']) -> MD5Hash: ...
+@overload
+def get_file_hash(p: Path, hash_type: Literal['sha1']) -> SHA1Hash: ...
+@overload
+def get_file_hash(p: Path, hash_type: Literal['sha256']) -> SHA256Hash: ...
+def get_file_hash(p: Path, hash_type: HashType) -> HashValueT:
+    """Get the hash for the contents of a file
+
+    Arguments:
+        p: The file path
+        hash_type: The hash type (``'md5'``, ``'sha1'``, or ``'sha256'``)
+
+    """
     assert p.is_file()
     h = hashlib.new(hash_type)
     h.update(p.read_bytes())
-    return h.hexdigest()
+    return _typed_hash_value(hash_type, h.hexdigest())
 
-async def get_file_hash_async(p: Path, hash_type: HashType) -> str:
+
+@overload
+async def get_file_hash_async(p: Path, hash_type: Literal['md5']) -> MD5Hash: ...
+@overload
+async def get_file_hash_async(p: Path, hash_type: Literal['sha1']) -> SHA1Hash: ...
+@overload
+async def get_file_hash_async(p: Path, hash_type: Literal['sha256']) -> SHA256Hash: ...
+async def get_file_hash_async(p: Path, hash_type: HashType) -> HashValueT:
+    """Get the hash for the contents of a file asynchronously using :mod:`aiofile`
+
+    Arguments:
+        p: The file path
+        hash_type: The hash type (``'md5'``, ``'sha1'``, or ``'sha256'``)
+
+    """
     assert p.is_file()
     chunk_size = 65536
     h = hashlib.new(hash_type)
@@ -327,7 +372,7 @@ async def get_file_hash_async(p: Path, hash_type: HashType) -> str:
         async for _b in fp.iter_chunked(chunk_size=chunk_size):
             assert type(_b) is bytes
             h.update(_b)
-    return h.hexdigest()
+    return _typed_hash_value(hash_type, h.hexdigest())
 
 
 def seconds_to_time_str(seconds: int) -> str:

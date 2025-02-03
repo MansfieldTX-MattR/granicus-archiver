@@ -5,6 +5,7 @@ from typing import (
 )
 from pathlib import Path
 
+from ..utils import SHA1Hash, SHA256Hash, MD5Hash
 from aiogoogle.resource import GoogleAPI, Resource
 from aiogoogle.models import Request
 
@@ -44,9 +45,9 @@ class FileMetaFull(TypedDict):
     size: str                           #: Size in bytes
     webViewLink: str                    #: Sharable link to the item
     webContentLink: str                 #: Download link
-    md5Checksum: str                    #: MD5 Checksum
-    sha1Checksum: str                   #: SHA1 Checksum
-    sha256Checksum: str                 #: SHA256 Checksum
+    md5Checksum: MD5Hash                #: MD5 Checksum
+    sha1Checksum: SHA1Hash              #: SHA1 Checksum
+    sha256Checksum: SHA256Hash          #: SHA256 Checksum
 
 
 class FileUploadResponse(TypedDict):
