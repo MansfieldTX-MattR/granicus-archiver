@@ -30,6 +30,8 @@ from ..utils import (
     JobWaiters,
     CompletionCounts,
     get_file_hash_async,
+    SHA1Hash,
+    HashMismatchError,
     aio_read_iter,
 )
 from .. import html_builder
@@ -700,11 +702,16 @@ class ClipGoogleClient(GoogleClient):
             upload_meta, _ = await self.get_clip_file_meta(clip, key)
             if upload_meta is None:
                 return True, upload_filename
+            local_meta = clip.files.get_metadata(key)
+            assert local_meta is not None
             assert 'size' in upload_meta
             local_size = filename.stat().st_size
             upload_size = int(upload_meta['size'])
             if upload_size != local_size:
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
+            assert local_meta.sha1 is not None
+            if local_meta.sha1 != upload_meta['sha1Checksum']:
+                raise HashMismatchError(f'hash mismatch for "{filename}"')
             return False, upload_filename
         if self.completion_counts.full:
             return False, clip, set()
@@ -812,21 +819,25 @@ class ClipGoogleClient(GoogleClient):
                 return {}
             return json.loads(hash_logfile.read_text())
 
-        hash_dict: dict[CLIP_ID, dict[ClipFileUploadKey, str]] = load_hash_data()
+        hash_dict: dict[CLIP_ID, dict[ClipFileUploadKey, SHA1Hash]] = load_hash_data()
 
         def save_hash_data():
             if hash_logfile is None:
                 return
             hash_logfile.write_text(json.dumps(hash_dict, indent=2))
 
-        def store_local_hash(clip: Clip|CLIP_ID, key: ClipFileUploadKey, value: str):
+        def store_local_hash(clip: Clip|CLIP_ID, key: ClipFileUploadKey, value: SHA1Hash):
             clip_id = clip if isinstance(clip, str) else clip.id
             d = hash_dict.setdefault(clip_id, {})
             d[key] = value
             save_hash_data()
 
-        def get_local_hash(clip: Clip|CLIP_ID, key: ClipFileUploadKey) -> str|None:
+        def get_local_hash(clip: Clip|CLIP_ID, key: ClipFileUploadKey) -> SHA1Hash|None:
             clip_id = clip if isinstance(clip, str) else clip.id
+            clip = clips[clip_id]
+            meta = clip.files.get_metadata(key)
+            if meta is not None and meta.sha1 is not None:
+                return meta.sha1
             d = hash_dict.get(clip_id, {})
             return d.get(key)
 
@@ -1065,7 +1076,11 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         """Check if the item matching *guid* has any local files that need to
         be uploaded
         """
-        async def do_check(uid: LegistarFileUID, filename: Path) -> tuple[bool, Path]:
+        async def do_check(
+            uid: LegistarFileUID,
+            filename: Path,
+            local_meta: ClipFileMeta
+        ) -> tuple[bool, Path]:
             upload_filename = self.get_file_upload_path(guid, uid)
             upload_meta, _ = await self.get_remote_meta(guid, uid)
             if upload_meta is None:
@@ -1075,13 +1090,16 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
             upload_size = int(upload_meta['size'])
             if upload_size != local_size:
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
+            if local_meta.sha1 is not None:
+                if local_meta.sha1 != upload_meta['sha1Checksum']:
+                    raise HashMismatchError(f'hash mismatch for "{filename}"')
             return False, upload_filename
         if self.completion_counts.full:
             return False, guid, set()
         coros: set[Coroutine[Any, Any, tuple[bool, Path]]] = set()
         it = self.legistar_data.iter_files_for_upload(guid)
         for uid, filename, local_meta, is_attachment in it:
-            coros.add(do_check(uid, filename))
+            coros.add(do_check(uid, filename, local_meta))
 
         upload_filenames: set[Path] = set()
         needs_upload = False
@@ -1165,9 +1183,13 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         """
         async def check_hash(
             filename: Path,
+            local_meta: ClipFileMeta,
             remote_meta: FileMetaFull,
         ):
-            local_hash = await get_file_hash_async(filename, 'sha1')
+            if local_meta.sha1 is not None:
+                local_hash = local_meta.sha1
+            else:
+                local_hash = await get_file_hash_async(filename, 'sha1')
             remote_hash = remote_meta['sha1Checksum']
             matched = local_hash == remote_hash
             logger.debug(f'Checking hashes for "{filename}": {matched=}')
@@ -1177,30 +1199,33 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         async def check_file(
             guid: _GuidT,
             uid: LegistarFileUID,
+            local_meta: ClipFileMeta,
             filename: Path
-        ) -> tuple[FileMetaFull|None, bool, Path]:
+        ) -> tuple[ClipFileMeta, FileMetaFull|None, bool, Path]:
             meta, is_cached = await self.get_remote_meta(guid, uid)
-            return meta, is_cached, filename
+            return local_meta, meta, is_cached, filename
 
         async def check_item(guid: _GuidT) -> bool:
             changed = False
             hash_waiters = JobWaiters(scheduler=self.upload_scheduler)
-            meta_waiters = JobWaiters[tuple[FileMetaFull|None, bool, Path]](scheduler=self.upload_scheduler)
+            meta_waiters = JobWaiters[tuple[ClipFileMeta, FileMetaFull|None, bool, Path]](
+                scheduler=self.upload_scheduler,
+            )
 
             it = self.legistar_data.iter_files_for_upload(guid)
             for uid, filename, local_meta, is_attachment in it:
-                await meta_waiters.spawn(check_file(guid, uid, filename))
+                await meta_waiters.spawn(check_file(guid, uid, local_meta, filename))
 
             async for job in meta_waiters:
                 if job.exception is not None:
                     raise job.exception
-                meta, is_cached, filename = job.result
-                if meta is None:
+                local_meta, remote_meta, is_cached, filename = job.result
+                if remote_meta is None:
                     continue
                 if not is_cached:
                     changed = True
                 if enable_hashes:
-                    await hash_waiters.spawn(check_hash(filename, meta))
+                    await hash_waiters.spawn(check_hash(filename, local_meta, remote_meta))
             await hash_waiters
             return changed
 
