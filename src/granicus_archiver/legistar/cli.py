@@ -55,14 +55,16 @@ def list_feed_urls(obj: BaseContext):
 
 
 @cli.command(name='check')
+@click.option('--recheck-hashes/--no-recheck-hashes', default=False)
 @click.pass_obj
-def check_legistar(obj: BaseContext):
+def check_legistar(obj: BaseContext, recheck_hashes: bool):
     """Check downloaded files using the stored metadata
     """
     leg_client_obj = asyncio.run(legistar_client.amain(
         config=obj.config,
         max_clips=0,
         check_only=True,
+        recheck_hashes=recheck_hashes,
     ))
     leg_items = leg_client_obj.get_item_count()
     leg_files = leg_client_obj.get_file_count()
@@ -70,14 +72,16 @@ def check_legistar(obj: BaseContext):
     click.echo(f'Legistar: item_count={leg_items}, file_count={leg_files}')
 
 @cli.command(name='check-rguid')
+@click.option('--recheck-hashes/--no-recheck-hashes', default=False)
 @click.pass_obj
-def check_legistar_rguid(obj: BaseContext):
+def check_legistar_rguid(obj: BaseContext, recheck_hashes: bool):
     """Check downloaded files using the stored metadata
     """
     leg_client_obj = asyncio.run(legistar_guid_client.amain(
         config=obj.config,
         max_clips=0,
         check_only=True,
+        recheck_hashes=recheck_hashes,
     ))
     click.echo('Check complete')
 
@@ -225,6 +229,24 @@ def download_legistar_rguid(
         click.echo('')
         click.echo(c.get_warning_items())
 
+
+@cli.command(name='ensure-local-hashes')
+@click.option('--check-existing/--no-check-existing', default=False)
+@click.option('--max-clips', type=int)
+@click.pass_obj
+def ensure_local_legistar_hashes(obj: BaseContext, check_existing: bool, max_clips: int|None):
+    legistar_client.ensure_local_file_hashes(
+        obj.config, check_existing=check_existing, max_clips=max_clips,
+    )
+
+@cli.command(name='ensure-local-hashes-rguid')
+@click.option('--check-existing/--no-check-existing', default=False)
+@click.option('--max-clips', type=int)
+@click.pass_obj
+def ensure_local_legistar_hashes_rguid(obj: BaseContext, check_existing: bool, max_clips: int|None):
+    legistar_guid_client.ensure_local_file_hashes(
+        obj.config, check_existing=check_existing, max_clips=max_clips,
+    )
 
 @cli.command
 @click.option('--max-items', type=int, default=100)

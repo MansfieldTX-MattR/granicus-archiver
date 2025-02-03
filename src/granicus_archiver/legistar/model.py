@@ -22,7 +22,7 @@ from .types import (
     GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID, Category,
     NoClipT, NoClip, _GuidT, _ItemT,
 )
-from ..utils import remove_pdf_links
+from ..utils import remove_pdf_links, get_file_hash, HashMismatchError
 
 
 def make_path_legal(p: Path, is_dir: bool) -> Path:
@@ -500,6 +500,38 @@ class LegistarFiles(Serializable):
         )
         self.attachments[name] = a
         return a
+
+    def ensure_local_hashes(self, legistar_data: LegistarData, check_existing: bool = False) -> bool:
+        """Ensure that all local files have an :attr:`~.model.FileMeta.sha1` hash
+        stored in their :attr:`~AbstractFile.metadata`
+
+        Arguments:
+            check_existing: If ``True``, the hash of the local file will be
+                checked against the stored hash
+
+        Returns:
+            ``True`` if any hashes were generated or updated
+        """
+        changed = False
+        for key, f in self.files.items():
+            full_p = legistar_data.get_file_path(self.guid, key)
+            if f.metadata.sha1 is None:
+                f.metadata.sha1 = get_file_hash(full_p, 'sha1')
+                changed = True
+            elif check_existing:
+                if f.metadata.sha1 != get_file_hash(full_p, 'sha1'):
+                    raise HashMismatchError(full_p)
+        for name, f in self.attachments.items():
+            if f is None:
+                continue
+            full_p = legistar_data.get_attachment_path(self.guid, name)
+            if f.metadata.sha1 is None:
+                f.metadata.sha1 = get_file_hash(full_p, 'sha1')
+                changed = True
+            elif check_existing:
+                if f.metadata.sha1 != get_file_hash(full_p, 'sha1'):
+                    raise HashMismatchError(full_p)
+        return changed
 
     def __getitem__(self, key: LegistarFileKey) -> LegistarFile|None:
         return self.files.get(key)

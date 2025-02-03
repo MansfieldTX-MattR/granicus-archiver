@@ -19,6 +19,9 @@ from ..utils import (
     CompletionCounts,
     remove_pdf_links,
     is_same_filesystem,
+    HashMismatchError,
+    get_file_hash,
+    get_file_hash_async,
 )
 from ..model import ClipCollection, Clip, FileMeta
 from .types import (
@@ -409,6 +412,9 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
                     logger.debug(f'pdf links stripped for {abs_filename}')
                     assert strip_output.exists()
                     meta.content_length = strip_output.stat().st_size
+
+                    # Clear any previous hashes since the file has changed
+                    meta.sha1 = None
                     temp_filename.unlink()
                     temp_filename = strip_output
                     strip_output = None
@@ -418,7 +424,13 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
                 if temp_filename.exists():
                     temp_filename.unlink()
                 raise
-
+            if meta.sha1 is None:
+                meta.sha1 = await get_file_hash_async(temp_filename, 'sha1')
+            else:
+                if meta.sha1 != await get_file_hash_async(temp_filename, 'sha1'):
+                    raise HashMismatchError(
+                        f'{temp_filename.name=}, {guid=}, {uid=}',
+                    )
             if is_same_filesystem(temp_filename, abs_filename):
                 temp_filename.rename(abs_filename)
                 file_obj = self._set_file_download_complete(
@@ -434,6 +446,13 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
                 async with aiofile.async_open(abs_filename, 'wb') as dst_fd:
                     async for chunk in src_fd.iter_chunked(chunk_size):
                         await dst_fd.write(chunk)
+
+            # Check the hash of the copy before deleting the temp file
+            if meta.sha1 != await get_file_hash_async(abs_filename, 'sha1'):
+                raise HashMismatchError(
+                    f'{abs_filename.name=}, {guid=}, {uid=}',
+                )
+
             logger.debug(f'copy complete for "{abs_filename}"')
             temp_filename.unlink()
             file_obj = self._set_file_download_complete(
@@ -756,7 +775,7 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
                 self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
         return parsed_item, exists, changed
 
-    def check_files(self):
+    def check_files(self, check_hashes: bool = False):
         self._legistar_data.ensure_unique_item_folders()
 
         for clip_id, detail_result in self.legistar_data.iter_guid_matches():
@@ -788,6 +807,10 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
                 assert t.filename.exists()
                 assert t.filename.stat().st_size == meta.content_length
                 assert t.filename not in asset_paths
+                assert meta.sha1 is not None
+                if check_hashes:
+                    if meta.sha1 != get_file_hash(t.filename, 'sha1'):
+                        raise HashMismatchError(f'{t.filename=}, {t.key=}')
                 asset_paths.add(t.filename)
         assert not len(illegal_dirs)
 
@@ -813,7 +836,8 @@ async def amain(
     max_clips: int = 0,
     check_only: bool = False,
     allow_updates: bool = False,
-    strip_pdf_links: bool = False
+    strip_pdf_links: bool = False,
+    recheck_hashes: bool = False
 ) -> Client:
     if not config.legistar.out_dir_abs.exists():
         config.legistar.out_dir_abs.mkdir(parents=True)
@@ -824,7 +848,7 @@ async def amain(
         allow_updates=allow_updates,
         strip_pdf_links=strip_pdf_links,
     )
-    client.check_files()
+    client.check_files(check_hashes=recheck_hashes)
     if check_only:
         return client
     async with client:
@@ -832,3 +856,34 @@ async def amain(
         if max_clips > 0:
             await client.download_feed_items(max_items=max_clips)
     return client
+
+def ensure_local_file_hashes(
+    conf: Config,
+    check_existing: bool,
+    max_clips: int|None = None
+) -> bool:
+    data_file = conf.legistar.data_file
+    legistar_data = LegistarData.load(data_file, root_dir=conf.legistar.out_dir)
+    changed = False
+    i = 0
+    total_clips = len(legistar_data.detail_results)
+    remaining = total_clips
+    num_changed = 0
+    for guid in legistar_data.detail_results.keys():
+        files = legistar_data.files.get(guid)
+        if files is None:
+            continue
+        _changed = files.ensure_local_hashes(legistar_data, check_existing=check_existing)
+        if _changed:
+            num_changed += 1
+            changed = True
+        remaining -= 1
+        i += 1
+        if i % 100 == 0:
+            logger.info(f'Checked {i} items. {remaining=}, {num_changed=}')
+        if max_clips is not None and num_changed >= max_clips:
+            break
+    if changed:
+        logger.info('hashes changed, saving data')
+        legistar_data.save(data_file)
+    return changed

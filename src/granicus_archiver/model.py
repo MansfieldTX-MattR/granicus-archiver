@@ -22,7 +22,9 @@ from yaml import (
 from yarl import URL
 from multidict import MultiMapping
 
-from .utils import seconds_to_time_str
+from .utils import (
+    SHA1Hash, seconds_to_time_str, get_file_hash, HashMismatchError,
+)
 
 mimetypes.add_type('audio/mp3', '.mp3')
 
@@ -249,6 +251,7 @@ class FileMeta(Serializable):
     content_type: str                       #: The file's mime type
     last_modified: datetime.datetime|None   #: Last modified datetime
     etag: str|None                          #: The etag value (if available)
+    sha1: SHA1Hash|None = None              #: SHA1 hash of the file
 
     # Tue, 04 Jun 2024 00:22:54 GMT
     dt_fmt: ClassVar[str] = '%a, %d %b %Y %H:%M:%S GMT'
@@ -652,6 +655,34 @@ class ClipFiles(Serializable):
                 FilesizeMagicNumber.check_and_raise(
                     self.clip, key, meta, msg='local meta',
                 )
+
+    def ensure_local_hashes(self, check_existing: bool = False) -> bool:
+        """Ensure that all local files have an :attr:`~FileMeta.sha1` hash
+        stored in :attr:`metadata`
+
+        Arguments:
+            check_existing: If ``True``, the hash of the local file will be
+                checked against the stored hash
+
+        Returns:
+            ``True`` if any hashes were generated or updated
+        """
+        changed = False
+        for key, p in self.iter_existing(for_download=False):
+            meta = self.get_metadata(key)
+            assert meta is not None
+            full_p = self.clip.get_file_path(key, absolute=True)
+            if not full_p.exists():
+                continue
+            if meta.sha1 is None:
+                sha1 = get_file_hash(full_p, 'sha1')
+                meta.sha1 = sha1
+                changed = True
+            elif check_existing:
+                sha1 = get_file_hash(full_p, 'sha1')
+                if sha1 != meta.sha1:
+                    raise HashMismatchError(f'{full_p=}')
+        return changed
 
     def relative_to(self, rel_dir: Path) -> Self:
         # paths: dict[ClipFileKey, Path] = {

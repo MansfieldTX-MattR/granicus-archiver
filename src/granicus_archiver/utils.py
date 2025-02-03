@@ -25,6 +25,11 @@ class NotSetType: ...
 NotSet = NotSetType()
 
 
+class HashMismatchError(ValueError):
+    """Raised when a hash comparison fails
+    """
+
+
 def remove_pdf_links(infile: Path, outfile: Path) -> None:
     """Remove hyperlinks from a pdf file
 

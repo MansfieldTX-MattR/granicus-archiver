@@ -128,6 +128,16 @@ def download_clips(
     ))
 
 
+@cli.command(name='ensure-local-hashes')
+@click.option('--check-existing/--no-check-existing', default=False)
+@click.option('--max-clips', type=int)
+@click.pass_obj
+def ensure_local_clip_hashes(obj: BaseContext, check_existing: bool, max_clips: int|None):
+    client.ensure_local_file_hashes(
+        obj.config, check_existing=check_existing, max_clips=max_clips,
+    )
+
+
 @cli.command
 @click.argument(
     'html-filename',

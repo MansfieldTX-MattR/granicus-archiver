@@ -17,7 +17,10 @@ from .model import (
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
     CheckError, FilesizeMagicNumber,
 )
-from .utils import JobWaiters, CompletionCounts, is_same_filesystem
+from .utils import (
+    JobWaiters, CompletionCounts, is_same_filesystem, get_file_hash_async,
+    HashMismatchError,
+)
 from .downloader import (
     Downloader,
     StupidZeroContentLengthError,
@@ -209,6 +212,11 @@ class GranicusClient:
             dst_file: Path,
             meta: FileMeta
         ) -> None:
+            if meta.sha1 is None:
+                meta.sha1 = await get_file_hash_async(src_file, 'sha1')
+            else:
+                if meta.sha1 != await get_file_hash_async(src_file, 'sha1'):
+                    raise HashMismatchError(f'{src_file=}')
             if is_same_filesystem(src_file, dst_file):
                 src_file.rename(dst_file)
                 clip.files.ensure_path(key)
@@ -221,6 +229,8 @@ class GranicusClient:
                     async with aiofile.async_open(dst_file, 'wb') as dst_fd:
                         async for chunk in src_fd.iter_chunked(chunk_size):
                             await dst_fd.write(chunk)
+                if meta.sha1 != await get_file_hash_async(dst_file, 'sha1'):
+                    raise HashMismatchError(f'{dst_file=}')
                 logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
                 src_file.unlink()
                 clip.files.ensure_path(key)
@@ -459,6 +469,38 @@ async def check_all_clip_meta(
             clips.save(data_file)
         await close_schedulers()
 
+def ensure_local_file_hashes(
+    conf: Config,
+    check_existing: bool,
+    max_clips: int|None = None
+) -> bool:
+    """Ensure that all local files have an :attr:`~.model.FileMeta.sha1` hash
+    stored in their metadata
+    """
+    data_file = conf.data_file
+    if not data_file.exists():
+        raise Exception('No data file')
+    clips = ClipCollection.load(data_file)
+    changed = False
+    i = 0
+    total_clips = len(clips)
+    remaining = total_clips
+    num_changed = 0
+    for clip in clips:
+        _changed = clip.files.ensure_local_hashes(check_existing=check_existing)
+        if _changed:
+            num_changed += 1
+            changed = True
+        remaining -= 1
+        i += 1
+        if i % 10 == 0:
+            logger.info(f'Checked {i} clips. {remaining=}, {num_changed=}')
+        if max_clips is not None and num_changed >= max_clips:
+            break
+    if changed:
+        logger.info('hashes changed, saving data')
+        clips.save(data_file)
+    return changed
 
 @logger.catch
 async def amain(

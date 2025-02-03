@@ -33,6 +33,7 @@ from .model import (
     file_key_to_uid,
 )
 from .rss_parser import FeedItem, GuidCompare
+from ..utils import HashMismatchError, get_file_hash
 
 
 
@@ -175,6 +176,28 @@ class RGuidLegistarFiles(Serializable):
         f_obj = f_cls.from_uid(uid, filename, meta, pdf_links_removed)
         self.files[uid] = f_obj
         return f_obj
+
+    def ensure_local_hashes(self, check_existing: bool = False) -> bool:
+        """Ensure that all local files have an :attr:`~.model.FileMeta.sha1` hash
+        stored in their :attr:`~AbstractFile.metadata`
+
+        Arguments:
+            check_existing: If ``True``, the hash of the local file will be
+                checked against the stored hash
+
+        Returns:
+            ``True`` if any hashes were generated or updated
+        """
+        changed = False
+        for f in self:
+            full_p = self.get_file_path(f.uid, absolute=True)
+            if f.metadata.sha1 is None:
+                f.metadata.sha1 = get_file_hash(full_p, 'sha1')
+                changed = True
+            elif check_existing:
+                if f.metadata.sha1 != get_file_hash(full_p, 'sha1'):
+                    raise HashMismatchError(full_p)
+        return changed
 
     def iter_legistar_files(self) -> Iterator[LegistarFile]:
         for obj in self:

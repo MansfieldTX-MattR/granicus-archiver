@@ -17,6 +17,7 @@ from .model import (
     make_path_legal, is_attachment_uid, uid_to_file_key, file_key_to_uid,
     attachment_name_to_uid, FilePathURLComplete, AbstractFile, UpdateResult,
 )
+from ..utils import HashMismatchError, get_file_hash
 from .guid_model import (
     RGuidLegistarData, RGuidDetailResult,
 )
@@ -194,7 +195,7 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
                 changed = True
         return existing_item, exists, changed
 
-    def check_files(self):
+    def check_files(self, check_hashes: bool = True) -> None:
         # self.legistar_data.ensure_unique_item_folders()
 
         # for clip_id, detail_result in self.legistar_data.iter_guid_matches():
@@ -226,6 +227,10 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
                 assert t.filename.exists()
                 assert t.filename.stat().st_size == meta.content_length
                 assert t.filename not in asset_paths
+                assert meta.sha1 is not None
+                if check_hashes:
+                    if meta.sha1 != get_file_hash(t.filename, 'sha1'):
+                        raise HashMismatchError(f'{t.filename=}, {meta.sha1=}')
                 asset_paths.add(t.filename)
         assert not len(illegal_dirs)
 
@@ -252,7 +257,8 @@ async def amain(
     max_clips: int = 0,
     check_only: bool = False,
     allow_updates: bool = False,
-    strip_pdf_links: bool = False
+    strip_pdf_links: bool = False,
+    recheck_hashes: bool = False
 ) -> RGClient:
     # if not config.legistar.out_dir_abs.exists():
     #     config.legistar.out_dir_abs.mkdir(parents=True)
@@ -265,7 +271,7 @@ async def amain(
     )
     if not client.root_dir.exists():
         client.root_dir.mkdir(parents=True)
-    client.check_files()
+    client.check_files(check_hashes=recheck_hashes)
     if check_only:
         return client
     async with client:
@@ -273,3 +279,32 @@ async def amain(
         if max_clips > 0:
             await client.download_feed_items(max_items=max_clips)
     return client
+
+
+def ensure_local_file_hashes(
+    conf: Config,
+    check_existing: bool,
+    max_clips: int|None = None
+) -> bool:
+    data_file = RGuidLegistarData._get_data_file(conf)
+    legistar_data = RGuidLegistarData.load(data_file)
+    changed = False
+    i = 0
+    total_clips = len(legistar_data)
+    remaining = total_clips
+    num_changed = 0
+    for detail_result in legistar_data:
+        _changed = detail_result.files.ensure_local_hashes(check_existing=check_existing)
+        if _changed:
+            num_changed += 1
+            changed = True
+        remaining -= 1
+        i += 1
+        if i % 100 == 0:
+            logger.info(f'Checked {i} items. {remaining=}, {num_changed=}')
+        if max_clips is not None and num_changed >= max_clips:
+            break
+    if changed:
+        logger.info('hashes changed, saving data')
+        legistar_data.save(data_file)
+    return changed
