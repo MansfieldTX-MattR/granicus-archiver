@@ -19,7 +19,6 @@ class LazyGroup(click.Group):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.lazy_subcommands = lazy_subcommands or {}
-        self._lazy_load_all()
 
     def list_commands(self, ctx):
         base = super().list_commands(ctx)

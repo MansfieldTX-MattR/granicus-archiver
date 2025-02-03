@@ -161,6 +161,8 @@ def authorize(obj: BaseContext):
     asyncio.run(googleauth.run_app(root_conf=obj.config))
 
 
+# Lazy-load all subcommands so sphinx-click sees them
+cli._lazy_load_all()
 
 
 if __name__ == '__main__':
