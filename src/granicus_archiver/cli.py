@@ -73,7 +73,7 @@ class BaseContext:
 def cli(
     ctx: click.Context,
     config_file: Path,
-    out_dir: Path,
+    out_dir: Path|None,
     data_file: Path|None,
     granicus_data_url: str|None,
     local_timezone: str|None,
@@ -86,14 +86,16 @@ def cli(
         data_file=data_file,
         granicus_data_url=granicus_data_url,
         local_timezone_name=local_timezone,
-        legistar=dict(
-            out_dir=legistar_out_dir,
-            data_file=legistar_data_file,
-        ),
         google={},
         timestamp_file=timestamp_file,
     )
+    legistar_kw = {
+        'out_dir': legistar_out_dir,
+        'data_file': legistar_data_file,
+    }
+    legistar_kw = {k:v for k,v in legistar_kw.items() if v is not None}
     conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
+    conf_kw['legistar'] = legistar_kw
     if config_file.exists():
         config = Config.load(config_file)
         if config.update(**conf_kw):

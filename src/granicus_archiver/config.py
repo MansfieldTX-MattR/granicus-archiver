@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import ClassVar, Literal, Any, Self, TYPE_CHECKING
+from typing import (
+    ClassVar, Literal, Iterator, Any, Self, get_type_hints, TYPE_CHECKING,
+)
 from abc import ABC, abstractmethod
 from pathlib import Path
 from os import PathLike
@@ -50,6 +52,25 @@ def get_app_cache(*parts: Path|str) -> Path:
 class BaseConfig(Serializable):
     group_key: ClassVar[GroupKey]
     """Unique key for :class:`BaseConfig` subclasses"""
+
+    @classmethod
+    def iter_child_config_classes(cls) -> Iterator[tuple[str, type[BaseConfig]]]:
+        """Iterate over child config classes
+        """
+        for attr, val_type in get_type_hints(cls).items():
+            if not isinstance(val_type, type):
+                continue
+            if issubclass(val_type, BaseConfig):
+                yield attr, val_type
+
+    @property
+    def child_configs(self) -> dict[str, BaseConfig]:
+        """Mapping of child config instances by their attribute name
+        """
+        return {
+            k:getattr(self, k)
+            for k, _ in self.iter_child_config_classes()
+        }
 
     @abstractmethod
     def update(self, **kwargs) -> bool:
@@ -367,6 +388,7 @@ class Config(BaseConfig):
             changed = True
 
         path_attrs = ['data_file', 'timestamp_file']
+        child_configs = self.child_configs
 
         for key, val in kwargs.items():
             if val is None:
@@ -381,11 +403,8 @@ class Config(BaseConfig):
                     continue
                 self.granicus_data_url = val
                 changed = True
-            elif key == 'legistar':
-                if self.legistar.update(**val):
-                    changed = True
-            elif key == 'google':
-                if self.google.update(**val):
+            elif key in child_configs:
+                if child_configs[key].update(**val):
                     changed = True
             elif key == 'local_timezone_name':
                 if val == self.local_timezone_name:
@@ -413,9 +432,12 @@ class Config(BaseConfig):
             timestamp_file=out_dir / 'timestamp-data.yaml',
             granicus_data_url=data_url,
             local_timezone_name=None,
-            legistar=LegistarConfig.build_defaults(**kwargs.get('legistar', {})),
-            google=GoogleConfig.build_defaults(**kwargs.get('google', {}))
         )
+        for attr, conf_cls in cls.iter_child_config_classes():
+            if attr in kwargs and isinstance(kwargs[attr], conf_cls):
+                continue
+            val = conf_cls.build_defaults(**kwargs.get(attr, {}))
+            kwargs[attr] = val
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
         return cls(**kwargs)
@@ -425,27 +447,26 @@ class Config(BaseConfig):
         d: dict[str, object] = {k: str(getattr(self, k)) for k in path_attrs}
         data_url = self.granicus_data_url
         d['granicus_data_url'] = None if data_url is None else str(data_url)
-        d['google'] = self.google.serialize()
-        d['legistar'] = self.legistar.serialize()
+        for key, child_conf in self.child_configs.items():
+            d[key] = child_conf.serialize()
         d['local_timezone_name'] = self.local_timezone_name
         return d
 
     @classmethod
     def deserialize(cls, data: dict[str, Any]) -> Self:
         path_attrs = ['out_dir', 'out_dir_abs', 'data_file', 'timestamp_file']
-        kw = {k: Path(data[k]) for k in path_attrs}
+        kw: dict[str, Any] = {k: Path(data[k]) for k in path_attrs}
         data_url = data.get('granicus_data_url')
         if data_url is not None:
             data_url = URL(data_url)
-        legistar: LegistarConfig
-        if 'legistar' in data:
-            legistar = LegistarConfig.deserialize(data['legistar'])
-        else:
-            legistar = LegistarConfig.build_defaults()
+        for key, val_type in cls.iter_child_config_classes():
+            if key not in data:
+                child_conf = val_type.build_defaults()
+            else:
+                child_conf = val_type.deserialize(data[key])
+            kw[key] = child_conf
         return cls(
             granicus_data_url=data_url,
-            google=GoogleConfig.deserialize(data['google']),
-            legistar=legistar,
             local_timezone_name=data.get('local_timezone_name'),
             **kw
         )
