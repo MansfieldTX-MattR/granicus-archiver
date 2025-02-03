@@ -19,6 +19,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'sphinx.ext.extlinks',
+    'sphinx_click',
 ]
 
 autodoc_member_order = 'bysource'

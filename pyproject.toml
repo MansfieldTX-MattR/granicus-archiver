@@ -21,9 +21,12 @@ dependencies = [
     "appdirs",
 ]
 
+[project.scripts]
+granicus-archiver = "granicus_archiver.cli:cli"
+
 [project.optional-dependencies]
 tests = ["pytest", "pytest-asyncio"]
-docs = ["sphinx", "furo"]
+docs = ["sphinx", "furo", "sphinx-click"]
 
 
 [tool.setuptools.packages.find]

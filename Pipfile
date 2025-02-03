@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-granicus-archiver = {extras = ["tests"], file = ".", editable = true}
+granicus-archiver = {extras = ["docs", "tests"], file = ".", editable = true}
 
 [dev-packages]
 ipython = "*"
@@ -12,7 +12,3 @@ ipython = "*"
 [requires]
 python_version = "3.12"
 python_full_version = "3.12.3"
-
-[docs]
-sphinx = "*"
-furo = "*"

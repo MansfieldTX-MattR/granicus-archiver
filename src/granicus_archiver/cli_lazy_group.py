@@ -19,6 +19,7 @@ class LazyGroup(click.Group):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.lazy_subcommands = lazy_subcommands or {}
+        self._lazy_load_all()
 
     def list_commands(self, ctx):
         base = super().list_commands(ctx)
@@ -29,6 +30,13 @@ class LazyGroup(click.Group):
         if cmd_name in self.lazy_subcommands:
             return self._lazy_load(cmd_name)
         return super().get_command(ctx, cmd_name)
+
+    def _lazy_load_all(self):
+        # This is necessary for sphinx-click to work
+        for cmd_name in self.lazy_subcommands.copy().keys():
+            cmd_object = self._lazy_load(cmd_name)
+            del self.lazy_subcommands[cmd_name]
+            self.add_command(cmd_object, name=cmd_name) # type: ignore
 
     def _lazy_load(self, cmd_name):
         # lazily loading a command, first get the module name and attribute name
