@@ -262,6 +262,7 @@ class Config(BaseConfig):
     """
 
     local_timezone_name: str|None
+    """Local timezone name for all granicus / legistar items"""
     default_filename: ClassVar[Path] = Path.home() / '.granicus.conf.yaml'
 
     group_key: ClassVar[GroupKey] = 'root'
