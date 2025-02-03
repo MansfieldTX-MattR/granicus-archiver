@@ -64,6 +64,14 @@ class MetaDict(Generic[IdType, Kt, Vt]):
         d = self._items.setdefault(item_id, {})
         d[item_key] = value
 
+    def __delitem__(self, key: tuple[IdType, Kt]|IdType) -> None:
+        if not isinstance(key, tuple):
+            del self._items[key]
+            return
+        item_id, item_key = key
+        d = self._items[item_id]
+        del d[item_key]
+
     def __contains__(self, key: IdType|tuple[IdType, Kt]) -> bool:
         if isinstance(key, tuple):
             item_id, item_key = key
@@ -180,6 +188,15 @@ class FileCache:
         else:
             assert cache_key[0] == 'legistar_rguid'
             self.legistar_rguid[cache_key[1:]] = value
+
+    def __contains__(self, cache_key: MetaCacheKey) -> bool:
+        if cache_key[0] == 'clips':
+            return cache_key[1:] in self.clips
+        elif cache_key[0] == 'legistar':
+            return cache_key[1:] in self.legistar
+        else:
+            assert cache_key[0] == 'legistar_rguid'
+            return cache_key[1:] in self.legistar_rguid
 
     def update(self, other: Self) -> None:
         self.clips.update(other.clips)
