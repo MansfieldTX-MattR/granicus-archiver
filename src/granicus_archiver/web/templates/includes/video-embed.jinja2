@@ -4,10 +4,18 @@
     {% set vid_file=clip.files.video %}{% set chapters_file=clip.files.chapters %}
     <video id="videoPlayer" controls data-has-chapters="{{ 'true' if chapters_file else 'false'}}">
       {% if vid_file -%}
-        <source src="{{ static_path('granicus', vid_file) }}" type="video/mp4" />
+        {% if request.app['use_s3'] %}
+          <source src="{{ clip_url(clip.id, 'video') }}" type="video/mp4" />
+        {% else %}
+          <source src="{{ static_path('granicus', vid_file) }}" type="video/mp4" />
+        {% endif %}
       {%- endif %}
       {% if chapters_file -%}
-        <track id="videoTextTrack" src="{{ static_path('granicus', chapters_file)}}" default kind="chapters" srcLang="en" />
+        {% if request.app['use_s3'] %}
+          <track id="videoTextTrack" src="{{ clip_url(clip.id, 'chapters') }}" default kind="chapters" srcLang="en" />
+        {% else %}
+          <track id="videoTextTrack" src="{{ static_path('granicus', chapters_file)}}" default kind="chapters" srcLang="en" />
+        {% endif %}
       {%- endif %}
     </video>
     {% endif %}

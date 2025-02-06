@@ -26,9 +26,13 @@
           {% endcall %}
           {% call desc_list('Files') %}
             <ul class="list-group">
-            {% for file_data in file_iter %}
+            {% for file_uid, file_data in file_iter %}
               <li class="list-group-item">
-                <a href="{{ static_path(file_static_key, file_data.filename) }}">{{ file_data.name|snake_case_to_title }}</a>
+                {% if request.app['use_s3'] %}
+                  <a href="{{ legistar_url((legistar_type, item_id, file_uid)) }}">{{ file_data.name|snake_case_to_title }}</a>
+                {% else %}
+                  <a href="{{ static_path(file_static_key, file_data.filename) }}">{{ file_data.name|snake_case_to_title }}</a>
+                {% endif %}
               </li>
             {% endfor %}
             </ul>

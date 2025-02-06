@@ -11,15 +11,23 @@ from ..config import Config
 from ..model import ClipCollection
 from ..legistar.model import LegistarData
 from ..legistar.guid_model import RGuidLegistarData
+from .s3client import S3Client
+
 
 __all__ = (
-    'ConfigKey', 'ClipsKey', 'LegistarDataKey', 'RGuidLegistarDataKey',
+    'ConfigKey', 'DataFileType', 'DataFiles',
+    'ClipsKey', 'LegistarDataKey', 'RGuidLegistarDataKey',
     'SortOrder', 'TimezoneKey', 'StaticRootName', 'StaticRoots', 'StaticRootsKey',
-    'StaticUrlRoots', 'StaticUrlRootsKey',
+    'StaticUrlRoots', 'StaticUrlRootsKey', 'S3ClientKey',
 )
 
 ConfigKey = web.AppKey('Config', Config)
 """App key for the :class:`granicus_archiver.config.Config` instance"""
+
+DataFileType = Literal['clips', 'legistar', 'legistar_rguid']
+""""""
+DataFiles = dict[DataFileType, Path]
+""""""
 
 ClipsKey = web.AppKey('Clips', ClipCollection)
 """App key for the :class:`granicus_archiver.model.ClipCollection` instance"""
@@ -29,6 +37,9 @@ LegistarDataKey = web.AppKey('LegistarData', LegistarData)
 
 RGuidLegistarDataKey = web.AppKey('RGuidLegistarDataKey', RGuidLegistarData)
 """App key for the :class:`granicus_archiver.legistar.guid_model.RGuidLegistarData` instance"""
+
+S3ClientKey = web.AppKey('S3Client', S3Client)
+"""App key for the :class:`.s3client.S3Client` instance"""
 
 SortOrder = Literal['asc', 'dsc']
 

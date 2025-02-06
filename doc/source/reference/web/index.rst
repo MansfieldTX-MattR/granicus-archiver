@@ -13,4 +13,5 @@
     views
     filters
     pagination
+    s3client
     types
