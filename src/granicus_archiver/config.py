@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .model import Location
     from .legistar.rss_parser import Category
 
-GroupKey = Literal['root', 'google', 'legistar']
+GroupKey = Literal['root', 'google', 'aws', 'legistar']
 """"""
 
 
@@ -168,6 +168,67 @@ class GoogleConfig(BaseConfig):
             folder_cache_file=Path(data['folder_cache_file']),
             meta_cache_file=Path(data['meta_cache_file']),
         )
+
+@dataclass
+class AWSConfig(BaseConfig):
+    """AWS Config
+    """
+    bucket_name: str
+    """The bucket to use for the archive"""
+    clips_prefix: Path
+    """Prefix for clips"""
+    legistar_prefix: Path
+    """Prefix for legistar items"""
+    legistar_rguid_prefix: Path
+    """Prefix for rguid legistar items"""
+
+    group_key: ClassVar[GroupKey] = 'aws'
+
+    def update(self, **kwargs) -> bool:
+        changed = False
+        keys = ['bucket_name', 'clips_prefix', 'legistar_prefix', 'legistar_rguid_prefix']
+        for key in keys:
+            if key not in kwargs:
+                continue
+            val = kwargs[key]
+            if val == getattr(self, key):
+                continue
+            if key != 'bucket_name':
+                assert isinstance(val, Path)
+                assert not val.is_absolute()
+            setattr(self, key, val)
+            changed = True
+        return changed
+
+    @classmethod
+    def build_defaults(cls, **kwargs) -> Self:
+        default_kw = dict(
+            bucket_name='',
+            clips_prefix=Path('clips'),
+            legistar_prefix=Path('legistar'),
+            legistar_rguid_prefix=Path('legistar-rguid'),
+        )
+        for key, val in default_kw.items():
+            kwargs.setdefault(key, val)
+        return cls(**kwargs)
+
+    def serialize(self) -> dict[str, Any]:
+        return dict(
+            bucket_name=self.bucket_name,
+            clips_prefix=str(self.clips_prefix),
+            legistar_prefix=str(self.legistar_prefix),
+            legistar_rguid_prefix=str(self.legistar_rguid_prefix),
+        )
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        return cls(
+            bucket_name=data['bucket_name'],
+            clips_prefix=Path(data['clips_prefix']),
+            legistar_prefix=Path(data['legistar_prefix']),
+            legistar_rguid_prefix=Path(data['legistar_rguid_prefix']),
+        )
+
 
 @dataclass
 class LegistarConfig(BaseConfig):
@@ -319,6 +380,10 @@ class Config(BaseConfig):
 
     google: GoogleConfig
     """:class:`GoogleConfig` instance
+    """
+
+    aws: AWSConfig
+    """:class:`AWSConfig` instance
     """
 
     local_timezone_name: str|None

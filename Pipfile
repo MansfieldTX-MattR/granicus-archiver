@@ -8,6 +8,7 @@ granicus-archiver = {extras = ["docs", "tests"], file = ".", editable = true}
 
 [dev-packages]
 ipython = "*"
+types-aiobotocore = {extras = ["essential"], version = "*"}
 
 [requires]
 python_version = "3.12"
