@@ -335,6 +335,7 @@ class ClipClient(ClientBase):
         await self.upload(
             key=remote_file,
             local_filename=local_file,
+            check_exists=False,
         )
 
     @logger.catch(reraise=True)
@@ -527,6 +528,7 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
         await self.upload(
             key=remote_file,
             local_filename=local_file,
+            check_exists=False,
         )
 
     async def upload_legistar_file(
