@@ -17,7 +17,7 @@ from ..legistar.guid_model import RGuidLegistarData
 
 from .types import *
 from .config import AppConfig, APP_CONF_KEY
-from .s3client import S3Client
+from .s3client import S3Client, S3ClientKey
 from . import views, filters
 
 

@@ -27,6 +27,7 @@ from ..legistar.guid_model import RGuidLegistarData, RGuidDetailResult
 from ..legistar.types import Category, GUID, REAL_GUID, NoClip, NoClipT, LegistarFileUID
 from .types import *
 from .config import APP_CONF_KEY
+from .s3client import S3ClientKey
 from .pagination import Paginator
 
 

@@ -38,7 +38,6 @@ class S3Client(ClientBase):
     """Cached metadata for data files"""
     def __init__(self, app: web.Application) -> None:
         # import app key locally because app.cleanup_ctx has issues otherwise
-        from .types import ConfigKey
         self.app = app
         self.app_conf = app[APP_CONF_KEY]
         config = app[ConfigKey]
@@ -127,3 +126,7 @@ class S3Client(ClientBase):
         """Save the data file metadata to disk
         """
         self.metadata_file.write_text(json.dumps(self.data_file_metadata))
+
+
+S3ClientKey = web.AppKey('S3Client', S3Client)
+"""App key for the :class:`.s3client.S3Client` instance"""

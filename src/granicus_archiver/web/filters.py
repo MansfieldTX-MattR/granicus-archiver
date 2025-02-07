@@ -12,6 +12,7 @@ from ..legistar.types import GUID, REAL_GUID, LegistarFileUID
 from ..legistar.rss_parser import is_guid, is_real_guid
 from .types import *
 from .config import APP_CONF_KEY
+from .s3client import S3ClientKey
 
 
 class Context(TypedDict):
