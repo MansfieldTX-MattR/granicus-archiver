@@ -60,13 +60,13 @@ class S3Client(ClientBase):
         ) -> bool:
             if local_file.exists():
                 local_hash = get_file_hash(local_file, 'sha1')
-                remote_hash = await self.get_object_sha1(str(remote_file))
+                remote_hash = await self.get_object_sha1(remote_file)
                 assert remote_hash is not None
                 if local_hash == remote_hash:
                     logger.debug(f'Data for "{key}" is up to date')
                     return False
             local_file.parent.mkdir(parents=True, exist_ok=True)
-            await self.download_object(str(remote_file), local_file)
+            await self.download_object(remote_file, local_file)
             logger.info(f'Downloaded data for "{key}" to "{local_file}"')
             return True
 

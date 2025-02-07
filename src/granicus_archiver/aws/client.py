@@ -40,7 +40,7 @@ from ..utils import (
     HashMismatchError, SHA1Hash, get_file_hash_async
 )
 
-Key = str
+Key = str|Path
 ACL = Literal[
     'private', 'public-read', 'public-read-write', 'authenticated-read',
     'aws-exec-read', 'bucket-owner-read', 'bucket-owner-full-control'
@@ -52,6 +52,12 @@ class SchedulersTD(TypedDict):
     uploads: aiojobs.Scheduler
     upload_checks: aiojobs.Scheduler
 
+
+def _key_to_str(key: Key) -> str:
+    if isinstance(key, Path):
+        assert not key.is_absolute()
+        return str(key)
+    return key
 
 
 class ClientBase:
@@ -96,6 +102,7 @@ class ClientBase:
     async def get_object(self, key: Key) -> Object:
         """Get an S3 object within :attr:`bucket` by key
         """
+        key = _key_to_str(key)
         obj = await self.bucket.Object(key)
         await obj.load()
         return obj
@@ -123,7 +130,7 @@ class ClientBase:
     async def get_object_tags(self, obj: Object|Key) -> dict[str, str]:
         """Get the tags for an S3 object
         """
-        key = obj if isinstance(obj, str) else obj.key
+        key = _key_to_str(obj) if isinstance(obj, (Path, str)) else obj.key
         tag_set = await self.s3_client.get_object_tagging(
             Bucket=self.bucket.name,
             Key=key,
@@ -213,6 +220,7 @@ class ClientBase:
                 return local_meta.sha1
             return await get_file_hash_async(local_filename, 'sha1')
 
+        key = _key_to_str(key)
         if check_exists and await self.object_exists(key):
             logger.warning(f'Object already exists: {key}')
             if wait_exists:
@@ -253,6 +261,7 @@ class ClientBase:
     ) -> None:
         """Download an S3 object to a local file
         """
+        key = _key_to_str(key)
         await self.bucket.download_file(
             Key=key,
             Filename=str(local_filename),
@@ -315,16 +324,16 @@ class ClipClient(ClientBase):
         """
         local_file = self.config.data_file
         remote_file = self.upload_dir / local_file.name
-        exists = await self.object_exists(str(remote_file))
+        exists = await self.object_exists(remote_file)
         if exists:
-            remote_hash = await self.get_object_sha1(str(remote_file))
+            remote_hash = await self.get_object_sha1(remote_file)
             local_hash = await get_file_hash_async(local_file, 'sha1')
             if remote_hash == local_hash:
                 logger.info(f'Data file matches hosted version: {remote_file}')
                 return
         logger.info(f'Uploading {local_file} to {remote_file}')
         await self.upload(
-            key=str(remote_file),
+            key=remote_file,
             local_filename=local_file,
         )
 
@@ -345,7 +354,7 @@ class ClipClient(ClientBase):
             assert local_meta is not None
             try:
                 await self.upload(
-                    key=str(remote_file),
+                    key=remote_file,
                     local_filename=local_file,
                     check_exists=True,
                     wait_exists=False,
@@ -507,16 +516,16 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
         """
         local_file = self.legistar_data_file
         remote_file = self.upload_dir / local_file.name
-        exists = await self.object_exists(str(remote_file))
+        exists = await self.object_exists(remote_file)
         if exists:
-            remote_hash = await self.get_object_sha1(str(remote_file))
+            remote_hash = await self.get_object_sha1(remote_file)
             local_hash = await get_file_hash_async(local_file, 'sha1')
             if remote_hash == local_hash:
                 logger.info(f'Data file matches hosted version: {remote_file}')
                 return
         logger.info(f'Uploading {local_file} to {remote_file}')
         await self.upload(
-            key=str(remote_file),
+            key=remote_file,
             local_filename=local_file,
         )
 
@@ -532,7 +541,7 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
         remote_file = self.get_file_upload_path(guid, uid)
         try:
             await self.upload(
-                key=str(remote_file),
+                key=remote_file,
                 local_filename=local_file,
                 check_exists=True,
                 local_meta=local_meta,
