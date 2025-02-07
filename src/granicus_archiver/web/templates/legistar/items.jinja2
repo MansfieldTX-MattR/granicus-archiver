@@ -41,7 +41,9 @@
   <th scope="row">
     <span class="d-flex justify-content-around align-self-start">
       <span class="flex-fill">{{ Link(url(item_view_name, guid=item_id), item.feed_item.title) }}</span>
+      {% if not request.app['read_only'] %}
       <span class="text-end fw-light small"><a href="{{ url(item_edit_view_name, guid=item_id, query_={'prev':request.url.__str__()}) }}">Edit</a></span>
+      {% endif %}
     </span>
   </th>
   <td class="item-location"><span class="text-wrap">{{ item.location }}</span></td>

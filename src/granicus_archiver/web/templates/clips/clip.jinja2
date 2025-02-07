@@ -33,7 +33,9 @@
       </div>
     </div>
     {% block section_end %}
+    {% if not request.app['read_only'] %}
     <a class="btn btn-primary btn-lg" href="{{ url('clip_item_change', clip_id=clip.id) }}">Edit</a>
+    {% endif %}
     {% endblock %}
   </section>
 </main>

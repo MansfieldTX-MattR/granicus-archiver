@@ -143,6 +143,7 @@ def build_app(app_conf: AppConfig) -> web.Application:
     app[TimezoneKey] = tz
     app.cleanup_ctx.append(app_data_ctx)
     app['use_s3'] = app_conf.use_s3
+    app['read_only'] = app_conf.read_only
 
     aiohttp_jinja2.setup(
         app,
