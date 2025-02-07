@@ -428,8 +428,6 @@ class ClipClient(ClientBase):
         upload_check_limit = upload_check_sch.limit
         assert upload_check_limit is not None
         for clip in clips:
-            if clip.datetime.year < 2023:
-                continue
             await self.upload_check_waiters.spawn(self.check_clip_needs_upload(clip))
             if len(self.upload_check_waiters) >= upload_check_limit:
                 await self.handle_upload_check_jobs()
