@@ -1,8 +1,10 @@
 from __future__ import annotations
 from typing import Self
 from pathlib import Path
+import asyncio
 import webbrowser
 
+from loguru import logger
 from aiohttp import web
 from yarl import URL
 import aiohttp_jinja2
@@ -38,9 +40,19 @@ async def home(request: web.Request):
 class AppDataContext:
     """Context manager for setting up the application data
     """
+    update_timeout = 300
+    """Update interval to check for updated data files"""
+    data_files: DataFiles
+    update_task: asyncio.Task|None
+    """Task to check for updated data files
+
+    This task is created in when the context is entered and cancelled closed.
+    """
     def __init__(self, app: web.Application) -> None:
         self.app = app
         self.s3_client: S3Client|None = None
+        self._closing = False
+        self.update_task: asyncio.Task|None = None
 
     async def open(self) -> None:
         await self.__aenter__()
@@ -54,9 +66,19 @@ class AppDataContext:
             self.s3_client = S3Client(self.app)
             await self.s3_client.__aenter__()
             self.app[S3ClientKey] = self.s3_client
+            self.update_task = asyncio.create_task(self.update_loop())
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        self._closing = True
+        t = self.update_task
+        self.update_task = None
+        if t is not None:
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
         if self.s3_client is not None:
             await self.s3_client.__aexit__(exc_type, exc_value, traceback)
 
@@ -77,12 +99,34 @@ class AppDataContext:
                 'legistar': config.legistar.data_file,
                 'legistar_rguid': RGuidLegistarData._get_data_file(config),
             }
+        self.data_files = data_files
+        self._load_app_models()
+
+    def _load_app_models(self) -> None:
+        data_files = self.data_files
         self.app[ClipsKey] = ClipCollection.load(data_files['clips'])
         self.app[LegistarDataKey] = LegistarData.load(data_files['legistar'])
         self.app[RGuidLegistarDataKey] = RGuidLegistarData.load(data_files['legistar_rguid'])
 
+    async def update_loop(self):
+        if self.s3_client is None:
+            return
+        while True:
+            await asyncio.sleep(self.update_timeout)
+            if not hasattr(self, 'data_files'):
+                continue
+            if self._closing:
+                break
+            logger.debug('Checking for updated data files')
+            changed = await self.s3_client.get_data_files()
+            if not changed:
+                continue
+            logger.info('Data files have changed. Reloading models')
+            self._load_app_models()
 
 
+
+@logger.catch(reraise=True)
 async def app_data_ctx(app: web.Application):
     ctx = AppDataContext(app)
     async with ctx:
