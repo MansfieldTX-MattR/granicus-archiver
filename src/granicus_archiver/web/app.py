@@ -215,7 +215,7 @@ def init_func(argv):
     return build_app(app_conf)
 
 
-@click.group()
+@click.group(name='web')
 @click.option('-h', '--hostname', default='localhost', show_default=True)
 @click.option('-p', '--port', default=8080, show_default=True)
 @click.option('--serve-static/--no-serve-static', default=True, show_default=True)

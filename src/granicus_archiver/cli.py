@@ -24,6 +24,7 @@ class BaseContext:
         'clips': 'granicus_archiver.clips_cli.cli',
         'legistar': 'granicus_archiver.legistar.cli.cli',
         'aws': 'granicus_archiver.aws.cli.cli',
+        'web': 'granicus_archiver.web.app.cli',
     }
 )
 @click.option(
