@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import NamedTuple
+from pathlib import Path
 
 from aiohttp import web
 from yarl import URL
@@ -26,6 +27,10 @@ class AppConfig(NamedTuple):
     If :attr:`serve_static` is ``True``, this should be ``"/"``. Otherwise, it
     should be the URL path to the static files.
     """
+    use_s3: bool = False
+    """If ``True``, the app will use S3 to for data files and assets"""
+    s3_data_dir: Path|None = None
+    """Root directory to store local data files from s3"""
 
 
 APP_CONF_KEY = web.AppKey('AppConfig', AppConfig)

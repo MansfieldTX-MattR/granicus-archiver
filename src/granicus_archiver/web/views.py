@@ -11,6 +11,7 @@ from functools import wraps
 
 from loguru import logger
 from aiohttp import web
+from multidict import MultiDict
 import aiohttp_jinja2
 from yarl import URL
 
@@ -19,12 +20,14 @@ from ..model import CLIP_ID, Location, Clip, ClipCollection
 from ..legistar.model import (
     LegistarData, DetailPageResult, LegistarFiles,
     AbstractLegistarModel, AbstractFile, LegistarFile, AttachmentFile,
+    file_key_to_uid, attachment_name_to_uid,
 )
 from ..legistar.rss_parser import is_guid, is_real_guid
 from ..legistar.guid_model import RGuidLegistarData, RGuidDetailResult
-from ..legistar.types import Category, GUID, REAL_GUID, NoClip, NoClipT
+from ..legistar.types import Category, GUID, REAL_GUID, NoClip, NoClipT, LegistarFileUID
 from .types import *
 from .config import APP_CONF_KEY
+from .s3client import S3ClientKey
 from .pagination import Paginator
 
 
@@ -119,6 +122,54 @@ def id_equal(a: _ID_Type|None|NoClipT, b: _ID_Type|None|NoClipT) -> bool:
     return a == b
 
 
+@routes.get('/clips/webvtt/{clip_id}/', name='clip_webvtt')
+async def clip_webvtt(request: web.Request) -> web.Response|web.StreamResponse:
+    """View to display a webvtt file for a clip
+    """
+    app_conf = request.app[APP_CONF_KEY]
+    clip_id = CLIP_ID(request.match_info['clip_id'])
+    clips = request.app[ClipsKey]
+    clip = clips[clip_id]
+    if app_conf.use_s3:
+        chunk_size = 4096
+        s3_client = request.app[S3ClientKey]
+        vtt_filename = clip.get_file_path('chapters', absolute=False)
+        s3_prefix = s3_client.data_dirs['clips']
+        s3_path = s3_prefix / vtt_filename
+        # if not await s3_client.object_exists(str(s3_path)):
+        #     raise web.HTTPNotFound()
+
+        obj = await s3_client.s3_client.get_object(
+            Bucket=s3_client.bucket.name, Key=str(s3_path),
+        )
+
+        obj_info = obj['ResponseMetadata']['HTTPHeaders']
+        resp = web.StreamResponse(
+            headers=MultiDict(
+                {
+                    "CONTENT-DISPOSITION": (
+                        f"attachment; filename='{vtt_filename}'"
+                    ),
+                    "Content-Type": obj_info["content-type"],
+                }
+            )
+        )
+        resp.content_type = obj_info['content-type']
+        resp.content_length = int(obj_info['content-length'])
+        resp.etag = obj_info['etag'].strip('"')
+        resp.last_modified = obj_info['last-modified']
+        await resp.prepare(request)
+        stream = obj['Body']
+        async for chunk in stream.iter_chunks(chunk_size):
+            await resp.write(chunk)
+    else:
+        vtt_filename = clip.get_file_path('chapters', absolute=True)
+        webvtt = vtt_filename.read_text()
+        resp = web.Response(
+            text=webvtt,
+            content_type='text/vtt',
+        )
+    return resp
 
 
 class AbstractView(ABC, Generic[ContextT]):
@@ -697,13 +748,15 @@ class _ItemContext[
 
     :meta public:
     """
+    legistar_type: Literal['legistar', 'legistar_rguid']
+    """The type of legistar data"""
     item: ItemT
     """The item being viewed"""
     item_id: IdT
     """The id of the :attr:`item`"""
     files: LegistarFiles|None
     """The files associated with the item"""
-    file_iter: Iterable[AbstractFile]
+    file_iter: Iterable[tuple[LegistarFileUID, AbstractFile]]
     """An iterable of :class:`~.legistar.model.AbstractFile` instances"""
     file_static_key: StaticRootName
     """The key for the item assets in :class:`~.web.types.StaticUrlRoots`"""
@@ -751,6 +804,7 @@ class LItemViewBase[
     or :class:`~.legistar.guid_model.RGuidDetailResult` instance
     """
     template_name = 'legistar/item.jinja2'
+    legistar_type: Literal['legistar', 'legistar_rguid']
     guid: IdT
     clip_id: CLIP_ID|None|NoClipT
     def __init__(self, request: web.Request) -> None:
@@ -776,7 +830,7 @@ class LItemViewBase[
         raise NotImplementedError
 
     @abstractmethod
-    def iter_files(self) -> Iterable[AbstractFile]: ...
+    def iter_files(self) -> Iterable[tuple[LegistarFileUID, AbstractFile]]: ...
 
     @abstractmethod
     def get_change_view_name(self) -> str:
@@ -804,6 +858,7 @@ class LItemViewBase[
 
     async def get_base_context_data(self) -> _ItemContext[IdT, ItemT]:
         return {
+            'legistar_type': self.legistar_type,
             'item': self.item,
             'item_id': self.guid,
             'files': self.get_files(),
@@ -837,23 +892,25 @@ class LItemMixin:
     def get_files(self) -> LegistarFiles | None:
         return self.legistar_data.files.get(self.item.feed_guid)
 
-    def iter_files(self) -> Iterable[AbstractFile]:
+    def iter_files(self) -> Iterable[tuple[LegistarFileUID, AbstractFile]]:
         files = self.get_files()
         if files is None:
             return []
-        result: list[LegistarFile|AttachmentFile] = []
+        result: list[tuple[LegistarFileUID, LegistarFile|AttachmentFile]] = []
         for f_key, f_file in files:
             if f_file is None:
                 continue
+            uid = file_key_to_uid(f_key)
             full_p = self.legistar_data.get_file_path(self.guid, f_key)
             full_p = full_p.relative_to(self.legistar_data.root_dir)
-            result.append(dataclasses.replace(f_file, filename=full_p))
+            result.append((uid, dataclasses.replace(f_file, filename=full_p)))
         for att_key, att_file in files.attachments.items():
             if att_file is None:
                 continue
+            uid = attachment_name_to_uid(att_key)
             full_p = self.legistar_data.get_attachment_path(self.guid, att_key)
             full_p = full_p.relative_to(self.legistar_data.root_dir)
-            result.append(dataclasses.replace(att_file, filename=full_p))
+            result.append((uid, dataclasses.replace(att_file, filename=full_p)))
         return result
 
 
@@ -869,6 +926,7 @@ class LItemMixin:
 class LItemView(LItemMixin, LItemViewBase[_ItemContext[GUID, DetailPageResult], GUID, DetailPageResult]):
     """View for a single :class:`~.legistar.model.DetailPageResult` instance
     """
+    legistar_type = 'legistar'
     async def get_context_data(self) -> _ItemContext[GUID, DetailPageResult]:
         """Get the context data for this view
         """
@@ -898,11 +956,11 @@ class RGItemMixin:
     def get_files(self) -> LegistarFiles | None:
         return None
 
-    def iter_files(self) -> Iterable[AbstractFile]:
+    def iter_files(self) -> Iterable[tuple[LegistarFileUID, AbstractFile]]:
         for f in self.item.files:
             full_p = self.item.files.get_file_path(f.uid, absolute=True)
             full_p = full_p.relative_to(self.legistar_data.root_dir)
-            yield dataclasses.replace(f, filename=full_p)
+            yield f.uid, dataclasses.replace(f, filename=full_p)
 
     def get_change_view_name(self) -> str:
         return 'rguid_legistar_item_change'
@@ -916,6 +974,7 @@ class RGItemMixin:
 class RGItemView(RGItemMixin, LItemViewBase[_ItemContext[REAL_GUID, RGuidDetailResult], REAL_GUID, RGuidDetailResult]):
     """View for a single :class:`~.legistar.guid_model.RGuidDetailResult` instance
     """
+    legistar_type = 'legistar_rguid'
     async def get_context_data(self) -> _ItemContext[REAL_GUID, RGuidDetailResult]:
         """Get the context data for this view
         """
@@ -1026,11 +1085,11 @@ class LItemChangeViewBase[
 class LItemChangeView(LItemMixin, LItemChangeViewBase[GUID, DetailPageResult]):
     """Edit view for a single :class:`~.legistar.model.DetailPageResult` instance
     """
-    pass
+    legistar_type = 'legistar'
 
 
 @routes.view('/legistar-rguid/items/change/{guid}/', name='rguid_legistar_item_change')
 class RGLItemChangeView(RGItemMixin, LItemChangeViewBase[REAL_GUID, RGuidDetailResult]):
     """Edit view for a single :class:`~.legistar.guid_model.RGuidDetailResult` instance
     """
-    pass
+    legistar_type = 'legistar_rguid'

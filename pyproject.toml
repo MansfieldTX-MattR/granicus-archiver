@@ -12,6 +12,7 @@ dependencies = [
     "aiojobs",
     "aiofile",
     "yarl",
+    "aioboto3",
     "pyyaml",
     "pyquery",
     "click",

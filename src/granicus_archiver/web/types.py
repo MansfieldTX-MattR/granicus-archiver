@@ -12,14 +12,21 @@ from ..model import ClipCollection
 from ..legistar.model import LegistarData
 from ..legistar.guid_model import RGuidLegistarData
 
+
 __all__ = (
-    'ConfigKey', 'ClipsKey', 'LegistarDataKey', 'RGuidLegistarDataKey',
+    'ConfigKey', 'DataFileType', 'DataFiles',
+    'ClipsKey', 'LegistarDataKey', 'RGuidLegistarDataKey',
     'SortOrder', 'TimezoneKey', 'StaticRootName', 'StaticRoots', 'StaticRootsKey',
     'StaticUrlRoots', 'StaticUrlRootsKey',
 )
 
 ConfigKey = web.AppKey('Config', Config)
 """App key for the :class:`granicus_archiver.config.Config` instance"""
+
+DataFileType = Literal['clips', 'legistar', 'legistar_rguid']
+""""""
+DataFiles = dict[DataFileType, Path]
+""""""
 
 ClipsKey = web.AppKey('Clips', ClipCollection)
 """App key for the :class:`granicus_archiver.model.ClipCollection` instance"""
@@ -29,6 +36,7 @@ LegistarDataKey = web.AppKey('LegistarData', LegistarData)
 
 RGuidLegistarDataKey = web.AppKey('RGuidLegistarDataKey', RGuidLegistarData)
 """App key for the :class:`granicus_archiver.legistar.guid_model.RGuidLegistarData` instance"""
+
 
 SortOrder = Literal['asc', 'dsc']
 

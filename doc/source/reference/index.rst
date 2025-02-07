@@ -10,4 +10,5 @@ Reference
     downloader
     legistar/index
     googledrive/index
+    aws
     web/index

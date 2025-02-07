@@ -1,8 +1,10 @@
 from __future__ import annotations
-
+from typing import Self
 from pathlib import Path
+import asyncio
 import webbrowser
 
+from loguru import logger
 from aiohttp import web
 from yarl import URL
 import aiohttp_jinja2
@@ -17,6 +19,7 @@ from ..legistar.guid_model import RGuidLegistarData
 
 from .types import *
 from .config import AppConfig, APP_CONF_KEY
+from .s3client import S3Client, S3ClientKey
 from . import views, filters
 
 
@@ -34,6 +37,103 @@ async def home(request: web.Request):
 # async def request_processor(request: web.Request):
 #     return {'myrequest': request}
 
+class AppDataContext:
+    """Context manager for setting up the application data
+    """
+    update_timeout = 300
+    """Update interval to check for updated data files"""
+    data_files: DataFiles
+    update_task: asyncio.Task|None
+    """Task to check for updated data files
+
+    This task is created in when the context is entered and cancelled closed.
+    """
+    def __init__(self, app: web.Application) -> None:
+        self.app = app
+        self.s3_client: S3Client|None = None
+        self._closing = False
+        self.update_task: asyncio.Task|None = None
+
+    async def open(self) -> None:
+        await self.__aenter__()
+
+    async def close(self) -> None:
+        await self.__aexit__(None, None, None)
+
+    async def __aenter__(self) -> Self:
+        use_s3 = self.app[APP_CONF_KEY].use_s3
+        if use_s3:
+            self.s3_client = S3Client(self.app)
+            await self.s3_client.__aenter__()
+            self.app[S3ClientKey] = self.s3_client
+            self.update_task = asyncio.create_task(self.update_loop())
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        self._closing = True
+        t = self.update_task
+        self.update_task = None
+        if t is not None:
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        if self.s3_client is not None:
+            await self.s3_client.__aexit__(exc_type, exc_value, traceback)
+
+    async def load_app_models(self) -> None:
+        """Load the model data
+
+        If :attr:`.config.AppConfig.use_s3` is True, the data files are
+        downloaded from S3 using :class:`.s3client.S3Client`.
+        """
+        config = self.app[ConfigKey]
+        data_files: DataFiles
+        if self.s3_client is not None:
+            await self.s3_client.get_data_files()
+            data_files = self.s3_client.data_files_local
+        else:
+            data_files = {
+                'clips': config.data_file,
+                'legistar': config.legistar.data_file,
+                'legistar_rguid': RGuidLegistarData._get_data_file(config),
+            }
+        self.data_files = data_files
+        self._load_app_models()
+
+    def _load_app_models(self) -> None:
+        data_files = self.data_files
+        self.app[ClipsKey] = ClipCollection.load(data_files['clips'])
+        self.app[LegistarDataKey] = LegistarData.load(data_files['legistar'])
+        self.app[RGuidLegistarDataKey] = RGuidLegistarData.load(data_files['legistar_rguid'])
+
+    async def update_loop(self):
+        if self.s3_client is None:
+            return
+        while True:
+            await asyncio.sleep(self.update_timeout)
+            if not hasattr(self, 'data_files'):
+                continue
+            if self._closing:
+                break
+            logger.debug('Checking for updated data files')
+            changed = await self.s3_client.get_data_files()
+            if not changed:
+                continue
+            logger.info('Data files have changed. Reloading models')
+            self._load_app_models()
+
+
+
+@logger.catch(reraise=True)
+async def app_data_ctx(app: web.Application):
+    ctx = AppDataContext(app)
+    async with ctx:
+        await ctx.load_app_models()
+        yield
+
+
 def build_app(app_conf: AppConfig) -> web.Application:
     app = web.Application()
     app[APP_CONF_KEY] = app_conf
@@ -41,9 +141,8 @@ def build_app(app_conf: AppConfig) -> web.Application:
     assert conf.local_timezone_name is not None
     tz = set_local_timezone(conf.local_timezone_name)
     app[TimezoneKey] = tz
-    app[ClipsKey] = ClipCollection.load(conf.data_file)
-    app[LegistarDataKey] = LegistarData.load(conf.legistar.data_file)
-    app[RGuidLegistarDataKey] = RGuidLegistarData.load(RGuidLegistarData._get_data_file(conf))
+    app.cleanup_ctx.append(app_data_ctx)
+    app['use_s3'] = app_conf.use_s3
 
     aiohttp_jinja2.setup(
         app,
@@ -64,6 +163,8 @@ def build_app(app_conf: AppConfig) -> web.Application:
     env.globals.update({
         'url_query': filters.url_query,
         'static_path': filters.static_path,
+        'clip_url': filters.clip_url,
+        'legistar_url': filters.legistar_url,
     })
     app.add_routes(routes)
     app.add_routes(views.routes)
@@ -72,11 +173,11 @@ def build_app(app_conf: AppConfig) -> web.Application:
         web.static('/assets', STATIC_ROOT),
     ]
 
-    if app_conf.serve_static:
+    if app_conf.serve_static and not app_conf.use_s3:
         static_routes.extend([
             web.static(f'/{conf.out_dir}', conf.out_dir_abs),
             web.static(f'/{conf.legistar.out_dir}', conf.legistar.out_dir_abs),
-            web.static(f'/{app[RGuidLegistarDataKey].root_dir}', app[RGuidLegistarDataKey].root_dir),
+            web.static(f'/{RGuidLegistarData._get_root_dir(conf)}', RGuidLegistarData._get_root_dir(conf)),
         ])
 
     app.add_routes(static_routes)
@@ -90,7 +191,7 @@ def build_app(app_conf: AppConfig) -> web.Application:
         'assets': Path('assets'),
         'granicus': conf.out_dir,
         'legistar': conf.legistar.out_dir,
-        'legistar_rguid': app[RGuidLegistarDataKey].root_dir,
+        'legistar_rguid': RGuidLegistarData._get_root_dir(conf),
     }
     app[StaticRootsKey] = roots
 
@@ -120,6 +221,8 @@ def init_func(argv):
 @click.option('--serve-static/--no-serve-static', default=True, show_default=True)
 @click.option('--read-only/--no-read-only', default=True, show_default=True)
 @click.option('--static-url', default='/', show_default=True)
+@click.option('--use-s3/--no-use-s3', default=False, show_default=True)
+@click.option('--s3-data-dir', type=click.Path(file_okay=False, dir_okay=True, path_type=Path))
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -127,7 +230,9 @@ def cli(
     port: int,
     serve_static: bool,
     read_only: bool,
-    static_url: str
+    static_url: str,
+    use_s3: bool,
+    s3_data_dir: Path|None
 ):
     _static_url = URL(static_url)
     if not _static_url.host:
@@ -135,6 +240,7 @@ def cli(
     conf = AppConfig(
         hostname=hostname, port=port, serve_static=serve_static,
         read_only=read_only, static_url=_static_url,
+        use_s3=use_s3, s3_data_dir=s3_data_dir
     )
     ctx.obj = conf
 

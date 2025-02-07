@@ -23,6 +23,7 @@ class BaseContext:
     lazy_subcommands={
         'clips': 'granicus_archiver.clips_cli.cli',
         'legistar': 'granicus_archiver.legistar.cli.cli',
+        'aws': 'granicus_archiver.aws.cli.cli',
     }
 )
 @click.option(
@@ -126,7 +127,7 @@ def drive(obj: BaseContext):
 @cli.command
 @click.option(
     '--group',
-    type=click.Choice(choices=['root', 'google', 'legistar', 'all']),
+    type=click.Choice(choices=['root', 'aws', 'google', 'legistar', 'all']),
     default='all',
     show_default=True,
 )
@@ -135,7 +136,7 @@ def show_config(obj: BaseContext, group: ConfigGroupKey|Literal['all']):
     """Show the current configuration
     """
     from pprint import pformat
-    sub_keys: list[ConfigGroupKey] = ['google', 'legistar']
+    sub_keys: list[ConfigGroupKey] = ['google', 'aws', 'legistar']
     ser = obj.config.serialize()
     for key in sub_keys:
         del ser[key]
