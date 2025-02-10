@@ -219,6 +219,11 @@ def init_func(argv):
 @click.group(name='web')
 @click.option('-h', '--hostname', default='localhost', show_default=True)
 @click.option('-p', '--port', default=8080, show_default=True)
+@click.option(
+    '--sockfile',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    help='Unix socket file to use for the server (if not specified, use TCP)'
+)
 @click.option('--serve-static/--no-serve-static', default=True, show_default=True)
 @click.option('--read-only/--no-read-only', default=True, show_default=True)
 @click.option('--static-url', default='/', show_default=True)
@@ -229,6 +234,7 @@ def cli(
     ctx: click.Context,
     hostname: str,
     port: int,
+    sockfile: Path|None,
     serve_static: bool,
     read_only: bool,
     static_url: str,
@@ -239,7 +245,7 @@ def cli(
     if not _static_url.host:
         _static_url = URL(f'http://{hostname}:{port}').join(_static_url)
     conf = AppConfig(
-        hostname=hostname, port=port, serve_static=serve_static,
+        hostname=hostname, port=port, sockfile=sockfile, serve_static=serve_static,
         read_only=read_only, static_url=_static_url,
         use_s3=use_s3, s3_data_dir=s3_data_dir
     )
@@ -261,10 +267,15 @@ def serve(obj: AppConfig, launch_browser: bool):
         webbrowser.open(f'http://{obj.hostname}:{obj.port}')
 
     app = build_app(obj)
-    if launch_browser:
+    if launch_browser and obj.sockfile is None:
         app.on_startup.append(on_startup)
-    click.echo(f'Serving on http://{obj.hostname}:{obj.port}')
-    web.run_app(app, host=obj.hostname, port=obj.port)
+
+    if obj.sockfile is not None:
+        click.echo(f'Serving on {obj.sockfile}')
+        web.run_app(app, path=str(obj.sockfile))
+    else:
+        click.echo(f'Serving on http://{obj.hostname}:{obj.port}')
+        web.run_app(app, host=obj.hostname, port=obj.port)
 
 
 

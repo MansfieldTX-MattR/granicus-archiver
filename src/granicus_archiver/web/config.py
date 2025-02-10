@@ -17,6 +17,11 @@ class AppConfig(NamedTuple):
     """Hostname to bind to"""
     port: int = 8080
     """Port to bind to"""
+    sockfile: Path|None = None
+    """UNIX socket file to bind to
+
+    If ``None``, the :attr:`hostname` and :attr:`port` will be used instead.
+    """
     serve_static: bool = True
     """Whether to serve static files directly from aiohttp"""
     read_only: bool = True
