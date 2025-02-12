@@ -525,6 +525,45 @@ class GoogleClient:
                 raise UploadError(f'Uploaded file hash mismatch for "{local_file}"')
         return uploaded_meta
 
+    async def update_existing_file(
+        self,
+        file_id: FileId,
+        local_file: Path,
+        check_hash: bool = True,
+    ) -> FileMetaFull:
+        """Upload a revision for an file that already exists in Drive
+
+        Arguments:
+            file_id: The id of the file to update
+            local_file: The local file to upload
+            check_hash: If ``True``, the hash of the local file will be checked
+                against the hash from the uploaded :class:`metadata <.types.FileMetaFull>`
+
+        Returns:
+            FileMetaFull: The metadata for the uploaded file
+
+        Raises:
+            UploadError: If *check_hash* is True and the content hashes
+                do not match
+        """
+        req = self.drive_v3.files.update(
+            fileId=file_id,
+            upload_file=local_file,
+            fields='*',
+        )
+        assert req.media_upload is not None
+        # Important! This must be set to False for files.update
+        # See https://github.com/omarryhan/aiogoogle/issues/118
+        req.media_upload.multipart = False
+        upload_res = await self.as_user(req, resp_type=FileMetaFull)
+        if not check_hash:
+            return upload_res
+        local_hash = await get_file_hash_async(local_file, 'sha1')
+        remote_hash = upload_res['sha1Checksum']
+        if local_hash != remote_hash:
+            raise UploadError(f'Uploaded file hash mismatch for "{local_file}": {local_hash=}, {remote_hash=}')
+        return upload_res
+
     async def prebuild_paths(self, *paths: Path):
         """Build multiple Drive folders from the given *paths*
 
@@ -605,6 +644,36 @@ class ClipGoogleClient(GoogleClient):
         """
         rel_filename = clip.get_file_path(key, absolute=False)
         return self.upload_dir / rel_filename
+
+    async def upload_data_file(self) -> FileMetaFull:
+        """Upload the data file to Drive
+        """
+        local_filename = self.root_conf.data_file
+        assert not local_filename.is_absolute()
+        upload_filename = self.upload_dir / local_filename.name
+        meta = await self.get_file_meta(upload_filename)
+        if meta is not None:
+            local_hash = await get_file_hash_async(local_filename, 'sha1')
+            remote_hash = meta['sha1Checksum']
+            if local_hash == remote_hash:
+                logger.info(f'Data file matches hosted version: {upload_filename}')
+                return meta
+            logger.info(f'Update existing data file: {local_filename} -> {upload_filename}')
+            upload_meta = await self.update_existing_file(
+                meta['id'],
+                local_filename,
+                check_hash=True,
+            )
+        else:
+            logger.info(f'Upload new data file: {local_filename} -> {upload_filename}')
+            upload_meta = await self.stream_upload_file(
+                local_filename,
+                upload_filename,
+                check_exists=False,
+                check_hash=True,
+            )
+        assert upload_meta is not None
+        return upload_meta
 
     async def get_clip_file_meta(
         self,
@@ -782,6 +851,7 @@ class ClipGoogleClient(GoogleClient):
             logger.info(f'waiting for waiters ({len(self.upload_clip_waiters)=})')
             await self.upload_clip_waiters
         logger.success(f'all waiters finished')
+        await self.upload_data_file()
 
     @logger.catch(reraise=True)
     async def check_meta(
@@ -928,6 +998,10 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
     @abstractmethod
     def upload_dir(self) -> Path: ...
 
+    @property
+    @abstractmethod
+    def local_data_file(self) -> Path: ...
+
     @abstractmethod
     def _load_legistar_data(self) -> _LegModelT: ...
 
@@ -972,6 +1046,35 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         await self.item_scheduler.wait_and_close()
         await self.upload_scheduler.wait_and_close()
         return await super().__aexit__(*args)
+
+    async def upload_data_file(self) -> FileMetaFull:
+        """Upload the data file to Drive
+        """
+        local_filename = self.local_data_file
+        upload_filename = self.upload_dir / local_filename.name
+        meta = await self.get_file_meta(upload_filename)
+        if meta is not None:
+            local_hash = await get_file_hash_async(local_filename, 'sha1')
+            remote_hash = meta['sha1Checksum']
+            if local_hash == remote_hash:
+                logger.info(f'Data file matches hosted version: {upload_filename}')
+                return meta
+            logger.info(f'Update existing data file: {local_filename} -> {upload_filename}')
+            upload_meta = await self.update_existing_file(
+                meta['id'],
+                local_filename,
+                check_hash=True,
+            )
+        else:
+            logger.info(f'Upload new data file: {local_filename} -> {upload_filename}')
+            upload_meta = await self.stream_upload_file(
+                local_filename,
+                upload_filename,
+                check_exists=False,
+                check_hash=True,
+            )
+        assert upload_meta is not None
+        return upload_meta
 
     def get_file_upload_path(self, guid: _GuidT, uid: LegistarFileUID) -> Path:
         """Get the uploaded filename for a legistar asset (relative to :attr:`upload_dir`)
@@ -1162,6 +1265,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
             await check_waiters
             await item_waiters
             logger.success('all jobs completed')
+            await self.upload_data_file()
         except RateLimitError:
             self.save_cache()
             raise
@@ -1255,8 +1359,12 @@ class LegistarGoogleClient(AbstractLegistarGoogleClient[GUID, DetailPageResult, 
         """
         return self.root_conf.google.legistar_drive_folder
 
+    @property
+    def local_data_file(self) -> Path:
+        return self.root_conf.legistar.data_file
+
     def _load_legistar_data(self) -> LegistarData:
-        return LegistarData.load(self.root_conf.legistar.data_file)
+        return LegistarData.load(self.local_data_file)
 
     def _build_cache_key(self, guid: GUID, uid: LegistarFileUID) -> MetaCacheKey:
         return ('legistar', guid, uid)
@@ -1276,9 +1384,12 @@ class RGuidLegistarGoogleClient(AbstractLegistarGoogleClient[REAL_GUID, RGuidDet
         """
         return self.root_conf.google.rguid_legistar_drive_folder
 
+    @property
+    def local_data_file(self) -> Path:
+        return RGuidLegistarData._get_data_file(self.root_conf)
+
     def _load_legistar_data(self) -> RGuidLegistarData:
-        fn = RGuidLegistarData._get_data_file(self.root_conf)
-        return RGuidLegistarData.load(fn)
+        return RGuidLegistarData.load(self.local_data_file)
 
     def _build_cache_key(self, guid: REAL_GUID, uid: LegistarFileUID) -> MetaCacheKey:
         return ('legistar_rguid', guid, uid)
