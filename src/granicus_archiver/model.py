@@ -601,6 +601,7 @@ class ClipFiles(Serializable):
             content_type='text/vtt',
             last_modified=dt,
             etag=None,
+            sha1=get_file_hash(full_filename, 'sha1'),
         )
         self.metadata['chapters'] = meta
         return True
