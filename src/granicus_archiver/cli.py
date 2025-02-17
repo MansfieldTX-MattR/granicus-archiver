@@ -195,6 +195,26 @@ def show_config(obj: BaseContext, group: ConfigGroupKey|Literal['all'], as_env: 
             click.echo('')
 
 
+@cli.command()
+@click.option(
+    '--out-file',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    required=False,
+)
+@click.pass_obj
+def save_config(obj: BaseContext, out_file: Path|None):
+    """Save the current configuration to a file
+    """
+    if out_file is None:
+        out_file = obj.config_file
+    is_read_only = Config._read_only
+    try:
+        Config._read_only = False
+        obj.config.save(out_file)
+    finally:
+        Config._read_only = is_read_only
+
+
 @drive.command
 @click.pass_obj
 def authorize(obj: BaseContext):
