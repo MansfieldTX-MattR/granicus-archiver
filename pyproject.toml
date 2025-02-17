@@ -20,6 +20,7 @@ dependencies = [
     "aiogoogle",
     "pypdf",
     "appdirs",
+    "python-dotenv",
 ]
 
 [project.scripts]

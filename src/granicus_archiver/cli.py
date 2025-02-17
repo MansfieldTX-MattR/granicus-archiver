@@ -4,6 +4,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import click
+from dotenv import load_dotenv
 
 from .config import Config, GroupKey as ConfigGroupKey
 # from .server import run_app as run_server_app
@@ -72,6 +73,20 @@ class BaseContext:
     help='Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.yaml"',
 )
 @click.option(
+    '--load-config-env',
+    is_flag=True,
+    help='Load configuration from environment variables',
+)
+@click.option(
+    '--config-env-file',
+    type=click.Path(
+        file_okay=True,
+        dir_okay=False,
+        path_type=Path,
+    ),
+    help='Load configuration from environment variables in a file (if --load-config-env is set)',
+)
+@click.option(
     '--config-read-only',
     is_flag=True,
     help='Disable saving configuration changes',
@@ -87,31 +102,39 @@ def cli(
     legistar_out_dir: Path|None,
     legistar_data_file: Path|None,
     timestamp_file: Path|None,
+    load_config_env: bool,
+    config_env_file: Path|None,
     config_read_only: bool,
 ):
     Config._read_only = config_read_only
-    conf_kw = dict(
-        out_dir=out_dir,
-        data_file=data_file,
-        granicus_data_url=granicus_data_url,
-        local_timezone_name=local_timezone,
-        google={},
-        timestamp_file=timestamp_file,
-    )
-    legistar_kw = {
-        'out_dir': legistar_out_dir,
-        'data_file': legistar_data_file,
-    }
-    legistar_kw = {k:v for k,v in legistar_kw.items() if v is not None}
-    conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
-    conf_kw['legistar'] = legistar_kw
-    if config_file.exists():
-        config = Config.load(config_file)
-        if config.update(**conf_kw):
-            config.save(config_file)
+    if load_config_env:
+        if config_env_file is not None:
+            click.echo(f'Loading environment variables from {config_env_file}')
+            load_dotenv(dotenv_path=config_env_file)
+        config = Config.load_from_env()
     else:
-        config = Config.build_defaults(**conf_kw)
-        config.save(config_file)
+        conf_kw = dict(
+            out_dir=out_dir,
+            data_file=data_file,
+            granicus_data_url=granicus_data_url,
+            local_timezone_name=local_timezone,
+            google={},
+            timestamp_file=timestamp_file,
+        )
+        legistar_kw = {
+            'out_dir': legistar_out_dir,
+            'data_file': legistar_data_file,
+        }
+        legistar_kw = {k:v for k,v in legistar_kw.items() if v is not None}
+        conf_kw = {k:v for k,v in conf_kw.items() if v is not None}
+        conf_kw['legistar'] = legistar_kw
+        if config_file.exists():
+            config = Config.load(config_file)
+            if config.update(**conf_kw):
+                config.save(config_file)
+        else:
+            config = Config.build_defaults(**conf_kw)
+            config.save(config_file)
     if config.local_timezone_name is None:
         tzname = click.prompt('Please enter the local timezone name', type=str)
         assert len(tzname)
