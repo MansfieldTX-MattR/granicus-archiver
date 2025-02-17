@@ -71,6 +71,11 @@ class BaseContext:
     required=False,
     help='Filename to store clip timestamp information. Defaults to "<out-dir>/timestamp-data.yaml"',
 )
+@click.option(
+    '--config-read-only',
+    is_flag=True,
+    help='Disable saving configuration changes',
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -81,8 +86,10 @@ def cli(
     local_timezone: str|None,
     legistar_out_dir: Path|None,
     legistar_data_file: Path|None,
-    timestamp_file: Path|None
+    timestamp_file: Path|None,
+    config_read_only: bool,
 ):
+    Config._read_only = config_read_only
     conf_kw = dict(
         out_dir=out_dir,
         data_file=data_file,

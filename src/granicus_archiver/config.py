@@ -491,6 +491,7 @@ class Config(BaseConfig):
     group_key: ClassVar[GroupKey] = 'root'
 
     app_dirs: ClassVar[AppDirs] = AppDirs(APP_NAME, APP_AUTHOR)
+    _read_only: ClassVar[bool] = True
 
     def __post_init__(self) -> None:
         assert self.out_dir != self.legistar.out_dir
@@ -543,6 +544,8 @@ class Config(BaseConfig):
     def save(self, filename: PathLike) -> None:
         """Save the config to the given filename
         """
+        if self._read_only:
+            raise ValueError('Config is read-only')
         if not isinstance(filename, Path):
             filename = Path(filename)
         filename.parent.mkdir(parents=True, exist_ok=True)
