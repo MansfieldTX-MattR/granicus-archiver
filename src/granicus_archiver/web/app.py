@@ -267,6 +267,42 @@ def cli(
 
 
 @cli.command()
+@click.argument(
+    'out_dir',
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path)
+)
+@click.option(
+    '--dry-run', is_flag=True,
+)
+@click.pass_obj
+def collect_static(obj: WebCliContext, out_dir: Path, dry_run: bool):
+    """Collect static files
+    """
+    click.echo(f'Collect static files to {out_dir}')
+    def walk_dir(p):
+        for f in p.iterdir():
+            if f.is_dir():
+                yield from walk_dir(f)
+            else:
+                yield f
+
+    for f in walk_dir(STATIC_ROOT):
+        if not f.is_file():
+            continue
+        if f.suffix not in ('.css', '.js'):
+            continue
+        rel = f.relative_to(STATIC_ROOT)
+        dest = out_dir / rel
+        if not dest.parent.exists():
+            click.echo(f'mkdir {dest.parent}')
+            if not dry_run:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+        click.echo(f'cp {f} {dest}')
+        if not dry_run:
+            dest.write_bytes(f.read_bytes())
+
+
+@cli.command()
 @click.option(
     '--launch-browser/--no-launch-browser',
     default=True,
