@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Self
+from typing import Self, TYPE_CHECKING
 from pathlib import Path
 import asyncio
 import webbrowser
+from dataclasses import dataclass
 
 from loguru import logger
 from aiohttp import web
@@ -20,6 +21,8 @@ from ..legistar.guid_model import RGuidLegistarData
 from .types import *
 from .config import AppConfig, APP_CONF_KEY
 from .s3client import S3Client, S3ClientKey
+if TYPE_CHECKING:
+    from ..cli import BaseContext
 from . import views, filters
 
 
@@ -27,6 +30,13 @@ HERE = Path(__file__).resolve().parent
 STATIC_ROOT = HERE / 'static'
 
 routes = web.RouteTableDef()
+
+
+@dataclass
+class WebCliContext:
+    parent: BaseContext
+    app_conf: AppConfig
+
 
 @routes.get('/', name='home')
 @aiohttp_jinja2.template('home.jinja2')
@@ -134,10 +144,12 @@ async def app_data_ctx(app: web.Application):
         yield
 
 
-def build_app(app_conf: AppConfig) -> web.Application:
+def build_app(app_conf: AppConfig, conf: Config|None = None) -> web.Application:
     app = web.Application()
     app[APP_CONF_KEY] = app_conf
-    conf = app[ConfigKey] = Config.load(Config.default_filename)
+    if conf is None:
+        conf = Config.load(Config.default_filename)
+    app[ConfigKey] = conf
     assert conf.local_timezone_name is not None
     tz = set_local_timezone(conf.local_timezone_name)
     app[TimezoneKey] = tz
@@ -249,7 +261,9 @@ def cli(
         read_only=read_only, static_url=_static_url,
         use_s3=use_s3, s3_data_dir=s3_data_dir
     )
-    ctx.obj = conf
+    assert ctx.parent is not None
+    assert isinstance(ctx.parent.obj.config, Config)
+    ctx.obj = WebCliContext(parent=ctx.parent.obj, app_conf=conf)
 
 
 @cli.command()
@@ -260,22 +274,25 @@ def cli(
     help='Launch a browser window after starting the server'
 )
 @click.pass_obj
-def serve(obj: AppConfig, launch_browser: bool):
+def serve(obj: WebCliContext, launch_browser: bool):
     """Run the webapp and optionally launch a browser window
     """
-    async def on_startup(app):
-        webbrowser.open(f'http://{obj.hostname}:{obj.port}')
+    parent_obj = obj.parent
+    app_conf = obj.app_conf
 
-    app = build_app(obj)
-    if launch_browser and obj.sockfile is None:
+    async def on_startup(app):
+        webbrowser.open(f'http://{app_conf.hostname}:{app_conf.port}')
+
+    app = build_app(app_conf, conf=parent_obj.config)
+    if launch_browser and app_conf.sockfile is None:
         app.on_startup.append(on_startup)
 
-    if obj.sockfile is not None:
-        click.echo(f'Serving on {obj.sockfile}')
-        web.run_app(app, path=str(obj.sockfile))
+    if app_conf.sockfile is not None:
+        click.echo(f'Serving on {app_conf.sockfile}')
+        web.run_app(app, path=str(app_conf.sockfile))
     else:
-        click.echo(f'Serving on http://{obj.hostname}:{obj.port}')
-        web.run_app(app, host=obj.hostname, port=obj.port)
+        click.echo(f'Serving on http://{app_conf.hostname}:{app_conf.port}')
+        web.run_app(app, host=app_conf.hostname, port=app_conf.port)
 
 
 
