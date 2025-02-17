@@ -1,6 +1,10 @@
 from __future__ import annotations
-from typing import Self, Iterator, Iterable, Any, Literal, ClassVar
-from typing_extensions import TypeIs
+from typing import Self, Iterator, Iterable, Any, Literal, ClassVar, TYPE_CHECKING
+if TYPE_CHECKING:
+    try:
+        from typing import TypeIs
+    except ImportError:
+        from typing_extensions import TypeIs    # type: ignore
 
 import dataclasses
 from dataclasses import dataclass
