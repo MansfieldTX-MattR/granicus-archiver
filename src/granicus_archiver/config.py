@@ -4,7 +4,9 @@ from typing import (
 )
 from abc import ABC, abstractmethod
 from pathlib import Path
+import os
 from os import PathLike
+import json
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -23,6 +25,9 @@ from .model import Serializable
 if TYPE_CHECKING:
     from .model import Location
     from .legistar.rss_parser import Category
+else:
+    Location = str
+    Category = str
 
 GroupKey = Literal['root', 'google', 'aws', 'legistar']
 """"""
@@ -52,6 +57,11 @@ def get_app_cache(*parts: Path|str) -> Path:
 class BaseConfig(Serializable):
     group_key: ClassVar[GroupKey]
     """Unique key for :class:`BaseConfig` subclasses"""
+    _env_prefix: ClassVar[str] = 'GRANICUS_ARCHIVER'
+
+    @classmethod
+    def _get_env_key(cls, key: str) -> str:
+        return f'{cls._env_prefix}_{cls.group_key.upper()}_{key.upper()}'
 
     @classmethod
     def iter_child_config_classes(cls) -> Iterator[tuple[str, type[BaseConfig]]]:
@@ -84,6 +94,58 @@ class BaseConfig(Serializable):
 
         Any provided keyword arguments will override the default
         """
+
+    @classmethod
+    @abstractmethod
+    def load_from_env(cls) -> Self:
+        """Load the config from environment variables
+        """
+
+    def as_dotenv(self) -> str:
+        """Convert the config to a dotenv string
+        """
+        data = self.serialize()
+        child_configs = self.child_configs
+        lines = []
+        for key, val in data.items():
+            if key in child_configs:
+                child_conf = child_configs[key]
+                lines.extend(child_conf.as_dotenv().splitlines())
+            else:
+                if isinstance(val, (list, dict)):
+                    val = json.dumps(val)
+                lines.append(f'{self._get_env_key(key)}={val}')
+        return '\n'.join(lines)
+
+    @classmethod
+    def _get_env_var[Vt: (str, Path, URL)](
+        cls, key: str, val_type: type[Vt]
+    ) -> Vt|None:
+        env_key = cls._get_env_key(key)
+        if env_key not in os.environ:
+            return None
+        val = os.environ[env_key].strip()
+        return val_type(val)
+
+    @classmethod
+    def _get_env_var_list[Vt: (str, Path, URL)](
+        cls, key: str, val_type: type[Vt]
+    ) -> list[Vt]|None:
+        val = cls._get_env_var(key, str)
+        if val is None:
+            return None
+        l = json.loads(val)
+        return [val_type(v) for v in l]
+
+    @classmethod
+    def _get_env_var_dict[Kt: (str), Vt: (str, Path, URL)](
+        cls, key: str, key_type: type[Kt], val_type: type[Vt]
+    ) -> dict[Kt, Vt]|None:
+        val = cls._get_env_var(key, str)
+        if val is None:
+            return None
+        d = json.loads(val)
+        return {key_type(k):val_type(v) for k,v in d.items()}
 
 
 @dataclass
@@ -169,6 +231,19 @@ class GoogleConfig(BaseConfig):
             meta_cache_file=Path(data['meta_cache_file']),
         )
 
+    @classmethod
+    def load_from_env(cls) -> Self:
+        kw = dict(
+            user_credentials_filename=cls._get_env_var('user_credentials_filename', Path),
+            drive_folder=cls._get_env_var('drive_folder', Path),
+            legistar_drive_folder=cls._get_env_var('legistar_drive_folder', Path),
+            rguid_legistar_drive_folder=cls._get_env_var('rguid_legistar_drive_folder', Path),
+            folder_cache_file=cls._get_env_var('folder_cache_file', Path),
+            meta_cache_file=cls._get_env_var('meta_cache_file', Path),
+        )
+        kw = {k:v for k,v in kw.items() if v is not None}
+        return cls.build_defaults(**kw)
+
 @dataclass
 class AWSConfig(BaseConfig):
     """AWS Config
@@ -228,6 +303,17 @@ class AWSConfig(BaseConfig):
             legistar_prefix=Path(data['legistar_prefix']),
             legistar_rguid_prefix=Path(data['legistar_rguid_prefix']),
         )
+
+    @classmethod
+    def load_from_env(cls) -> Self:
+        kw = dict(
+            bucket_name=cls._get_env_var('bucket_name', str),
+            clips_prefix=cls._get_env_var('clips_prefix', Path),
+            legistar_prefix=cls._get_env_var('legistar_prefix', Path),
+            legistar_rguid_prefix=cls._get_env_var('legistar_rguid_prefix', Path),
+        )
+        kw = {k:v for k,v in kw.items() if v is not None}
+        return cls.build_defaults(**kw)
 
 
 @dataclass
@@ -353,6 +439,18 @@ class LegistarConfig(BaseConfig):
             category_maps=data['category_maps'],
         )
 
+    @classmethod
+    def load_from_env(cls) -> Self:
+        kw = dict(
+            out_dir=cls._get_env_var('out_dir', Path),
+            out_dir_abs=cls._get_env_var('out_dir_abs', Path),
+            data_file=cls._get_env_var('data_file', Path),
+            feed_urls=cls._get_env_var_dict('feed_urls', str, URL),
+            feed_overflows_allowed=cls._get_env_var_list('feed_overflows_allowed', str),
+            category_maps=cls._get_env_var_dict('category_maps', str, str),
+        )
+        kw = {k:v for k,v in kw.items() if v is not None}
+        return cls.build_defaults(**kw)
 
 
 @dataclass
@@ -551,3 +649,18 @@ class Config(BaseConfig):
             local_timezone_name=data.get('local_timezone_name'),
             **kw
         )
+
+    @classmethod
+    def load_from_env(cls) -> Self:
+        kw: dict[str, Any] = dict(
+            out_dir=cls._get_env_var('out_dir', Path),
+            out_dir_abs=cls._get_env_var('out_dir_abs', Path),
+            data_file=cls._get_env_var('data_file', Path),
+            timestamp_file=cls._get_env_var('timestamp_file', Path),
+            granicus_data_url=cls._get_env_var('granicus_data_url', URL),
+            local_timezone_name=cls._get_env_var('local_timezone_name', str),
+        )
+        kw = {k:v for k,v in kw.items() if v is not None}
+        for key, val_type in cls.iter_child_config_classes():
+            kw[key] = val_type.load_from_env()
+        return cls.build_defaults(**kw)
