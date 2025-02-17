@@ -5,8 +5,7 @@ since its storage method is more robust.
 For now however, the two exist in parallel.
 """
 from __future__ import annotations
-from typing import Literal, Iterator, Self, Any, overload, TYPE_CHECKING
-from typing_extensions import NamedTuple
+from typing import Literal, Iterator, NamedTuple, Self, Any, overload, TYPE_CHECKING
 from os import PathLike
 from pathlib import Path
 import json
