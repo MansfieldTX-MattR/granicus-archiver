@@ -1,0 +1,32 @@
+
+upstream aiohttp_server {
+    # server unix:${AIOHTTP_SOCKFILE} fail_timeout=0;
+    server ${AIOHTTP_SERVER} fail_timeout=0;
+}
+
+server {
+    listen                ${NGINX_PORT} default_server;
+    server_name           ${NGINX_SERVER_NAME};
+    client_max_body_size  200M;
+
+    root ${NGINX_ROOT};
+    index index.html index.htm index.nginx-debian.html;
+    include gzip_params;
+
+    location /assets/ {
+        alias ${AIOHTTP_STATIC_ROOT}/;
+    }
+
+    location /data/ {
+        alias ${DATA_ROOT};
+    }
+
+    location / {
+        try_files $uri uri/ @proxy_to_aiohttp;
+    }
+
+    location @proxy_to_aiohttp {
+        include proxy_params;
+        proxy_pass http://aiohttp_server;
+    }
+}

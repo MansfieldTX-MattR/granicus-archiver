@@ -1,42 +1,60 @@
 
 services:
-  nextjs:
+  aiohttp:
+    env_file:
+      - .docker.env
     build:
-      context: ./webapp
-      target: runner
+      context: .
       args:
-        - CONTENT_HOST_PATH=http://frontend
-    ports:
-      - "3000:3000"
-    links:
-      - frontend
-    hostname: nextjs
+        VOLUME_DIRNAMES: /mnt/data;/mnt/static
+
     environment:
-      - CONTENT_HOST_PATH=http://frontend
+      - AIOHTTP_PORT=8080
+      - AIOHTTP_HOST=0.0.0.0
+      - AIOHTTP_STATIC_ROOT=/mnt/static
+      - S3_TMP_DIR=/mnt/data/s3-tmp
+      - AWS_SHARED_CREDENTIALS_FILE=/run/secrets/aws_credentials
+
+    secrets:
+      - aws_credentials
+
+    volumes:
+      - web_static:/mnt/static
+      - data:/mnt/data
 
 
   frontend:
     build:
-      context: .
+      context: ./frontend-service
       dockerfile_inline: |
         FROM nginx:1.21.6
 
         RUN mkdir -p /etc/nginx/templates
         RUN mkdir -p /mnt/data
 
-        COPY webapp/.nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
+        COPY proxy_params /etc/nginx/
+        COPY templates/default.conf.template /etc/nginx/templates/default.conf.template
 
     environment:
       - NGINX_PORT=80
       - NGINX_SERVER_NAME=localhost
       - NGINX_ROOT=/var/www
-      - NEXTJS_SERVER=nextjs:3000
+      - DATA_ROOT=/mnt/data/data
+      - AIOHTTP_STATIC_ROOT=/var/www/static
+      - AIOHTTP_SERVER=aiohttp:8080
 
     volumes:
-      - type: bind
-        source: ./data
-        target: /mnt/data/data
-        read_only: true
+      - web_static:/var/www/static
+      - data:/mnt/data
 
     ports:
       - "80:80"
+
+volumes:
+  data:
+  web_static:
+
+
+secrets:
+  aws_credentials:
+    file: ~/.aws/granicus-credentials
