@@ -50,3 +50,20 @@ testpaths = [
 addopts = "--doctest-modules"
 asyncio_default_fixture_loop_scope = 'function'
 asyncio_mode = 'auto'
+
+[dependency-groups]
+tests = [
+    "pytest",
+    "pytest-asyncio",
+]
+docs = [
+    "sphinx",
+    "furo",
+    "sphinx-click",
+]
+dev = [
+    "ipython>=8.32.0",
+    "types-aiobotocore[essential]>=2.19.0",
+    {include-group = "docs"},
+    {include-group = "tests"},
+]
