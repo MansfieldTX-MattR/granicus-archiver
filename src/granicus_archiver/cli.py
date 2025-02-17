@@ -162,10 +162,20 @@ def drive(obj: BaseContext):
     default='all',
     show_default=True,
 )
+@click.option(
+    '--as-env', is_flag=True, help='Print as environment variables'
+)
 @click.pass_obj
-def show_config(obj: BaseContext, group: ConfigGroupKey|Literal['all']):
+def show_config(obj: BaseContext, group: ConfigGroupKey|Literal['all'], as_env: bool):
     """Show the current configuration
     """
+    if as_env:
+        if group == 'all' or group == 'root':
+            click.echo(obj.config.as_dotenv())
+        else:
+            conf = obj.config.child_configs[group]
+            click.echo(conf.as_dotenv())
+        return
     from pprint import pformat
     sub_keys: list[ConfigGroupKey] = ['google', 'aws', 'legistar']
     ser = obj.config.serialize()
