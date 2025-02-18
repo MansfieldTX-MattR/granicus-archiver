@@ -19,8 +19,14 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'sphinx.ext.extlinks',
+    'sphinx.ext.todo',
+    'sphinx_design',
     'sphinx_click',
 ]
+
+numfig = True
+todo_include_todos = True
+todo_link_only = True
 
 autodoc_member_order = 'bysource'
 autodoc_default_options = {

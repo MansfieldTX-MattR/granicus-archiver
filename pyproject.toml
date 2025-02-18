@@ -60,6 +60,7 @@ docs = [
     "sphinx",
     "furo",
     "sphinx-click",
+    "sphinx-design>=0.6.1",
 ]
 dev = [
     "ipython>=8.32.0",
