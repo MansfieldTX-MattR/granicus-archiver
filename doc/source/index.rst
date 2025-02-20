@@ -69,6 +69,7 @@ Setup
    installation
    granicus-setup
    legistar-setup
+   configuration
 
 Usage
 *****

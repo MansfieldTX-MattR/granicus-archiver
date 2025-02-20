@@ -90,7 +90,6 @@ Under the "Contents" tab, select any Folders that you want to include in the arc
 
 
 
-
 View Publishing URL
 -------------------
 
@@ -126,4 +125,5 @@ the :ref:`view-publishing-url` and see something that looks like this:
 
   This is a very basic (and ugly) table, but it isn't meant to be seen
   by the public.  It has data attributes embedded in the HTML that the
-  archiver will use later on.
+  archiver will use later on in the
+  :ref:`configuration section <config-granicus-data-url>`.
