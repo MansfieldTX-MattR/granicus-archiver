@@ -49,7 +49,7 @@ granicus-archiver = "granicus_archiver.cli:cli"
 
 [project.optional-dependencies]
 tests = ["pytest", "pytest-asyncio"]
-docs = ["sphinx", "furo", "sphinx-click"]
+docs = ["sphinx", "furo", "sphinx-click", "sphinx-design"]
 
 
 [tool.setuptools.packages.find]
