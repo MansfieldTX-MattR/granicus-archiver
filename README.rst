@@ -13,9 +13,10 @@ The archived content for each meeting may include:
 - Minutes (PDF)
 - Video (MP4)
 - Audio (MP3)
-- Video timestamps (:term:`WebVTT`)
+- Video timestamps (`WebVTT`_)
 
 
 
 .. _Granicus: https://granicus.com
 .. _Legistar: https://granicus.com/product/legistar-agenda-management/
+.. _WebVTT: https://wikipedia.org/wiki/WebVTT
