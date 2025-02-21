@@ -51,7 +51,8 @@ granicus-archiver = "granicus_archiver.cli:cli"
 [project.optional-dependencies]
 tests = ["pytest", "pytest-asyncio"]
 docs = [
-    "sphinx", "furo", "sphinx-click", "sphinx-design", "types-aiobotocore"
+    "sphinx", "furo", "sphinx-click", "sphinx-design",
+    "types-aiobotocore[essential]",
 ]
 
 
