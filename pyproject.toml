@@ -5,6 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "granicus-archiver"
 version = "0.0.1"
+authors = [
+    {name = "Matthew Reid", email = "matt.reid@mansfieldtexas.gov"}
+]
+description = "A tool for archiving Granicus and Legistar meeting data"
+readme = "README.rst"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
 dependencies = [
     "aiohttp",
     "aiohttp-jinja2",
@@ -22,6 +29,20 @@ dependencies = [
     "appdirs",
     "python-dotenv",
 ]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/MansfieldTX-MattR/granicus-archiver"
+Repository = "https://github.com/MansfieldTX-MattR/granicus-archiver"
 
 [project.scripts]
 granicus-archiver = "granicus_archiver.cli:cli"
