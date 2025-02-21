@@ -50,7 +50,9 @@ granicus-archiver = "granicus_archiver.cli:cli"
 
 [project.optional-dependencies]
 tests = ["pytest", "pytest-asyncio"]
-docs = ["sphinx", "furo", "sphinx-click", "sphinx-design"]
+docs = [
+    "sphinx", "furo", "sphinx-click", "sphinx-design", "types-aiobotocore"
+]
 
 
 [tool.setuptools.packages.find]
@@ -83,6 +85,7 @@ docs = [
     "furo",
     "sphinx-click",
     "sphinx-design>=0.6.1",
+    "types-aiobotocore[essential]>=2.19.0",
 ]
 dev = [
     "ipython>=8.32.0",
