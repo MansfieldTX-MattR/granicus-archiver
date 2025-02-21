@@ -43,6 +43,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/MansfieldTX-MattR/granicus-archiver"
 Repository = "https://github.com/MansfieldTX-MattR/granicus-archiver"
+Documentation = "https://granicus-archiver.readthedocs.io"
 
 [project.scripts]
 granicus-archiver = "granicus_archiver.cli:cli"

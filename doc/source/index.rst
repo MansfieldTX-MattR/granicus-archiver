@@ -59,6 +59,13 @@ For example, with around 7-10 years of data, you may need 1-2 TB of disk space.
   speed and portability, but for their longevity and shelf-life.
 
 
+Project Links
+*************
+
+- `Source Code <https://github.com/MansfieldTX-MattR/granicus-archiver>`_
+- `Documentation <https://granicus-archiver.readthedocs.io>`_
+
+
 Setup
 *****
 

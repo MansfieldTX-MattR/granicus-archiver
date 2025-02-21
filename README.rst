@@ -16,6 +16,13 @@ The archived content for each meeting may include:
 - Video timestamps (`WebVTT`_)
 
 
+Project Links
+=============
+
+- `Source Code <https://github.com/MansfieldTX-MattR/granicus-archiver>`_
+- `Documentation <https://granicus-archiver.readthedocs.io>`_
+
+
 
 .. _Granicus: https://granicus.com
 .. _Legistar: https://granicus.com/product/legistar-agenda-management/
