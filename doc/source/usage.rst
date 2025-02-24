@@ -30,6 +30,19 @@ download in one invocation.
 
 
 
+Checking Local Files
+=====================
+
+The :ref:`cli-clips-check` command will check local files against what's stored in the data file.
+This is useful to see if any files have been deleted or moved.
+
+
+.. note::
+
+   The same checks are also performed when running the :ref:`cli-clips-download` command.
+
+
+
 Legistar
 ********
 
@@ -79,6 +92,17 @@ Or:
    from a web page on the Legistar site.
 
    Subsequent runs will be much faster as the data is cached locally.
+
+
+Checking Local Files
+=====================
+
+The :ref:`cli-legistar-check` (or :ref:`cli-legistar-check-rguid`) command will check local files against what's
+stored in the data file. This is useful to see if any files have been deleted or moved.
+
+.. note::
+
+   The same checks are also performed when running the :ref:`cli-legistar-download` command.
 
 
 Handling Updates
