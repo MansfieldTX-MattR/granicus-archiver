@@ -439,6 +439,7 @@ class ClipClient(ClientBase):
             logger.info(f'waiting for check_waiters ({len(self.upload_check_waiters)=})')
             await self.upload_check_waiters
 
+        self.completion_counts.max_items = self.completion_counts.num_queued
         if len(self.upload_clip_waiters):
             logger.info(f'waiting for waiters ({len(self.upload_clip_waiters)=})')
             await self.upload_clip_waiters
@@ -632,6 +633,7 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
             logger.info(f'waiting for check_waiters ({len(self.check_waiters)=})')
             await self.check_waiters
 
+        self.completion_counts.max_items = self.completion_counts.num_queued
         if len(self.item_waiters):
             logger.info(f'waiting for waiters ({len(self.item_waiters)=})')
             await self.item_waiters

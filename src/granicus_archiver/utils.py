@@ -465,18 +465,52 @@ class CompletionCounts:
     >>> counts.complete
     True
 
+    The :attr:`progress` attribute will also be updated whenever :attr:`max_items`
+    is changed:
+
+    >>> counts = CompletionCounts(max_items=100)
+    >>> counts.num_queued = 50
+    >>> counts
+    <CompletionCounts: queued=50, completed=0, active=50, progress=0%>
+    >>> counts.num_queued = 50
+    >>> counts
+    <CompletionCounts: queued=50, completed=0, active=50, progress=0%>
+    >>> counts.num_completed = 25
+    >>> counts
+    <CompletionCounts: queued=50, completed=25, active=25, progress=25%>
+    >>> counts.max_items = 50
+    >>> counts
+    <CompletionCounts: queued=50, completed=25, active=25, progress=50%>
+    >>> counts.num_completed = 50
+    >>> counts
+    <CompletionCounts: queued=50, completed=50, active=0, progress=100%>
+    >>> counts.complete
+    True
+
     """
-    max_items: int|None
-    """Maximum number of items"""
     enable_log: bool
     """If ``True`` any changes to :attr:`num_queued` or :attr:`num_completed`
     will be logged
     """
     def __init__(self, max_items: int|None = None, enable_log: bool = False) -> None:
-        self.max_items = max_items
+        self._max_items = max_items
         self.enable_log = enable_log
         self._num_queued = 0
         self._num_completed = 0
+
+    @property
+    def max_items(self) -> int|None:
+        """Maximum number of items
+        """
+        return self._max_items
+    @max_items.setter
+    def max_items(self, value: int|None) -> None:
+        if value == self._max_items:
+            return
+        if value is not None and value < self.num_queued:
+            raise ValueError('max_items cannot be less than num_queued')
+        self._max_items = value
+        self._log_counts('max_items: ')
 
     @property
     def num_queued(self) -> int:
