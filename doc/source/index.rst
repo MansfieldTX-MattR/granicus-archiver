@@ -80,30 +80,19 @@ Project Links
 - `Documentation <https://granicus-archiver.readthedocs.io>`_
 
 
-Setup
-*****
+Contents
+********
 
 .. toctree::
    :maxdepth: 2
-   :caption: Setup:
+   :caption: Setup and Usage:
 
    installation
    granicus-setup
    legistar-setup
    configuration
-
-Usage
-*****
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Usage:
-
    usage
 
-
-Reference
-*********
 
 .. toctree::
    :maxdepth: 1
