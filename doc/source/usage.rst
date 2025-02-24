@@ -42,6 +42,19 @@ This is useful to see if any files have been deleted or moved.
    The same checks are also performed when running the :ref:`cli-clips-download` command.
 
 
+Uploading to Google Drive
+=========================
+
+.. important::
+
+   The :ref:`config-googledrive` setup steps must be completed before using this feature.
+
+The :ref:`cli-clips-upload` command will upload the Granicus items to Google Drive.
+
+.. todo::
+
+   Add more information about the Google Drive upload feature.
+
 
 Legistar
 ********
@@ -140,3 +153,20 @@ These cases are safe to update, so you can run the command again with the
          :name: legistar-update-complete
 
          Legistar Update Complete
+
+
+
+Uploading to Google Drive
+=========================
+
+.. important::
+
+   The :ref:`config-googledrive` setup steps must be completed before using this feature.
+
+
+The :ref:`cli-legistar-upload` (or :ref:`cli-legistar-upload-rguid`) command will upload the Legistar items to Google Drive.
+
+
+.. todo::
+
+   Add more information about the Google Drive upload feature.
