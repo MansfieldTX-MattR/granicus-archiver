@@ -37,6 +37,11 @@ Clips
     :prog: granicus-archiver clips download
     :nested: none
 
+.. _cli-clips-check:
+.. click:: granicus_archiver.clips_cli:check_clips
+    :prog: granicus-archiver clips check
+    :nested: none
+
 .. _cli-clips-upload:
 .. click:: granicus_archiver.clips_cli:upload_clips
     :prog: granicus-archiver clips upload
@@ -70,9 +75,17 @@ Legistar
     :nested: none
 
 
+"Fake GUID" Commands
+^^^^^^^^^^^^^^^^^^^^
+
 .. _cli-legistar-download:
 .. click:: granicus_archiver.legistar.cli:download_legistar
     :prog: granicus-archiver legistar download
+    :nested: none
+
+.. _cli-legistar-check:
+.. click:: granicus_archiver.legistar.cli:check_legistar
+    :prog: granicus-archiver legistar check
     :nested: none
 
 
@@ -82,9 +95,17 @@ Legistar
     :nested: none
 
 
+"Real GUID" Commands
+^^^^^^^^^^^^^^^^^^^^
+
 .. _cli-legistar-download-rguid:
 .. click:: granicus_archiver.legistar.cli:download_legistar_rguid
     :prog: granicus-archiver legistar download-rguid
+    :nested: none
+
+.. _cli-legistar-check-rguid:
+.. click:: granicus_archiver.legistar.cli:check_legistar_rguid
+    :prog: granicus-archiver legistar check-rguid
     :nested: none
 
 
@@ -101,7 +122,13 @@ Drive
 .. _cli-drive:
 .. click:: granicus_archiver.cli:drive
     :prog: granicus-archiver drive
-    :nested: full
+    :nested: none
+
+
+.. _cli-drive-auth:
+.. click:: granicus_archiver.cli:authorize
+    :prog: granicus-archiver drive authorize
+    :nested: none
 
 
 AWS
@@ -110,7 +137,27 @@ AWS
 .. _cli-aws:
 .. click:: granicus_archiver.aws.cli:cli
     :prog: granicus-archiver aws
-    :nested: full
+    :nested: none
+
+.. _cli-aws-config:
+.. click:: granicus_archiver.aws.cli:config
+    :prog: granicus-archiver aws config
+    :nested: none
+
+.. _cli-aws-upload-clips:
+.. click:: granicus_archiver.aws.cli:upload_clips
+    :prog: granicus-archiver aws upload-clips
+    :nested: none
+
+.. _cli-aws-upload-legistar:
+.. click:: granicus_archiver.aws.cli:upload_legistar
+    :prog: granicus-archiver aws upload-legistar
+    :nested: none
+
+.. _cli-aws-upload-legistar-rguid:
+.. click:: granicus_archiver.aws.cli:upload_legistar_rguid
+    :prog: granicus-archiver aws upload-legistar-rguid
+    :nested: none
 
 
 Web
@@ -119,4 +166,14 @@ Web
 .. _cli-web:
 .. click:: granicus_archiver.web.app:cli
     :prog: granicus-archiver web
-    :nested: full
+    :nested: none
+
+.. _cli-web-collect-static:
+.. click:: granicus_archiver.web.app:collect_static
+    :prog: granicus-archiver web collect-static
+    :nested: none
+
+.. _cli-web-serve:
+.. click:: granicus_archiver.web.app:serve
+    :prog: granicus-archiver web serve
+    :nested: none
