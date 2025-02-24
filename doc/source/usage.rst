@@ -79,3 +79,40 @@ Or:
    from a web page on the Legistar site.
 
    Subsequent runs will be much faster as the data is cached locally.
+
+
+Handling Updates
+================
+
+When items have changed in Legistar, this is detected, but the items are not automatically updated.
+This is to ensure that the user has control over when the updates are applied.
+
+When updates are detected, you will see something like this:
+
+
+.. grid:: 1
+
+   .. grid-item::
+
+      .. figure:: images/04-legistar-update-warning-01.jpg
+         :name: legistar-update-warning
+
+         Legistar Update Warning
+
+
+In the output above under "REAL GUID COLLISIONS", you will see a list of items that have changed.
+Most of the time it will be a status change ``setattr(obj, "minutes_status", Draft)``
+and possibly a change in the URLs available ``setattr(obj.links, "minutes", <url>)``.
+
+These cases are safe to update, so you can run the command again with the
+:option:`--allow-updates <granicus-archiver legistar download --allow-updates>` option as suggested:
+
+
+.. grid:: 1
+
+   .. grid-item::
+
+      .. figure:: images/04-legistar-update-complete-01.jpg
+         :name: legistar-update-complete
+
+         Legistar Update Complete
