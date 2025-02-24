@@ -213,9 +213,9 @@ class GranicusClient:
             meta: FileMeta
         ) -> None:
             if meta.sha1 is None:
-                meta.sha1 = await get_file_hash_async(src_file, 'sha1')
+                meta.sha1 = await get_file_hash_async('sha1', src_file)
             else:
-                if meta.sha1 != await get_file_hash_async(src_file, 'sha1'):
+                if meta.sha1 != await get_file_hash_async('sha1', src_file):
                     raise HashMismatchError(f'{src_file=}')
             if is_same_filesystem(src_file, dst_file):
                 src_file.rename(dst_file)
@@ -229,7 +229,7 @@ class GranicusClient:
                     async with aiofile.async_open(dst_file, 'wb') as dst_fd:
                         async for chunk in src_fd.iter_chunked(chunk_size):
                             await dst_fd.write(chunk)
-                if meta.sha1 != await get_file_hash_async(dst_file, 'sha1'):
+                if meta.sha1 != await get_file_hash_async('sha1', dst_file):
                     raise HashMismatchError(f'{dst_file=}')
                 logger.debug(f'copy complete for "{clip.unique_name} - {key}"')
                 src_file.unlink()

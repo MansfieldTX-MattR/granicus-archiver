@@ -191,10 +191,10 @@ class RGuidLegistarFiles(Serializable):
         for f in self:
             full_p = self.get_file_path(f.uid, absolute=True)
             if f.metadata.sha1 is None:
-                f.metadata.sha1 = get_file_hash(full_p, 'sha1')
+                f.metadata.sha1 = get_file_hash('sha1', full_p)
                 changed = True
             elif check_existing:
-                if f.metadata.sha1 != get_file_hash(full_p, 'sha1'):
+                if f.metadata.sha1 != get_file_hash('sha1', full_p):
                     raise HashMismatchError(full_p)
         return changed
 

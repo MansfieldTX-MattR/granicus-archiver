@@ -425,9 +425,9 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
                     temp_filename.unlink()
                 raise
             if meta.sha1 is None:
-                meta.sha1 = await get_file_hash_async(temp_filename, 'sha1')
+                meta.sha1 = await get_file_hash_async('sha1', temp_filename)
             else:
-                if meta.sha1 != await get_file_hash_async(temp_filename, 'sha1'):
+                if meta.sha1 != await get_file_hash_async('sha1', temp_filename):
                     raise HashMismatchError(
                         f'{temp_filename.name=}, {guid=}, {uid=}',
                     )
@@ -448,7 +448,7 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
                         await dst_fd.write(chunk)
 
             # Check the hash of the copy before deleting the temp file
-            if meta.sha1 != await get_file_hash_async(abs_filename, 'sha1'):
+            if meta.sha1 != await get_file_hash_async('sha1', abs_filename):
                 raise HashMismatchError(
                     f'{abs_filename.name=}, {guid=}, {uid=}',
                 )
@@ -809,7 +809,7 @@ class Client(ClientBase[GUID, DetailPageResult, LegistarData]):
                 assert t.filename not in asset_paths
                 assert meta.sha1 is not None
                 if check_hashes:
-                    if meta.sha1 != get_file_hash(t.filename, 'sha1'):
+                    if meta.sha1 != get_file_hash('sha1', t.filename):
                         raise HashMismatchError(f'{t.filename=}, {t.key=}')
                 asset_paths.add(t.filename)
         assert not len(illegal_dirs)

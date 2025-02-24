@@ -218,7 +218,7 @@ class ClientBase:
         async def get_local_hash() -> SHA1Hash:
             if local_meta is not None and local_meta.sha1 is not None:
                 return local_meta.sha1
-            return await get_file_hash_async(local_filename, 'sha1')
+            return await get_file_hash_async('sha1', local_filename)
 
         key = _key_to_str(key)
         if check_exists and await self.object_exists(key):
@@ -327,7 +327,7 @@ class ClipClient(ClientBase):
         exists = await self.object_exists(remote_file)
         if exists:
             remote_hash = await self.get_object_sha1(remote_file)
-            local_hash = await get_file_hash_async(local_file, 'sha1')
+            local_hash = await get_file_hash_async('sha1', local_file)
             if remote_hash == local_hash:
                 logger.info(f'Data file matches hosted version: {remote_file}')
                 return
@@ -518,7 +518,7 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
         exists = await self.object_exists(remote_file)
         if exists:
             remote_hash = await self.get_object_sha1(remote_file)
-            local_hash = await get_file_hash_async(local_file, 'sha1')
+            local_hash = await get_file_hash_async('sha1', local_file)
             if remote_hash == local_hash:
                 logger.info(f'Data file matches hosted version: {remote_file}')
                 return

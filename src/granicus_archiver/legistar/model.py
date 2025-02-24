@@ -516,20 +516,20 @@ class LegistarFiles(Serializable):
         for key, f in self.files.items():
             full_p = legistar_data.get_file_path(self.guid, key)
             if f.metadata.sha1 is None:
-                f.metadata.sha1 = get_file_hash(full_p, 'sha1')
+                f.metadata.sha1 = get_file_hash('sha1', full_p)
                 changed = True
             elif check_existing:
-                if f.metadata.sha1 != get_file_hash(full_p, 'sha1'):
+                if f.metadata.sha1 != get_file_hash('sha1', full_p):
                     raise HashMismatchError(full_p)
         for name, f in self.attachments.items():
             if f is None:
                 continue
             full_p = legistar_data.get_attachment_path(self.guid, name)
             if f.metadata.sha1 is None:
-                f.metadata.sha1 = get_file_hash(full_p, 'sha1')
+                f.metadata.sha1 = get_file_hash('sha1', full_p)
                 changed = True
             elif check_existing:
-                if f.metadata.sha1 != get_file_hash(full_p, 'sha1'):
+                if f.metadata.sha1 != get_file_hash('sha1', full_p):
                     raise HashMismatchError(full_p)
         return changed
 

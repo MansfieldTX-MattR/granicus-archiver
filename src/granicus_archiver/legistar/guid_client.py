@@ -230,7 +230,7 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
                 assert t.filename not in asset_paths
                 assert meta.sha1 is not None
                 if check_hashes:
-                    if meta.sha1 != get_file_hash(t.filename, 'sha1'):
+                    if meta.sha1 != get_file_hash('sha1', t.filename):
                         raise HashMismatchError(f'{t.filename=}, {meta.sha1=}')
                 asset_paths.add(t.filename)
         assert not len(illegal_dirs)

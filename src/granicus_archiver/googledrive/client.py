@@ -517,7 +517,7 @@ class GoogleClient:
         uploaded_meta = await self.get_file_meta(upload_filename)
         assert uploaded_meta is not None
         if check_hash:
-            local_hash = await get_file_hash_async(local_file, 'sha1')
+            local_hash = await get_file_hash_async('sha1', local_file)
             remote_hash = uploaded_meta['sha1Checksum']
             matched = local_hash == remote_hash
             logger.debug(f'Checking hashes for "{local_file}": {matched=}')
@@ -558,7 +558,7 @@ class GoogleClient:
         upload_res = await self.as_user(req, resp_type=FileMetaFull)
         if not check_hash:
             return upload_res
-        local_hash = await get_file_hash_async(local_file, 'sha1')
+        local_hash = await get_file_hash_async('sha1', local_file)
         remote_hash = upload_res['sha1Checksum']
         if local_hash != remote_hash:
             raise UploadError(f'Uploaded file hash mismatch for "{local_file}": {local_hash=}, {remote_hash=}')
@@ -653,7 +653,7 @@ class ClipGoogleClient(GoogleClient):
         upload_filename = self.upload_dir / local_filename.name
         meta = await self.get_file_meta(upload_filename)
         if meta is not None:
-            local_hash = await get_file_hash_async(local_filename, 'sha1')
+            local_hash = await get_file_hash_async('sha1', local_filename)
             remote_hash = meta['sha1Checksum']
             if local_hash == remote_hash:
                 logger.info(f'Data file matches hosted version: {upload_filename}')
@@ -920,7 +920,7 @@ class ClipGoogleClient(GoogleClient):
             sch = self.schedulers['uploads']
             local_hash = get_local_hash(clip_id, key)
             if local_hash is None:
-                local_hash = await get_file_hash_async(filename, 'sha1')
+                local_hash = await get_file_hash_async('sha1', filename)
             remote_hash = remote_meta['sha1Checksum']
             matched = local_hash == remote_hash
             logger.debug(f'Checking hashes for "{filename}": {matched=}, {sch.active_count=}')
@@ -1054,7 +1054,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         upload_filename = self.upload_dir / local_filename.name
         meta = await self.get_file_meta(upload_filename)
         if meta is not None:
-            local_hash = await get_file_hash_async(local_filename, 'sha1')
+            local_hash = await get_file_hash_async('sha1', local_filename)
             remote_hash = meta['sha1Checksum']
             if local_hash == remote_hash:
                 logger.info(f'Data file matches hosted version: {upload_filename}')
@@ -1293,7 +1293,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
             if local_meta.sha1 is not None:
                 local_hash = local_meta.sha1
             else:
-                local_hash = await get_file_hash_async(filename, 'sha1')
+                local_hash = await get_file_hash_async('sha1', filename)
             remote_hash = remote_meta['sha1Checksum']
             matched = local_hash == remote_hash
             logger.debug(f'Checking hashes for "{filename}": {matched=}')

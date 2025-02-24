@@ -601,7 +601,7 @@ class ClipFiles(Serializable):
             content_type='text/vtt',
             last_modified=dt,
             etag=None,
-            sha1=get_file_hash(full_filename, 'sha1'),
+            sha1=get_file_hash('sha1', full_filename),
         )
         self.metadata['chapters'] = meta
         return True
@@ -676,11 +676,11 @@ class ClipFiles(Serializable):
             if not full_p.exists():
                 continue
             if meta.sha1 is None:
-                sha1 = get_file_hash(full_p, 'sha1')
+                sha1 = get_file_hash('sha1', full_p)
                 meta.sha1 = sha1
                 changed = True
             elif check_existing:
-                sha1 = get_file_hash(full_p, 'sha1')
+                sha1 = get_file_hash('sha1', full_p)
                 if sha1 != meta.sha1:
                     raise HashMismatchError(f'{full_p=}')
         return changed
