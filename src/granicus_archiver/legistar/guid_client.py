@@ -174,6 +174,7 @@ class RGClient(ClientBase[REAL_GUID, RGuidDetailResult, RGuidLegistarData]):
             _changed, actions = await self.handle_item_update(
                 feed_item, tmp_item, apply_actions=True, parsed_item=parsed_item,
             )
+            self.guid_collisions[feed_item.real_guid] = (feed_item, actions)
             logger.info(f'Update item: {actions=}')
             if _changed:
                 assert tmp_item.links == parsed_item.links

@@ -8,6 +8,7 @@ from yarl import URL
 
 from . import client as legistar_client
 from . import guid_client as legistar_guid_client
+from .client import ClientBase
 from .model import LegistarData
 from ..googledrive import client as googleclient
 if TYPE_CHECKING:
@@ -162,6 +163,29 @@ def download_legistar(
     else:
         click.echo('')
         click.echo(c.get_warning_items())
+        _handle_items_needing_update(c, allow_updates)
+
+
+def _handle_items_needing_update(c: ClientBase, allow_updates: bool):
+    items_needing_update = c.get_items_needing_updates()
+    if not len(items_needing_update):
+        return
+    if not allow_updates:
+        msg = '\n'.join([
+            'Items listed above (in "REAL_GUID_COLLISIONS") may need to be updated',
+            'Review them and run the command again with --allow-updates if necessary',
+        ])
+        click.echo(click.style(msg, fg='yellow'))
+    else:
+        update_msg = []
+        for item_title, actions in items_needing_update:
+            update_msg.append(f'  {item_title}:')
+            update_msg.extend([f'    {a}' for a in actions])
+        msg = '\n'.join([
+            'The following items have been updated:',
+            *update_msg,
+        ])
+        click.echo(click.style(msg, fg='green'))
 
 
 @cli.command(name='download-rguid')
@@ -228,6 +252,7 @@ def download_legistar_rguid(
     else:
         click.echo('')
         click.echo(c.get_warning_items())
+        _handle_items_needing_update(c, allow_updates)
 
 
 @cli.command(name='ensure-local-hashes')
