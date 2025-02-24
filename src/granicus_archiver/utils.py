@@ -492,9 +492,19 @@ class CompletionCounts:
     """If ``True`` any changes to :attr:`num_queued` or :attr:`num_completed`
     will be logged
     """
-    def __init__(self, max_items: int|None = None, enable_log: bool = False) -> None:
+    log_level: int|str
+    """The log level to use when logging changes to :attr:`num_queued` or
+    :attr:`num_completed`
+    """
+    def __init__(
+        self,
+        max_items: int|None = None,
+        enable_log: bool = False,
+        log_level: int|str = 'INFO'
+    ) -> None:
         self._max_items = max_items
         self.enable_log = enable_log
+        self.log_level = log_level
         self._num_queued = 0
         self._num_completed = 0
 
@@ -612,7 +622,7 @@ class CompletionCounts:
 
     def _log_counts(self, msg: str) -> None:
         if self.enable_log:
-            logger.debug(f'{msg}{self}')
+            logger.log(self.log_level, f'{msg}{self}')
 
     def __repr__(self) -> str:
         return f'<{self.__class__.__name__}: {self}>'
