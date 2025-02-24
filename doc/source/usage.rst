@@ -170,3 +170,12 @@ The :ref:`cli-legistar-upload` (or :ref:`cli-legistar-upload-rguid`) command wil
 .. todo::
 
    Add more information about the Google Drive upload feature.
+
+
+Web Application
+***************
+
+
+.. todo::
+
+   Document the web app

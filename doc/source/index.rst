@@ -59,6 +59,20 @@ For example, with around 7-10 years of data, you may need 1-2 TB of disk space.
   speed and portability, but for their longevity and shelf-life.
 
 
+Other Features
+**************
+
+- **Google Drive Integration**:  The tool can upload the archived content to Google Drive
+  for backup purposes.  This is useful for both redundancy and for sharing the data with
+  others.
+- **AWS S3 Integration**:  The tool can upload the archived content to an AWS S3 bucket.
+  This can be used for redundancy as well as serving the data to a website or other
+  application.
+- **Web Interface**: There is a built-in web application that allows you to view the
+  archived content in a browser.  This is useful for quickly finding and viewing
+  content without having to navigate the file system.
+
+
 Project Links
 *************
 
