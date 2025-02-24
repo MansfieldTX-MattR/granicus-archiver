@@ -38,7 +38,12 @@ configuration file, or passed as command line arguments.
    working directory from this point forward.
 
    The working directory will be checked on every invocation and will warn you if
-   things don't match.
+   things don't match:
+
+   .. code-block:: bash
+
+      $ granicus-archiver clips download --max-clips 5
+      Current working directory does not match your config. Continue? [y/N]
 
 
 .. _config-granicus-data-url:
