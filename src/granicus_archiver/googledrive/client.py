@@ -1197,7 +1197,10 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
                 logger.warning(f'size mismatch for "{filename}", {local_size=}, {upload_size=}')
             if local_meta.sha1 is not None:
                 if local_meta.sha1 != upload_meta['sha1Checksum']:
-                    raise HashMismatchError(f'hash mismatch for "{filename}"')
+                    current_hash = await get_file_hash_async('sha1', filename)
+                    if current_hash != local_meta.sha1:
+                        raise HashMismatchError(f'LOCAL hash mismatch for "{filename}"')
+                    raise HashMismatchError(f'REMOTE hash mismatch for "{filename}"')
             return False, upload_filename
         if self.completion_counts.full:
             return False, guid, set()
