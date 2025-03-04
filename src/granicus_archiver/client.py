@@ -551,6 +551,8 @@ async def amain(
                 completion_counts.num_queued += 1
                 if completion_counts.full:
                     break
+            logger.debug('all items queued')
+            completion_counts.max_items = completion_counts.num_queued
             await waiter
         finally:
             clips.save(data_file)
