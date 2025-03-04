@@ -760,6 +760,7 @@ class ClipGoogleClient(GoogleClient):
         return all_skipped
 
 
+    @logger.catch(reraise=True)
     async def check_clip_needs_upload(
         self,
         clip: Clip

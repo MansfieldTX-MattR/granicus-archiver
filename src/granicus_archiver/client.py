@@ -320,7 +320,7 @@ def check_clip_files(clip: Clip, warnings_only: bool = False) -> int:
         count += 1
     return count
 
-@logger.catch
+@logger.catch(reraise=True)
 def check_all_clip_files(clips: ClipCollection, warnings_only: bool = False):
     clip_count = 0
     item_count = 0
@@ -447,7 +447,7 @@ async def check_clip_file_meta(
     return changed
 
 
-@logger.catch
+@logger.catch(reraise=True)
 async def check_all_clip_meta(
     conf: Config,
     report_only: bool = True

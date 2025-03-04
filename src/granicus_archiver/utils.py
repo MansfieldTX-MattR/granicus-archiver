@@ -115,6 +115,7 @@ class JobResult(Generic[T]):
         """Raise the :attr:`exception` if it exists
         """
         if self.exception is not None:
+            logger.exception(self.exception)
             raise self.exception
 
 
