@@ -352,6 +352,13 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
 
         return '\n'.join(lines)
 
+    def get_items_needing_updates(self) -> list[tuple[str, list[str]]]:
+        items: list[tuple[str, list[str]]] = []
+        for feed_item, update_actions in self.guid_collisions.values():
+            item_update = (feed_item.to_str(), update_actions)
+            items.append(item_update)
+        return items
+
     def get_incomplete_csv(self) -> str:
         items = list(self.incomplete_items.values())
         items.extend(list(self.incomplete_existing_items.values()))
