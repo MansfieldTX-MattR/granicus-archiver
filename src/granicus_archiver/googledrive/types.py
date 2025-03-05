@@ -10,7 +10,7 @@ from aiogoogle.resource import GoogleAPI, Resource
 from aiogoogle.models import Request
 
 __all__ = (
-    'FileId', 'FileMeta', 'FileMetaFull', 'FileUploadResponse', 'FileListResponse',
+    'FileId', 'DriveFileMeta', 'DriveFileMetaFull', 'FileUploadResponse', 'FileListResponse',
     'DriveResource', 'DriveFiles', 'FolderCache',
 )
 
@@ -23,7 +23,7 @@ FolderCache = dict[Path, FileId]
 """Mapping of paths to :obj:`FileId` to aid in caching Drive folders"""
 
 
-class FileMeta(TypedDict):
+class DriveFileMeta(TypedDict):
     """Metadata for a Drive file or folder
     """
     name: str                           #: The file or folder name
@@ -35,8 +35,8 @@ class FileMeta(TypedDict):
     webContentLink: NotRequired[str]    #: Download link
 
 
-class FileMetaFull(TypedDict):
-    """Similar to :class:`FileMeta` but with all fields required
+class DriveFileMetaFull(TypedDict):
+    """Similar to :class:`DriveFileMeta` but with all fields required
     """
     name: str                           #: The file or folder name
     id: FileId                          #: The item id

@@ -185,7 +185,7 @@ class GoogleClient:
     def find_cached_file_meta(
         self,
         key: MetaCacheKey
-    ) -> FileMetaFull|None:
+    ) -> DriveFileMetaFull|None:
         """Search the cache for metadata by :attr:`.model.Clip.id` and file type
         """
         meta = self.meta_cache.get(key)
@@ -196,7 +196,7 @@ class GoogleClient:
     def set_cached_file_meta(
         self,
         key: MetaCacheKey,
-        meta: FileMetaFull
+        meta: DriveFileMetaFull
     ) -> None:
         """Store metadata for the :attr:`.model.Clip.id` and file type in the cache
         """
@@ -222,7 +222,7 @@ class GoogleClient:
         spaces: str = 'drive',
         fields: list[str]|str|None = ...,
         full_res: bool = True
-    ) -> AsyncGenerator[FileMetaFull]: ...
+    ) -> AsyncGenerator[DriveFileMetaFull]: ...
     @overload
     async def list_files(
         self,
@@ -230,28 +230,28 @@ class GoogleClient:
         spaces: str = 'drive',
         fields: list[str]|str|None = ...,
         full_res: bool = False
-    ) -> AsyncGenerator[FileMeta]: ...
+    ) -> AsyncGenerator[DriveFileMeta]: ...
     async def list_files(
         self,
         q: str,
         spaces: str = 'drive',
         fields: list[str]|str|None = None,
         full_res: bool = False
-    ) -> AsyncGenerator[FileMeta|FileMetaFull]:
+    ) -> AsyncGenerator[DriveFileMeta|DriveFileMetaFull]:
         """List files using the given query string
 
         The result will be an :term:`asynchronous generator` of
-        :class:`~.types.FileMeta` (if *full_res* is ``False``) or
-        :class:`~.types.FileMetaFull` (if *full_res* is ``True``).
+        :class:`~.types.DriveFileMeta` (if *full_res* is ``False``) or
+        :class:`~.types.DriveFileMetaFull` (if *full_res* is ``True``).
         """
         req = self.drive_v3.files.list(q=q, spaces=spaces, fields=fields)
         if full_res:
             res = await self.as_user(
-                req, resp_type=FileListResponse[FileMetaFull], full_res=True,
+                req, resp_type=FileListResponse[DriveFileMetaFull], full_res=True,
             )
         else:
             res = await self.as_user(
-                req, resp_type=FileListResponse[FileMeta], full_res=False,
+                req, resp_type=FileListResponse[DriveFileMeta], full_res=False,
             )
         async for page in res:
             for f in page['files']:
@@ -333,7 +333,7 @@ class GoogleClient:
         folder
         """
         # drive_v3 = await aiogoogle.discover('drive', 'v3')
-        file_meta: FileMeta = {
+        file_meta: DriveFileMeta = {
             'name': name,
             'mimeType': FOLDER_MTYPE,
         }
@@ -432,7 +432,7 @@ class GoogleClient:
     async def get_file_meta(
         self,
         filename: Path
-    ) -> FileMetaFull|None:
+    ) -> DriveFileMetaFull|None:
         """Get metadata for the given file (if it exists)
         """
         folder = filename.parent
@@ -457,7 +457,7 @@ class GoogleClient:
         check_hash: bool = True,
         timeout_total: float|None = None,
         timeout_chunk: float|None = None
-    ) -> FileMetaFull|None:
+    ) -> DriveFileMetaFull|None:
         """Upload a file to Drive
 
         Arguments:
@@ -469,7 +469,8 @@ class GoogleClient:
                 not provided, the parent folder(s) will be searched for and
                 created if necessary.
             check_hash: If ``True``, the hash of the local file will be checked
-                against the hash from the uploaded :class:`metadata <.types.FileMetaFull>`
+                against the hash from the uploaded
+                :class:`metadata <.types.DriveFileMetaFull>`
 
         Returns:
             The metadata for the uploaded file.
@@ -491,7 +492,7 @@ class GoogleClient:
             else:
                 parent = None
 
-        file_meta: FileMeta = {
+        file_meta: DriveFileMeta = {
             'name': upload_filename.name,
         }
         if parent is not None:
@@ -530,17 +531,18 @@ class GoogleClient:
         file_id: FileId,
         local_file: Path,
         check_hash: bool = True,
-    ) -> FileMetaFull:
+    ) -> DriveFileMetaFull:
         """Upload a revision for an file that already exists in Drive
 
         Arguments:
             file_id: The id of the file to update
             local_file: The local file to upload
             check_hash: If ``True``, the hash of the local file will be checked
-                against the hash from the uploaded :class:`metadata <.types.FileMetaFull>`
+                against the hash from the uploaded
+                :class:`metadata <.types.DriveFileMetaFull>`
 
         Returns:
-            FileMetaFull: The metadata for the uploaded file
+            DriveFileMetaFull: The metadata for the uploaded file
 
         Raises:
             UploadError: If *check_hash* is True and the content hashes
@@ -555,7 +557,7 @@ class GoogleClient:
         # Important! This must be set to False for files.update
         # See https://github.com/omarryhan/aiogoogle/issues/118
         req.media_upload.multipart = False
-        upload_res = await self.as_user(req, resp_type=FileMetaFull)
+        upload_res = await self.as_user(req, resp_type=DriveFileMetaFull)
         if not check_hash:
             return upload_res
         local_hash = await get_file_hash_async('sha1', local_file)
@@ -645,7 +647,7 @@ class ClipGoogleClient(GoogleClient):
         rel_filename = clip.get_file_path(key, absolute=False)
         return self.upload_dir / rel_filename
 
-    async def upload_data_file(self) -> FileMetaFull:
+    async def upload_data_file(self) -> DriveFileMetaFull:
         """Upload the data file to Drive
         """
         local_filename = self.root_conf.data_file
@@ -679,7 +681,7 @@ class ClipGoogleClient(GoogleClient):
         self,
         clip: Clip,
         key: ClipFileUploadKey
-    ) -> tuple[FileMetaFull|None, bool]:
+    ) -> tuple[DriveFileMetaFull|None, bool]:
         """Get metadata for the given clip file (if it exists)
 
         The local :attr:`~.GoogleClient.meta_cache` will first be checked.
@@ -688,7 +690,7 @@ class ClipGoogleClient(GoogleClient):
 
         Returns:
             (tuple):
-                - **metadata** (:class:`.types.FileMetaFull`, *optional*): The
+                - **metadata** (:class:`.types.DriveFileMetaFull`, *optional*): The
                   metadata for the file, or ``None`` if it does not exist in Drive
                 - **is_cached** (:class:`bool`): Whether the metadata was retrieved from the
                   :attr:`~.GoogleClient.meta_cache`
@@ -865,7 +867,7 @@ class ClipGoogleClient(GoogleClient):
         """Check metadata for all available files stored on Drive
 
         Arguments:
-            enable_hashes: If ``True``, the :attr:`~.types.FileMetaFull.sha1Checksum`
+            enable_hashes: If ``True``, the :attr:`~.types.DriveFileMetaFull.sha1Checksum`
                 will be compared with the hash of the local file contents
             hash_logfile: Optional file to store / load the local file hashes.
                 This can greatly reduce the time required since most files are
@@ -917,7 +919,7 @@ class ClipGoogleClient(GoogleClient):
             clip_id: CLIP_ID,
             key: ClipFileUploadKey,
             filename: Path,
-            remote_meta: FileMetaFull,
+            remote_meta: DriveFileMetaFull,
         ):
             sch = self.schedulers['uploads']
             local_hash = get_local_hash(clip_id, key)
@@ -935,14 +937,14 @@ class ClipGoogleClient(GoogleClient):
             clip: Clip,
             key: ClipFileUploadKey,
             filename: Path
-        ) -> tuple[CLIP_ID, ClipFileUploadKey, FileMetaFull|None, bool, Path]:
+        ) -> tuple[CLIP_ID, ClipFileUploadKey, DriveFileMetaFull|None, bool, Path]:
             meta, is_cached = await self.get_clip_file_meta(clip, key)
             return clip.id, key, meta, is_cached, filename
 
         async def check_item(clip: Clip) -> bool:
             changed = False
             hash_waiters = JobWaiters(scheduler=self.schedulers['uploads'])
-            meta_waiters = JobWaiters[tuple[CLIP_ID, ClipFileUploadKey, FileMetaFull|None, bool, Path]](
+            meta_waiters = JobWaiters[tuple[CLIP_ID, ClipFileUploadKey, DriveFileMetaFull|None, bool, Path]](
                 scheduler=self.schedulers['general']
             )
             for key, filename in clip.iter_paths(for_download=False):
@@ -1049,7 +1051,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         await self.upload_scheduler.wait_and_close()
         return await super().__aexit__(*args)
 
-    async def upload_data_file(self) -> FileMetaFull:
+    async def upload_data_file(self) -> DriveFileMetaFull:
         """Upload the data file to Drive
         """
         local_filename = self.local_data_file
@@ -1096,7 +1098,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         self,
         guid: _GuidT,
         uid: LegistarFileUID
-    ) -> tuple[FileMetaFull|None, bool]:
+    ) -> tuple[DriveFileMetaFull|None, bool]:
         """Get metadata for the filename matching *guid* and *uid* (if it exists)
 
         The local :attr:`~.GoogleClient.meta_cache` will first be checked.
@@ -1105,7 +1107,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
 
         Returns:
             (tuple):
-                - **metadata** (:class:`~.types.FileMetaFull`, *optional*): The
+                - **metadata** (:class:`~.types.DriveFileMetaFull`, *optional*): The
                   metadata for the file, or ``None`` if it does not exist in Drive
                 - **is_cached** (:class:`bool`): Whether the metadata was retrieved from the
                   :attr:`~.GoogleClient.meta_cache`
@@ -1282,7 +1284,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         """Check metadata for all available files stored on Drive
 
         Arguments:
-            enable_hashes: If ``True``, the :attr:`~.types.FileMetaFull.sha1Checksum`
+            enable_hashes: If ``True``, the :attr:`~.types.DriveFileMetaFull.sha1Checksum`
                 will be compared with the hash of the local file contents
 
         Raises:
@@ -1295,7 +1297,7 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
         async def check_hash(
             filename: Path,
             local_meta: ClipFileMeta,
-            remote_meta: FileMetaFull,
+            remote_meta: DriveFileMetaFull,
         ):
             if local_meta.sha1 is not None:
                 local_hash = local_meta.sha1
@@ -1312,14 +1314,14 @@ class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegMod
             uid: LegistarFileUID,
             local_meta: ClipFileMeta,
             filename: Path
-        ) -> tuple[ClipFileMeta, FileMetaFull|None, bool, Path]:
+        ) -> tuple[ClipFileMeta, DriveFileMetaFull|None, bool, Path]:
             meta, is_cached = await self.get_remote_meta(guid, uid)
             return local_meta, meta, is_cached, filename
 
         async def check_item(guid: _GuidT) -> bool:
             changed = False
             hash_waiters = JobWaiters(scheduler=self.upload_scheduler)
-            meta_waiters = JobWaiters[tuple[ClipFileMeta, FileMetaFull|None, bool, Path]](
+            meta_waiters = JobWaiters[tuple[ClipFileMeta, DriveFileMetaFull|None, bool, Path]](
                 scheduler=self.upload_scheduler,
             )
 

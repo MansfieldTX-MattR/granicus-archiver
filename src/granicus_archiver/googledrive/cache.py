@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TypeVar, Generic, NamedTuple, Literal, Any, Iterator, Self, overload
 
-from .types import FileMetaFull
+from .types import DriveFileMetaFull
 from ..model import CLIP_ID, ClipFileUploadKey
 from ..legistar.types import GUID, REAL_GUID, LegistarFileUID
 
@@ -10,7 +10,7 @@ IdType = TypeVar('IdType', CLIP_ID, GUID, REAL_GUID)
 """Id of an item within the top-level of :class:`MetaDict`"""
 Kt = TypeVar('Kt', ClipFileUploadKey, LegistarFileUID)
 """Sub key for values within an item"""
-Vt = TypeVar('Vt', bound=FileMetaFull)
+Vt = TypeVar('Vt', bound=DriveFileMetaFull)
 
 
 MetaKey = Literal['clips', 'legistar', 'legistar_rguid']
@@ -30,7 +30,7 @@ class MetaDict(Generic[IdType, Kt, Vt]):
     """Generic metadata container
 
     Items are arranged with a top-level dict with :obj:`IdType` as keys and
-    values as nested dicts of :obj:`Kt` and :class:`~.types.FileMetaFull`
+    values as nested dicts of :obj:`Kt` and :class:`~.types.DriveFileMetaFull`
     """
     _items: dict[IdType, dict[Kt, Vt]]
     def __init__(self, initdict: dict[IdType, dict[Kt, Vt]]|None = None) -> None:
@@ -102,7 +102,7 @@ class MetaDict(Generic[IdType, Kt, Vt]):
             item_dict.update(other_dict)
 
     def serialize(self):
-        ser_keys = set(FileMetaFull.__required_keys__) | set(FileMetaFull.__optional_keys__)
+        ser_keys = set(DriveFileMetaFull.__required_keys__) | set(DriveFileMetaFull.__optional_keys__)
         def serialize_meta(meta: Vt):
             keys = set(meta.keys()) & ser_keys
             return {k: meta[k] for k in keys}
@@ -118,9 +118,9 @@ class MetaDict(Generic[IdType, Kt, Vt]):
         return cls(data)
 
 
-_ClipMetaDict = MetaDict[CLIP_ID, ClipFileUploadKey, FileMetaFull]
-_LegistarMetaDict = MetaDict[GUID, LegistarFileUID, FileMetaFull]
-_RGuidLegistarMetaDict = MetaDict[REAL_GUID, LegistarFileUID, FileMetaFull]
+_ClipMetaDict = MetaDict[CLIP_ID, ClipFileUploadKey, DriveFileMetaFull]
+_LegistarMetaDict = MetaDict[GUID, LegistarFileUID, DriveFileMetaFull]
+_RGuidLegistarMetaDict = MetaDict[REAL_GUID, LegistarFileUID, DriveFileMetaFull]
 
 
 class MetaCount(NamedTuple):
@@ -153,7 +153,7 @@ class FileCache:
             )
         return CacheCounts(**counts)
 
-    def get(self, cache_key: MetaCacheKey) -> FileMetaFull|None:
+    def get(self, cache_key: MetaCacheKey) -> DriveFileMetaFull|None:
         try:
             result = self[cache_key]
         except KeyError:
@@ -161,14 +161,14 @@ class FileCache:
         return result
 
     @overload
-    def __getitem__(self, cache_key: MetaCacheKey) -> FileMetaFull: ...
+    def __getitem__(self, cache_key: MetaCacheKey) -> DriveFileMetaFull: ...
     @overload
     def __getitem__(self, cache_key: Literal['clips']) -> _ClipMetaDict: ...
     @overload
     def __getitem__(self, cache_key: Literal['legistar']) -> _LegistarMetaDict: ...
     @overload
     def __getitem__(self, cache_key: Literal['legistar_rguid']) -> _RGuidLegistarMetaDict: ...
-    def __getitem__(self, cache_key: MetaCacheKey|MetaKey) -> FileMetaFull|_ClipMetaDict|_LegistarMetaDict|_RGuidLegistarMetaDict:
+    def __getitem__(self, cache_key: MetaCacheKey|MetaKey) -> DriveFileMetaFull|_ClipMetaDict|_LegistarMetaDict|_RGuidLegistarMetaDict:
         if not isinstance(cache_key, tuple):
             assert cache_key in self._meta_keys
             return getattr(self, cache_key)
@@ -180,7 +180,7 @@ class FileCache:
             assert cache_key[0] == 'legistar_rguid'
             return self.legistar_rguid[cache_key[1:]]
 
-    def __setitem__(self, cache_key: MetaCacheKey, value: FileMetaFull) -> None:
+    def __setitem__(self, cache_key: MetaCacheKey, value: DriveFileMetaFull) -> None:
         if cache_key[0] == 'clips':
             self.clips[cache_key[1:]] = value
         elif cache_key[0] == 'legistar':
