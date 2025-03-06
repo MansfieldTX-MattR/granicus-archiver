@@ -17,6 +17,9 @@ from pyquery.pyquery import PyQuery
 
 from ..model import Serializable, Clip, CLIP_ID, Location
 from .types import GUID, REAL_GUID, Category
+from .exceptions import (
+    LegistarThinksRSSCanPaginateError, CategoryError, DatetimeError
+)
 
 ItemDict = dict[GUID, 'FeedItem']
 
@@ -30,52 +33,6 @@ FUTURE_TIMEDELTA = datetime.timedelta(days=1)
 it is no longer considered a future item
 """
 
-ParseErrorType = Literal['unknown', 'category', 'datetime']
-"""Parse error names"""
-
-class ParseError(Exception):
-    """Exception raised during parsing
-    """
-    clip_id: CLIP_ID
-    """The clip id associated with the error"""
-    error_type: ClassVar[ParseErrorType] = 'unknown'
-    """String indicator of the type of error"""
-    def __init__(self, clip_id: CLIP_ID, msg: str) -> None:
-        super().__init__()
-        self.clip_id = clip_id
-        self.msg = msg
-
-    def __str__(self) -> str:
-        return f'{self.msg} (clip_id={self.clip_id})'
-
-class CategoryError(ParseError):
-    """Exception raised when matching :attr:`FeedItem.category` to a clip
-    location
-    """
-    error_type = 'category'
-
-class DatetimeError(ParseError):
-    """Exception raised when matching :attr:`FeedItem.meeting_date` to a clip
-    datetime
-    """
-    error_type = 'datetime'
-
-
-class LegistarThinksRSSCanPaginateError(Exception):
-    """Exception raised when an RSS feed contains exactly 100 items
-
-    This *could* mean there are exactly 100 items available, but Legistar's
-    feed generator limits the results for **any** RSS feed to 100 items
-    **even if there are more available**!
-
-    As a precaution, this is treated as an error so the feeds can be
-    divided up as described in :class:`Feed`.
-    """
-    def __str__(self) -> str:
-        args = self.args
-        arg_str = '' if not len(args) else f' {args!r}'
-        msg = 'Feed item count is exactly 100.  This may be missing items because Legistar thinks they can paginate RSS feeds!!!'
-        return f'{msg}{arg_str}'
 
 
 def set_timezone(tz: ZoneInfo) -> None:

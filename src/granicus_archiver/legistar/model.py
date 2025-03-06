@@ -24,6 +24,9 @@ from .types import (
     GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID, Category,
     NoClipT, NoClip, _GuidT, _ItemT,
 )
+from .exceptions import (
+    ThisShouldBeA500ErrorButItsNot, HiddenItemError, NoMeetingTimeError,
+)
 from ..utils import remove_pdf_links, get_file_hash, HashMismatchError
 
 
@@ -49,37 +52,6 @@ def make_path_legal(p: Path, is_dir: bool) -> Path:
         parts.append(name)
     return Path(*parts)
 
-
-class ThisShouldBeA500ErrorButItsNot(Exception):
-    """Raised when a detail page request returns a ``200 - OK`` response,
-    but with error information in the HTML content
-
-    Yes, that really happens
-    """
-    def __str__(self):
-        return "Yes, they really do that. Isn't it lovely?"
-
-
-class IncompleteItemError(Exception):
-    """Raised in :meth:`DetailPageResult.from_html` if a detail page is in an
-    incomplete state
-
-    This can be the case if the agenda status is not public or if no
-    meeting time has been set.
-    """
-
-class HiddenItemError(IncompleteItemError):
-    """Raised if a detail page is ``"Not Viewable by the Public"``
-    """
-
-class NoMeetingTimeError(IncompleteItemError):
-    """Raised if no time was set for the meeting
-
-    .. note::
-
-        This exception is not raised if the item is older than a set amount
-        of time (see :attr:`.rss_parser.FeedItem.is_in_past`)
-    """
 
 
 ATTACHMENT_UID_PREFIX = ':attachment:'

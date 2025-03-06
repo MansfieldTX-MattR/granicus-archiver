@@ -28,11 +28,15 @@ from .types import (
     GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip,
     _GuidT, _ItemT,
 )
-from .rss_parser import Feed, FeedItem, ParseError, LegistarThinksRSSCanPaginateError, GuidCompare
+from .rss_parser import Feed, FeedItem, GuidCompare
 from .model import (
-    LegistarData, DetailPageResult, IncompleteItemError, HiddenItemError,
+    LegistarData, DetailPageResult,
     is_attachment_uid, uid_to_file_key, make_path_legal,
     FilePathURLComplete, AbstractFile, AbstractLegistarModel, UpdateResult,
+)
+from .exceptions import (
+    RSSParseError, HiddenItemError, IncompleteItemError,
+    LegistarThinksRSSCanPaginateError,
 )
 from ..downloader import Downloader, DownloadResult, StupidZeroContentLengthError
 
@@ -285,7 +289,7 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
         for feed in self.all_feeds.values():
             try:
                 feed_item = feed.find_clip_match(clip)
-            except ParseError:
+            except RSSParseError:
                 feed_item = None
             if feed_item is None or feed_item.is_future:
                 continue

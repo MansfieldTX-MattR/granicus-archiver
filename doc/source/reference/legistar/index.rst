@@ -10,3 +10,4 @@
     guid_model
     rss_parser
     types
+    exceptions
