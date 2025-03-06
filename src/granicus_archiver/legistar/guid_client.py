@@ -4,13 +4,10 @@ from pathlib import Path
 
 from loguru import logger
 
-from granicus_archiver.legistar.model import AbstractFile, FilePathURLComplete
-from granicus_archiver.model import FileMeta
-
 if TYPE_CHECKING:
     from ..config import Config
 
-from ..model import ClipCollection
+from ..clips.model import ClipCollection, FileMeta
 from .types import REAL_GUID, LegistarFileUID
 from .rss_parser import FeedItem
 from .model import (

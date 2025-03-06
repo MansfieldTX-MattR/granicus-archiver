@@ -19,7 +19,7 @@ from .types import *
 from .cache import FileCache, MetaCacheKey, MetaCount
 from .pathtree import PathNode
 from . import config
-from ..model import (
+from ..clips.model import (
     ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID,
     FileMeta as ClipFileMeta,
 )
@@ -34,7 +34,7 @@ from ..utils import (
     HashMismatchError,
     aio_read_iter,
 )
-from .. import html_builder
+from ..clips import html_builder
 
 if TYPE_CHECKING:
     from ..config import Config

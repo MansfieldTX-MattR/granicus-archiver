@@ -16,7 +16,7 @@ import aiohttp_jinja2
 from yarl import URL
 
 from ..config import Config
-from ..model import CLIP_ID, Location, Clip, ClipCollection
+from ..clips.model import CLIP_ID, Location, Clip, ClipCollection
 from ..legistar.model import (
     LegistarData, DetailPageResult, LegistarFiles,
     AbstractLegistarModel, AbstractFile, LegistarFile, AttachmentFile,

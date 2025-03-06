@@ -16,7 +16,7 @@ from loguru import logger
 from pyquery.pyquery import PyQuery
 from yarl import URL
 
-from ..model import CLIP_ID, Serializable, FileMeta
+from ..clips.model import CLIP_ID, Serializable, FileMeta
 from .rss_parser import FeedItem, get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info
 from .types import (
     LegistarFileKeys, AgendaStatus, MinutesStatus,

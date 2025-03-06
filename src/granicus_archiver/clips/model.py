@@ -22,7 +22,7 @@ from yaml import (
 from yarl import URL
 from multidict import MultiMapping
 
-from .utils import (
+from ..utils import (
     SHA1Hash, seconds_to_time_str, get_file_hash, HashMismatchError,
 )
 

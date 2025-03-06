@@ -9,7 +9,7 @@ from aiohttp import (
 import aiojobs
 import aiofile
 
-from .model import FileMeta
+from .clips.model import FileMeta
 
 
 class DownloadError(Exception):

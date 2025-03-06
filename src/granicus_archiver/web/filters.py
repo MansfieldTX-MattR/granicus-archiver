@@ -7,7 +7,7 @@ from aiohttp import web
 import jinja2
 from yarl import URL
 
-from ..model import CLIP_ID
+from ..clips.model import CLIP_ID
 from ..legistar.types import GUID, REAL_GUID, LegistarFileUID
 from ..legistar.rss_parser import is_guid, is_real_guid
 from .types import *

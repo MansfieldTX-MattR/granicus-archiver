@@ -8,7 +8,7 @@ import click
 if TYPE_CHECKING:
     from ..cli import BaseContext
 
-from ..model import ClipCollection
+from ..clips.model import ClipCollection
 from . import client
 
 

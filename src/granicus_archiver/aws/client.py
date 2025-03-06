@@ -31,7 +31,7 @@ else:
 
 
 from ..config import Config
-from ..model import FileMeta, Clip, ClipFileUploadKey, ClipCollection
+from ..clips.model import FileMeta, Clip, ClipFileUploadKey, ClipCollection
 from ..legistar.types import GUID, REAL_GUID, LegistarFileUID, _GuidT, _ItemT
 from ..legistar.model import AbstractLegistarModel, LegistarData, DetailPageResult
 from ..legistar.guid_model import RGuidDetailResult, RGuidLegistarData

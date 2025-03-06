@@ -1,5 +1,5 @@
-:mod:`granicus_archiver.model`
-==============================
+:mod:`granicus_archiver.clips.model`
+====================================
 
-.. automodule:: granicus_archiver.model
+.. automodule:: granicus_archiver.clips.model
     :members:

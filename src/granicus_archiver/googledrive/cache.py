@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TypeVar, Generic, NamedTuple, Literal, Any, Iterator, Self, overload
 
 from .types import DriveFileMetaFull
-from ..model import CLIP_ID, ClipFileUploadKey
+from ..clips.model import CLIP_ID, ClipFileUploadKey
 from ..legistar.types import GUID, REAL_GUID, LegistarFileUID
 
 

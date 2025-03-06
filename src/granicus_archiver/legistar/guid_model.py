@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 if TYPE_CHECKING:
     from ..config import Config
-from ..model import CLIP_ID, Serializable, FileMeta
+from ..clips.model import CLIP_ID, Serializable, FileMeta
 from .types import (
     REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID,
     NoClipT, NoClip,

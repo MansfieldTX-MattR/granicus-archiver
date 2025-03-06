@@ -22,7 +22,7 @@ class BaseContext:
 @click.group(
     cls=LazyGroup,
     lazy_subcommands={
-        'clips': 'granicus_archiver.clips_cli.cli',
+        'clips': 'granicus_archiver.clips.cli.cli',
         'legistar': 'granicus_archiver.legistar.cli.cli',
         'aws': 'granicus_archiver.aws.cli.cli',
         'web': 'granicus_archiver.web.app.cli',

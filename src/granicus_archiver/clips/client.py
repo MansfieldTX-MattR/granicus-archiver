@@ -10,18 +10,18 @@ import aiojobs
 import aiofile
 from yarl import URL
 
-from .config import Config
+from ..config import Config
 from .parser import parse_page, parse_player_page
 from .model import (
     ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey,
     AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
     CheckError, FilesizeMagicNumber,
 )
-from .utils import (
+from ..utils import (
     JobWaiters, CompletionCounts, is_same_filesystem, get_file_hash_async,
     HashMismatchError,
 )
-from .downloader import (
+from ..downloader import (
     Downloader,
     StupidZeroContentLengthError,
     ThisShouldBeA404ErrorButItsNot,

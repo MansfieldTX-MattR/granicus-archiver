@@ -1,6 +1,6 @@
 from typing import ClassVar, Literal
 
-from ..model import CLIP_ID
+from ..clips.model import CLIP_ID
 
 
 class ThisShouldBeA500ErrorButItsNot(Exception):

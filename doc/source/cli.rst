@@ -28,22 +28,22 @@ Clips
 -----
 
 .. _cli-clips:
-.. click:: granicus_archiver.clips_cli:cli
+.. click:: granicus_archiver.clips.cli:cli
     :prog: granicus-archiver clips
     :nested: none
 
 .. _cli-clips-download:
-.. click:: granicus_archiver.clips_cli:download_clips
+.. click:: granicus_archiver.clips.cli:download_clips
     :prog: granicus-archiver clips download
     :nested: none
 
 .. _cli-clips-check:
-.. click:: granicus_archiver.clips_cli:check_clips
+.. click:: granicus_archiver.clips.cli:check_clips
     :prog: granicus-archiver clips check
     :nested: none
 
 .. _cli-clips-upload:
-.. click:: granicus_archiver.clips_cli:upload_clips
+.. click:: granicus_archiver.clips.cli:upload_clips
     :prog: granicus-archiver clips upload
     :nested: none
 

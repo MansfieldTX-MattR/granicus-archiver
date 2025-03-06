@@ -21,10 +21,10 @@ from yaml import (
 from loguru import logger
 from appdirs import AppDirs
 
-from .model import Serializable
+from .clips.model import Serializable
 if TYPE_CHECKING:
-    from .model import Location
-    from .legistar.rss_parser import Category
+    from .clips.model import Location
+    from .legistar.types import Category
 else:
     Location = str
     Category = str

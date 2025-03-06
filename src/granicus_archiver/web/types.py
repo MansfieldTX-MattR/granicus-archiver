@@ -8,7 +8,7 @@ from yarl import URL
 
 
 from ..config import Config
-from ..model import ClipCollection
+from ..clips.model import ClipCollection
 from ..legistar.model import LegistarData
 from ..legistar.guid_model import RGuidLegistarData
 

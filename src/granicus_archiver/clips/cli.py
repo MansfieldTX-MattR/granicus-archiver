@@ -9,9 +9,9 @@ from yarl import URL
 from .model import ClipCollection, AgendaTimestampCollection, ClipsIndex
 from . import client
 from . import html_builder
-from .googledrive import client as googleclient
+from ..googledrive import client as googleclient
 if TYPE_CHECKING:
-    from .cli import BaseContext
+    from ..cli import BaseContext
 
 
 @click.group(name='clips')

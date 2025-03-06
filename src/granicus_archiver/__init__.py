@@ -5,7 +5,7 @@ logger.disable('pypdf')
 logger.disable('pypdf.generic._data_structures')
 
 # from .config import Config
-from .model import set_timezone as model_set_timezone
+from .clips.model import set_timezone as model_set_timezone
 from .legistar.rss_parser import set_timezone as legistar_set_timezone
 
 
