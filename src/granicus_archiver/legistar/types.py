@@ -39,13 +39,13 @@ MinutesStatusItems: tuple[MinutesStatus, ...] = get_args(MinutesStatus)
 
 
 
-class DoesNotExistEnum(enum.Enum):
+class _DoesNotExistEnum(enum.Enum):
     DoesNotExist = enum.auto()
 
 
-NoClipT = Literal[DoesNotExistEnum.DoesNotExist]
+NoClipT = Literal[_DoesNotExistEnum.DoesNotExist]
 """Type parameter for :obj:`NoClip`"""
-NoClip = DoesNotExistEnum.DoesNotExist
+NoClip = _DoesNotExistEnum.DoesNotExist
 """Used to signify an item that should have no :class:`~.model.Clip`"""
 
 _GuidT = TypeVar('_GuidT', GUID, REAL_GUID)
