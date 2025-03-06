@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import NewType, Self, ClassVar, Literal, Iterator, Any, overload
-from abc import ABC, abstractmethod
 
 from os import PathLike
 from pathlib import Path
@@ -20,11 +19,11 @@ from yaml import (
     CDumper as YamlDumper,
 )
 from yarl import URL
-from multidict import MultiMapping
 
 from ..utils import (
     SHA1Hash, seconds_to_time_str, get_file_hash, HashMismatchError,
 )
+from ..types import Serializable, FileMeta, Headers
 
 mimetypes.add_type('audio/mp3', '.mp3')
 
@@ -39,7 +38,6 @@ ClipFileKey = Literal['agenda', 'minutes', 'audio', 'video']
 ClipFileUploadKey = ClipFileKey | Literal['chapters', 'agenda_packet']
 """Key for file types in :class:`ClipFiles`"""
 
-Headers = MultiMapping[str]|dict[str, str]
 
 Location = NewType('Location', str)
 """The "Location" (or folder) of a clip"""
@@ -48,17 +46,6 @@ Location = NewType('Location', str)
 def set_timezone(tz: zoneinfo.ZoneInfo) -> None:
     ParseClipData.set_timezone(tz)
 
-
-class Serializable(ABC):
-
-    @abstractmethod
-    def serialize(self) -> dict[str, Any]:
-        raise NotImplementedError
-
-    @classmethod
-    @abstractmethod
-    def deserialize(cls, data: dict[str, Any]) -> Self:
-        raise NotImplementedError
 
 
 @dataclass
@@ -243,84 +230,6 @@ class ParseClipData(Serializable):
         return cls(**kw)
 
 
-@dataclass
-class FileMeta(Serializable):
-    """Metadata for a file
-    """
-    content_length: int                     #: File size (in bytes)
-    content_type: str                       #: The file's mime type
-    last_modified: datetime.datetime|None   #: Last modified datetime
-    etag: str|None                          #: The etag value (if available)
-    sha1: SHA1Hash|None = None              #: SHA1 hash of the file
-
-    # Tue, 04 Jun 2024 00:22:54 GMT
-    dt_fmt: ClassVar[str] = '%a, %d %b %Y %H:%M:%S GMT'
-
-    @classmethod
-    def from_headers(cls, headers: Headers) -> Self:
-        """Create an instance from http headers
-        """
-        dt_str = headers.get('Last-Modified')
-        if dt_str is not None:
-            dt = datetime.datetime.strptime(dt_str, cls.dt_fmt).replace(tzinfo=UTC)
-        else:
-            dt = None
-        etag = headers.get('Etag')
-        if etag is not None:
-            etag = etag.strip('"')
-        return cls(
-            content_length=int(headers.get('Content-Length', '0')),
-            content_type=headers['Content-Type'],
-            last_modified=dt,
-            etag=etag,
-        )
-
-    @classmethod
-    def create_zero_length(cls) -> Self:
-        """Create an instance to indicate that the file has a reported length
-        of zero
-
-        This may be used to indicate that a file is malformed or no longer
-        exists on the server.
-
-        Zero-length :class:`FileMeta` instances can be detected from their
-        :attr:`is_zero_length` attribute.
-        """
-        return cls(
-            content_length=-1,
-            content_type='__none__',
-            last_modified=None,
-            etag=None,
-        )
-
-    @property
-    def is_pdf(self) -> bool:
-        """Whether this is a pdf file
-        """
-        return self.content_type == 'application/pdf'
-
-    @property
-    def is_zero_length(self) -> bool:
-        """Whether this instance represents a zero-length file (created by
-        :meth:`create_zero_length`)
-        """
-        return self.content_length == -1 and self.content_type == '__none__'
-
-    def serialize(self) -> dict[str, Any]:
-        d = dataclasses.asdict(self)
-        if self.last_modified is not None:
-            dt = self.last_modified.astimezone(UTC)
-            d['last_modified'] = dt.strftime(self.dt_fmt)
-        return d
-
-    @classmethod
-    def deserialize(cls, data: dict[str, Any]) -> Self:
-        kw = data.copy()
-        if kw['last_modified'] is not None:
-            dt = datetime.datetime.strptime(kw['last_modified'], cls.dt_fmt)
-            kw['last_modified'] = dt.replace(tzinfo=UTC)
-        return cls(**kw)
-
 
 class CheckError(Exception):
     """Base exception for :meth:`ClipFiles.check`
@@ -342,16 +251,16 @@ class CheckError(Exception):
         return f'{self.clip.unique_name} ({self.key}){msg}'
 
 class NoMetaError(CheckError):
-    """Raised when a file exists locally with no stored :class:`FileMeta`
+    """Raised when a file exists locally with no stored :class:`~.types.FileMeta`
     """
 
 class ContentLengthError(CheckError):
-    """Raised when the stored :attr:`~FileMeta.content_length` does not match
+    """Raised when the stored :attr:`~.types.FileMeta.content_length` does not match
     the local filesize
     """
 
 class ContentTypeError(CheckError):
-    """Raised when the :attr:`~FileMeta.content_type` disagrees with the
+    """Raised when the :attr:`~.types.FileMeta.content_type` disagrees with the
     file extension
     """
     @overload
@@ -413,13 +322,13 @@ class ContentTypeError(CheckError):
 
 
 class NoFileError(CheckError):
-    """Raised when there is :class:`metadata <FileMeta>` for a file that
+    """Raised when there is :class:`metadata <.types.FileMeta>` for a file that
     does not exist locally
     """
 
 class FileShouldNotExist(CheckError):
     """Raised when the stored metadata for a file is
-    :attr:`zero-length <FileMeta.is_zero_length>` but the file exists locally
+    :attr:`zero-length <.types.FileMeta.is_zero_length>` but the file exists locally
     """
 
 
@@ -485,7 +394,7 @@ class ClipFiles(Serializable):
     agenda_packet: Path|None = None
     """Agenda packet (parsed from :class:`.legistar.detail_page.DetailPageResult`)"""
     metadata: dict[ClipFileUploadKey, FileMeta] = field(default_factory=dict)
-    """:class:`FileMeta` for each file (if available)"""
+    """:class:`~.types.FileMeta` for each file (if available)"""
 
     path_attrs: ClassVar[list[ClipFileKey]] = ['agenda', 'minutes', 'audio', 'video']
     all_path_attrs: ClassVar[list[ClipFileUploadKey]] = [
@@ -551,12 +460,12 @@ class ClipFiles(Serializable):
         self[key] = rel_p
 
     def get_metadata(self, key: ClipFileUploadKey) -> FileMeta|None:
-        """Get the :class:`FileMeta` for the given file type (if available)
+        """Get the :class:`~.types.FileMeta` for the given file type (if available)
         """
         return self.metadata.get(key)
 
     def set_metadata(self, key: ClipFileUploadKey, meta: FileMeta|Headers) -> FileMeta:
-        """Set the :class:`FileMeta` for the given file type from request headers
+        """Set the :class:`~.types.FileMeta` for the given file type from request headers
         """
         if not isinstance(meta, FileMeta):
             meta = FileMeta.from_headers(meta)
@@ -658,7 +567,7 @@ class ClipFiles(Serializable):
                 )
 
     def ensure_local_hashes(self, check_existing: bool = False) -> bool:
-        """Ensure that all local files have an :attr:`~FileMeta.sha1` hash
+        """Ensure that all local files have an :attr:`~.types.FileMeta.sha1` hash
         stored in :attr:`metadata`
 
         Arguments:

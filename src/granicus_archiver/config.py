@@ -21,7 +21,7 @@ from yaml import (
 from loguru import logger
 from appdirs import AppDirs
 
-from .clips.model import Serializable
+from .types import Serializable
 if TYPE_CHECKING:
     from .clips.model import Location
     from .legistar.types import Category

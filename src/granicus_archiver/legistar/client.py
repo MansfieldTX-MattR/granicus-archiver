@@ -23,7 +23,8 @@ from ..utils import (
     get_file_hash,
     get_file_hash_async,
 )
-from ..clips.model import ClipCollection, Clip, FileMeta
+from ..types import FileMeta
+from ..clips.model import ClipCollection, Clip
 from .types import (
     GUID, REAL_GUID, LegistarFileKey, LegistarFileUID, NoClip,
     _GuidT, _ItemT,

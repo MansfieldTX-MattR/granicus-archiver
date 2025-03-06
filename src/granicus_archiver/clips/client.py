@@ -11,10 +11,11 @@ import aiofile
 from yarl import URL
 
 from ..config import Config
+from ..types import FileMeta
 from .parser import parse_page, parse_player_page
 from .model import (
     ClipCollection, Clip, ParseClipData, ParseClipLinks, ClipFileKey,
-    AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps, FileMeta,
+    AgendaTimestampCollection, AgendaTimestamp, AgendaTimestamps,
     CheckError, FilesizeMagicNumber,
 )
 from ..utils import (
@@ -474,7 +475,7 @@ def ensure_local_file_hashes(
     check_existing: bool,
     max_clips: int|None = None
 ) -> bool:
-    """Ensure that all local files have an :attr:`~.model.FileMeta.sha1` hash
+    """Ensure that all local files have an :attr:`~.types.FileMeta.sha1` hash
     stored in their metadata
     """
     data_file = conf.data_file

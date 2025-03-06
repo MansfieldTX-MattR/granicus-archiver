@@ -19,9 +19,9 @@ from .types import *
 from .cache import FileCache, MetaCacheKey, MetaCount
 from .pathtree import PathNode
 from . import config
+from ..types import FileMeta as ClipFileMeta
 from ..clips.model import (
     ClipCollection, Clip, ClipFileKey, ClipFileUploadKey, CLIP_ID,
-    FileMeta as ClipFileMeta,
 )
 from ..legistar.types import GUID, REAL_GUID, LegistarFileUID, _GuidT, _ItemT
 from ..legistar.model import AbstractLegistarModel, LegistarData, DetailPageResult

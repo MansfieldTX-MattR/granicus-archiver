@@ -15,7 +15,8 @@ from loguru import logger
 from yarl import URL
 from pyquery.pyquery import PyQuery
 
-from ..clips.model import Serializable, Clip, CLIP_ID, Location
+from ..types import Serializable
+from ..clips.model import Clip, CLIP_ID, Location
 from .types import GUID, REAL_GUID, Category
 from .exceptions import (
     LegistarThinksRSSCanPaginateError, CategoryError, DatetimeError

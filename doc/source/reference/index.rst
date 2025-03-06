@@ -7,6 +7,7 @@ API
     config
     model
     utils
+    types
     downloader
     legistar/index
     googledrive/index

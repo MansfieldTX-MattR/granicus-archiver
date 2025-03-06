@@ -14,7 +14,8 @@ from dataclasses import dataclass, field
 
 if TYPE_CHECKING:
     from ..config import Config
-from ..clips.model import CLIP_ID, Serializable, FileMeta
+from ..types import Serializable, FileMeta
+from ..clips.model import CLIP_ID
 from .types import (
     REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID,
     NoClipT, NoClip,
@@ -177,7 +178,7 @@ class RGuidLegistarFiles(Serializable):
         return f_obj
 
     def ensure_local_hashes(self, check_existing: bool = False) -> bool:
-        """Ensure that all local files have an :attr:`~.model.FileMeta.sha1` hash
+        """Ensure that all local files have an :attr:`~.types.FileMeta.sha1` hash
         stored in their :attr:`~AbstractFile.metadata`
 
         Arguments:

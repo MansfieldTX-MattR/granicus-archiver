@@ -7,7 +7,8 @@ from loguru import logger
 if TYPE_CHECKING:
     from ..config import Config
 
-from ..clips.model import ClipCollection, FileMeta
+from ..types import FileMeta
+from ..clips.model import ClipCollection
 from .types import REAL_GUID, LegistarFileUID
 from .rss_parser import FeedItem
 from .model import (

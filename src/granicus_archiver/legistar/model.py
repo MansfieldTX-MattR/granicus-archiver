@@ -16,7 +16,8 @@ from loguru import logger
 from pyquery.pyquery import PyQuery
 from yarl import URL
 
-from ..clips.model import CLIP_ID, Serializable, FileMeta
+from ..types import Serializable, FileMeta
+from ..clips.model import CLIP_ID
 from .rss_parser import FeedItem, get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info
 from .types import (
     LegistarFileKeys, AgendaStatus, MinutesStatus,
@@ -243,7 +244,7 @@ class AbstractFile(Serializable, ABC, Generic[KT]):
 
         The resulting file will have the same path and the :attr:`metadata`
         will be updated with the new file size
-        (:attr:`.model.FileMeta.content_length`).
+        (:attr:`.types.FileMeta.content_length`).
 
         The :attr:`pdf_links_removed` flag will then be set to ``True``
         """
@@ -470,7 +471,7 @@ class LegistarFiles(Serializable):
         return a
 
     def ensure_local_hashes(self, legistar_data: LegistarData, check_existing: bool = False) -> bool:
-        """Ensure that all local files have an :attr:`~.model.FileMeta.sha1` hash
+        """Ensure that all local files have an :attr:`~.types.FileMeta.sha1` hash
         stored in their :attr:`~AbstractFile.metadata`
 
         Arguments:
@@ -1445,7 +1446,7 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
         Returns:
             (tuple):
                 - **filename** (:class:`~.pathlib.Path`): The local filename
-                - **meta** (:class:`~.model.FileMeta`, *optional*): The file's
+                - **meta** (:class:`~.types.FileMeta`, *optional*): The file's
                   metadata (if it exists)
 
         """
@@ -1471,7 +1472,7 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
             :
                 - **uid** (:obj:`~.types.LegistarFileUID`): The uid for the file type
                 - **filename** (:class:`~pathlib.Path`): The local file path
-                - **meta** (:class:`~.model.FileMeta`): Local meta data for the file
+                - **meta** (:class:`~.types.FileMeta`): Local meta data for the file
                 - **is_attachment** (:class:`bool`): ``True`` if the *uid* refers to an
                   :attr:`attachment <LegistarFiles.attachments>`, ``False`` otherwise
 
