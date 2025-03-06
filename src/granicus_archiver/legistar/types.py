@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TypeVar, NewType, Literal, TYPE_CHECKING
+from typing import TypeVar, NewType, Literal, get_args, TYPE_CHECKING
 import enum
 
 if TYPE_CHECKING:
@@ -15,13 +15,28 @@ Category = NewType('Category', str)
 LegistarFileKey = Literal['agenda', 'minutes', 'agenda_packet', 'video']
 """Key name for legistar files"""
 
+LegistarFileKeys: tuple[LegistarFileKey, ...] = get_args(LegistarFileKey)
+
 AttachmentName = NewType('AttachmentName', str)
-"""Type variable to associate keys in :attr:`DetailPageLinks.attachments` with
-:attr:`AttachmentFile.name`
+"""Type variable to associate keys in :attr:`.model.DetailPageLinks.attachments`
+with the :attr:`~.model.AbstractFile.name` of an :class:`~.model.AttachmentFile`
 """
 
 LegistarFileUID = NewType('LegistarFileUID', str)
 """Unique ID for :obj:`LegistarFileKey` or :obj:`AttachmentName`"""
+
+AgendaStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+"""Status of an agenda"""
+
+MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
+"""Status of minutes"""
+
+ItemStatus = Literal['final', 'addendum', 'draft', 'hidden']
+"""Status of an item"""
+
+AgendaStatusItems: tuple[AgendaStatus, ...] = get_args(AgendaStatus)
+MinutesStatusItems: tuple[MinutesStatus, ...] = get_args(MinutesStatus)
+
 
 
 class DoesNotExistEnum(enum.Enum):

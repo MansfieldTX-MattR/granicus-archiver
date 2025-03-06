@@ -19,6 +19,8 @@ from yarl import URL
 from ..model import CLIP_ID, Serializable, FileMeta
 from .rss_parser import FeedItem, get_the_real_guid_part_of_their_guid_that_adds_pointless_datetime_info
 from .types import (
+    LegistarFileKeys, AgendaStatus, MinutesStatus,
+    AgendaStatusItems, MinutesStatusItems, ItemStatus,
     GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID, Category,
     NoClipT, NoClip, _GuidT, _ItemT,
 )
@@ -123,17 +125,11 @@ def file_key_to_uid(key: LegistarFileKey) -> LegistarFileUID:
     return LegistarFileUID(key)
 
 
-LegistarFileKeys: list[LegistarFileKey] = ['agenda', 'minutes', 'agenda_packet', 'video']
 
 ElementKey = Literal[
     'title', 'date', 'time', 'agenda_status', 'minutes_status', 'agenda_packet',
     'agenda', 'minutes', 'video', 'location', 'attachments',
 ]
-AgendaStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
-MinutesStatus = Literal['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
-AgendaStatusItems: list[AgendaStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
-MinutesStatusItems: list[MinutesStatus] = ['Final', 'Final-Addendum', 'Draft', 'Not Viewable by the Public']
-ItemStatus = Literal['final', 'addendum', 'draft', 'hidden']
 
 KT = TypeVar('KT')
 
