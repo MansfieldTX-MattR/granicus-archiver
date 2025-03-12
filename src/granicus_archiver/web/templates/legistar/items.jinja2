@@ -6,13 +6,13 @@
 {% macro agenda_status(status) -%}
 {%- set text_class = 'text-body' -%}
 {%- if status.startswith('Final') -%}
-{% set badge_class = 'text-bg-success' %}{% set icon_class = 'bi-check-circle' %}{% set label = status.split('-')[0] %}{% set text_class = '' %}
+{% set badge_class = 'text-bg-success' %}{% set icon_class = 'bi-check-circle' %}{% set label = ' '.join(status.split('-')) %}{% set text_class = '' %}
 {%- elif status == 'Draft' -%}
 {% set badge_class = 'text-bg-secondary' %}{% set icon_class = 'bi-hourglass-split' %}{% set label = status %}
 {%- else -%}
 {% set badge_class = 'text-bg-danger' %}{% set icon_class = 'bi-ban text-danger text-body' %}{% set label = 'Hidden' %}
 {%- endif -%}
-<span class="badge {{ badge_class }}">
+<span class="badge {{ badge_class }} w-100 text-wrap">
   <i class="bi {{ icon_class }} pe-1"></i>
   <span class="{{ text_class }}">{{ label }}</span>
 </span>
@@ -30,6 +30,9 @@
   }
   .table-item > .item-location {
     max-width: 30vw;
+  }
+  .table-item > .item-agenda-status,.item-minutes-status {
+    width: 7em;
   }
 </style>
 {% endblock %}
@@ -55,10 +58,10 @@
     {%- set clip_id = item_clip_ids[item_id] -%}
     {% if clip_id == 'None' %}--{% elif clip_id == 'NoClip' %}(noclip){% else %}{{ Link(url('clip_item', clip_id=clip_id), clip_id)}}{% endif %}
   </td>
-  <td>
+  <td class="item-agenda-status text-center">
     {{ agenda_status(item.agenda_status) }}
   </td>
-  <td>
+  <td class="item-minutes-status text-center">
     {{ agenda_status(item.minutes_status) }}
   </td>
 </tr>
