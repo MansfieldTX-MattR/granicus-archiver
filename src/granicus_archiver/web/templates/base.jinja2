@@ -21,6 +21,12 @@
   <script src="https://cdn.jsdelivr.net/npm/@coreui/coreui@5.2.0/dist/js/coreui.bundle.min.js" integrity="sha384-JdRP5GRWP6APhoVS1OM/pOKMWe7q9q8hpl+J2nhCfVJKoS+yzGtELC5REIYKrymn" crossorigin="anonymous"></script>
   <script src="{{ static_path('assets', 'utils.js') }}"></script>
   <script src="{{ static_path('assets', 'videoTracks.js') }}"></script>
+  <script type="text/javascript">
+    (() => {
+      const tooltipTriggerList = document.querySelectorAll('[data-coreui-toggle="tooltip"]');
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new coreui.Tooltip(tooltipTriggerEl));
+    })();
+  </script>
   {%- endblock js_foot %}
   {%- endblock body %}
 </body>
