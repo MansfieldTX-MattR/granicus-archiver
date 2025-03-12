@@ -65,6 +65,30 @@ def read_only_guard(func):
     return wrapper
 
 
+def with_data_file_lock(func):
+    """Decorator to hold the :obj:`DataFileLock <.types.DataFileLockKey>`
+    within wrapped the function
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        _self_or_request: web.View|web.Request = args[0]
+        if isinstance(_self_or_request, web.View):
+            request = _self_or_request.request
+        elif isinstance(_self_or_request, web.Request):
+            request = _self_or_request
+        else:
+            raise TypeError(f'invalid type: {type(_self_or_request)}')
+        data_file_lock = request.app[DataFileLockKey]
+        logger.debug(f'acquiring data file lock for {func}')
+        async with data_file_lock:
+            try:
+                return await func(*args, **kwargs)
+            finally:
+                logger.debug(f'released data file lock for {func}')
+        return r
+    return wrapper
+
+
 def clip_id_to_str(clip_id: CLIP_ID|Clip|None|NoClipT) -> ClipIdOrNoneStr:
     if clip_id is None:
         return 'None'
@@ -216,6 +240,7 @@ class TemplatedView(web.View, Generic[ContextT], AbstractView[ContextT]):
         tmpl = self.get_template_name()
         return aiohttp_jinja2.render_template(tmpl, self.request, context)
 
+    @with_data_file_lock
     async def get(self) -> web.Response:
         """Handler for GET requests
         """
@@ -497,6 +522,7 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
             'rguid_item_options': self.get_rguid_item_options(),
         }
 
+    @with_data_file_lock
     @read_only_guard
     async def post(self) -> web.Response:
         next_url = self.request.app.router['clip_item_change'].url_for(clip_id=self.clip.id)
@@ -1060,6 +1086,7 @@ class LItemChangeViewBase[
         c['clip_options'] = self.get_clip_options()
         return c
 
+    @with_data_file_lock
     @read_only_guard
     async def post(self) -> web.Response:
         context = await self.get_context_data()

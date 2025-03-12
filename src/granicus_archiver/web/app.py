@@ -62,6 +62,7 @@ class AppDataContext:
         self.app = app
         self.s3_client: S3Client|None = None
         self._closing = False
+        self._running = False
         self.update_task: asyncio.Task|None = None
 
     async def open(self) -> None:
@@ -71,6 +72,8 @@ class AppDataContext:
         await self.__aexit__(None, None, None)
 
     async def __aenter__(self) -> Self:
+        assert not self._running
+        self._running = True
         use_s3 = self.app[APP_CONF_KEY].use_s3
         if use_s3:
             self.s3_client = S3Client(self.app)
@@ -80,6 +83,9 @@ class AppDataContext:
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        if not self._running:
+            return
+        self._running = False
         self._closing = True
         t = self.update_task
         self.update_task = None
@@ -121,7 +127,8 @@ class AppDataContext:
     async def update_loop(self):
         if self.s3_client is None:
             return
-        while True:
+        lck = self.app[DataFileLockKey]
+        while self._running:
             await asyncio.sleep(self.update_timeout)
             if not hasattr(self, 'data_files'):
                 continue
@@ -132,7 +139,10 @@ class AppDataContext:
             if not changed:
                 continue
             logger.info('Data files have changed. Reloading models')
-            self._load_app_models()
+            async with lck:
+                logger.debug('data file lock acquired')
+                self._load_app_models()
+            logger.debug('data file lock released')
 
 
 
@@ -150,6 +160,7 @@ def build_app(app_conf: AppConfig, conf: Config|None = None) -> web.Application:
     if conf is None:
         conf = Config.load(Config.default_filename)
     app[ConfigKey] = conf
+    app[DataFileLockKey] = asyncio.Lock()
     assert conf.local_timezone_name is not None
     tz = set_local_timezone(conf.local_timezone_name)
     app[TimezoneKey] = tz

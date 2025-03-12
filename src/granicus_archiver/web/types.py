@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 from pathlib import Path
 from zoneinfo import ZoneInfo
+import asyncio
 
 from aiohttp import web
 from yarl import URL
@@ -14,7 +15,7 @@ from ..legistar.guid_model import RGuidLegistarData
 
 
 __all__ = (
-    'ConfigKey', 'DataFileType', 'DataFiles',
+    'ConfigKey', 'DataFileType', 'DataFiles', 'DataFileLockKey',
     'ClipsKey', 'LegistarDataKey', 'RGuidLegistarDataKey',
     'SortOrder', 'TimezoneKey', 'StaticRootName', 'StaticRoots', 'StaticRootsKey',
     'StaticUrlRoots', 'StaticUrlRootsKey',
@@ -27,6 +28,9 @@ DataFileType = Literal['clips', 'legistar', 'legistar_rguid']
 """"""
 DataFiles = dict[DataFileType, Path]
 """"""
+
+DataFileLockKey = web.AppKey('DataFileLock', asyncio.Lock)
+"""App key for the :class:`asyncio.Lock` used to protect data files"""
 
 ClipsKey = web.AppKey('Clips', ClipCollection)
 """App key for the :class:`granicus_archiver.model.ClipCollection` instance"""
