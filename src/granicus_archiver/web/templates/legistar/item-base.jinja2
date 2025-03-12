@@ -10,7 +10,7 @@
 <main class="container-fluid">
   <div id="itemId" class="invisible" data-item-id="{{ item_id }}"></div>
   <div id="itemType" class="invisible" data-item-type="{{ change_view_name }}"></div>
-  {% call Section(item.feed_item.title, extraClass='mt-5') %}
+  {% call Section(page_title, extraClass='mt-5') %}
   {% block section %}
     <div class="row">
       <div class="col-lg-6 mb-4">

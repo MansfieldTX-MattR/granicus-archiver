@@ -40,8 +40,11 @@ class WebCliContext:
 
 @routes.get('/', name='home')
 @aiohttp_jinja2.template('home.jinja2')
-async def home(request: web.Request):
-    return {}
+async def home(request: web.Request) -> views.GlobalContext:
+    return {
+        'page_title': request.app[APP_CONF_KEY].site_name,
+        'nav_links': request.app[NavLinksKey],
+    }
 
 
 # async def request_processor(request: web.Request):
@@ -167,6 +170,8 @@ def build_app(app_conf: AppConfig, conf: Config|None = None) -> web.Application:
     app.cleanup_ctx.append(app_data_ctx)
     app['use_s3'] = app_conf.use_s3
     app['read_only'] = app_conf.read_only
+    app['site_name'] = app_conf.site_name
+    app[NavLinksKey] = app_conf.nav_links
 
     aiohttp_jinja2.setup(
         app,

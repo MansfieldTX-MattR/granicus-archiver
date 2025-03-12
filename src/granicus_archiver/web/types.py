@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, NamedTuple, Sequence, Any
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import asyncio
@@ -18,7 +18,7 @@ __all__ = (
     'ConfigKey', 'DataFileType', 'DataFiles', 'DataFileLockKey',
     'ClipsKey', 'LegistarDataKey', 'RGuidLegistarDataKey',
     'SortOrder', 'TimezoneKey', 'StaticRootName', 'StaticRoots', 'StaticRootsKey',
-    'StaticUrlRoots', 'StaticUrlRootsKey',
+    'StaticUrlRoots', 'StaticUrlRootsKey', 'NavLink', 'NavLinksKey',
 )
 
 ConfigKey = web.AppKey('Config', Config)
@@ -40,6 +40,29 @@ LegistarDataKey = web.AppKey('LegistarData', LegistarData)
 
 RGuidLegistarDataKey = web.AppKey('RGuidLegistarDataKey', RGuidLegistarData)
 """App key for the :class:`granicus_archiver.legistar.guid_model.RGuidLegistarData` instance"""
+
+class NavLink(NamedTuple):
+    """A navigation link
+    """
+    name: str
+    """Name of the link"""
+    title: str
+    """Title of the link"""
+    url: str|URL
+    """URL or view name for the link"""
+    view_kwargs: dict[str, Any]|None = None
+    """Keyword arguments for the view, if any"""
+
+    def get_url(self, app: web.Application) -> URL:
+        """Get the URL for the link
+        """
+        if isinstance(self.url, URL):
+            return self.url
+        return app.router[self.url].url_for(**(self.view_kwargs or {}))
+
+
+NavLinksKey = web.AppKey('NavLinks', Sequence[NavLink])
+"""App key for :class:`NavLink` instances"""
 
 
 SortOrder = Literal['asc', 'dsc']

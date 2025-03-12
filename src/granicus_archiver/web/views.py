@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, Generic, Literal, ClassVar, Mapping, TypedDict,
+    TypeVar, Generic, Literal, ClassVar, TypedDict,
     Iterable, Sequence, Any, cast,
 )
 
@@ -31,7 +31,16 @@ from .s3client import S3ClientKey
 from .pagination import Paginator
 
 
-ContextT = TypeVar('ContextT', bound=Mapping[str, Any])
+class GlobalContext(TypedDict):
+    """Context data for all templated views
+    """
+    nav_links: Sequence[NavLink]
+    """Navigation links"""
+    page_title: str
+    """Title of the page"""
+
+
+ContextT = TypeVar('ContextT', bound=GlobalContext)
 """Type variable for template context data"""
 
 _ID_Type = TypeVar('_ID_Type', GUID, REAL_GUID, CLIP_ID)
@@ -249,7 +258,7 @@ class TemplatedView(web.View, Generic[ContextT], AbstractView[ContextT]):
 
 
 
-class ClipListContext(TypedDict):
+class ClipListContext(GlobalContext):
     """Template context for :class:`ClipListView`
     """
     clip_dict: dict[CLIP_ID, Clip]
@@ -319,6 +328,8 @@ class ClipListView(TemplatedView[ClipListContext]):
             category = Location(category)
         all_categories = set([clip.location for clip in self.clips])
         context: ClipListContext = {
+            'nav_links': self.request.app[NavLinksKey],
+            'page_title': 'Clips',
             'clip_dict': self.item_dict,
             'clips': self.clips,
             'clip_guids': self.get_clip_guids(),
@@ -338,7 +349,7 @@ class ClipListView(TemplatedView[ClipListContext]):
         ]
 
 
-class ClipViewContext(TypedDict):
+class ClipViewContext(GlobalContext):
     """Template context for :class:`ClipViewBase`
     """
     clip: Clip
@@ -399,6 +410,8 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
         """Get the context data for this view
         """
         return {
+            'page_title': self.clip.name,
+            'nav_links': self.request.app[NavLinksKey],
             'clip': self.clip,
             'legistar_item': self.legistar_item,
             'legistar_guid': self.legistar_guid,
@@ -512,6 +525,8 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
         """Get the context data for this view
         """
         return {
+            'page_title': self.clip.unique_name,
+            'nav_links': self.request.app[NavLinksKey],
             'clip': self.clip,
             'legistar_item': self.legistar_item,
             'legistar_guid': self.legistar_guid,
@@ -568,7 +583,7 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
 
 class LegistarItemsContext[
     IdT: (GUID, REAL_GUID), ItemT: (DetailPageResult, RGuidDetailResult)
-](TypedDict):
+](GlobalContext):
     """Template context for :class:`LegistarItemsViewBase`
     """
     items: Iterable[ItemT]
@@ -654,6 +669,8 @@ class LegistarItemsViewBase[
             item_clip_ids[guid] = clip_id_to_str(clip_id)
 
         context: LegistarItemsContext[IdT, ItemT] = {
+            'page_title': 'Legistar Items',
+            'nav_links': self.request.app[NavLinksKey],
             'items': self.items,
             'item_dict': self.item_dict,
             'item_clip_ids': item_clip_ids,
@@ -769,7 +786,7 @@ class LegistarItemFormData(TypedDict):
 
 class _ItemContext[
     IdT: (GUID, REAL_GUID), ItemT: (DetailPageResult, RGuidDetailResult)
-](TypedDict):
+](GlobalContext):
     """Template context for :class:`LItemViewBase`
 
     :meta public:
@@ -884,6 +901,8 @@ class LItemViewBase[
 
     async def get_base_context_data(self) -> _ItemContext[IdT, ItemT]:
         return {
+            'page_title': self.item.feed_item.title,
+            'nav_links': self.request.app[NavLinksKey],
             'legistar_type': self.legistar_type,
             'item': self.item,
             'item_id': self.guid,

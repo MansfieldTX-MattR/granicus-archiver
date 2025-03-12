@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 from pathlib import Path
 
 from aiohttp import web
@@ -36,6 +36,15 @@ class AppConfig(NamedTuple):
     """If ``True``, the app will use S3 to for data files and assets"""
     s3_data_dir: Path|None = None
     """Root directory to store local data files from s3"""
+    nav_links: Sequence[NavLink] = (
+        NavLink(name='home', title='Home', url='home'),
+        NavLink(name='clips', title='Clips', url='clip_list'),
+        NavLink(name='legistar', title='Legistar', url='legistar_items'),
+        NavLink(name='legistar_rguid', title='Legistar (Real Guid)', url='rguid_legistar_items'),
+    )
+    """Navigation links for the app"""
+    site_name: str = 'Granicus Archive'
+    """Name of the site"""
 
 
 APP_CONF_KEY = web.AppKey('AppConfig', AppConfig)
