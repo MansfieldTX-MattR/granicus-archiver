@@ -7,7 +7,7 @@
 <main>
   <div id="itemListType" class="invisible" data-item-type="{{ item_view_name }}"></div>
   {% call Section(item_list_title or page_title) %}
-    {{ list_filter_form('mt-4') }}
+    {% block list_filter_form_call %}{{ list_filter_form('mt-4') }}{% endblock %}
     {% if paginator.paginating and paginator.per_page >= 50 %}
     {{ Paginator() }}
     {% endif %}

@@ -1,5 +1,6 @@
 {% extends "item-list-base.jinja2" %}
 {%- from "includes/macros.jinja2" import Link with context -%}
+{%- from "includes/list-filter-form.jinja2" import legistar_list_filter_form with context %}
 
 
 {% macro agenda_status(status) -%}
@@ -34,6 +35,8 @@
 {% endblock %}
 
 {% set column_names = ['Title', 'Location', 'Category', 'Date', 'Clip', 'Agenda', 'Minutes'] %}
+
+{% block list_filter_form_call %}{{ legistar_list_filter_form('mt-4') }}{% endblock %}
 
 {% block table_row_item %}
 <tr class="table-item">

@@ -24,7 +24,10 @@ from ..legistar.model import (
 )
 from ..legistar.rss_parser import is_guid, is_real_guid
 from ..legistar.guid_model import RGuidLegistarData, RGuidDetailResult
-from ..legistar.types import Category, GUID, REAL_GUID, NoClip, NoClipT, LegistarFileUID
+from ..legistar.types import (
+    Category, GUID, REAL_GUID, NoClip, NoClipT, LegistarFileUID,
+    AgendaStatus, MinutesStatus, AgendaStatusItems, MinutesStatusItems,
+)
 from .types import *
 from .config import APP_CONF_KEY
 from .s3client import S3ClientKey
@@ -633,6 +636,17 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
         # self.legistar_data.save(conf_file.legistar.data_file)
         raise web.HTTPFound(next_url)
 
+class LegistarListFilterContext(ListFilterContext[Category]):
+    """Filter context data for legistar items
+    """
+    agenda_status: AgendaStatus|None
+    """The agenda status to filter by"""
+    minutes_status: MinutesStatus|None
+    """The minutes status to filter by"""
+    agenda_status_items: Iterable[AgendaStatus]
+    """All possible agenda status items"""
+    minutes_status_items: Iterable[MinutesStatus]
+    """All possible minutes status items"""
 
 
 class LegistarItemsContext[
@@ -652,7 +666,7 @@ class LegistarItemsContext[
     """The name of the view to edit an individual item"""
     paginator: Paginator[tuple[IdT, ItemT]]
     """:class:`~.pagination.Paginator` instance for :attr:`item_dict`"""
-    filter_context: ListFilterContext[Category]
+    filter_context: LegistarListFilterContext
     """Filter context data"""
 
 
@@ -686,13 +700,26 @@ class LegistarItemsViewBase[
     @abstractmethod
     def _id_for_item(self, item: ItemT) -> IdT: ...
 
-    def parse_filter_context(self) -> ListFilterContext[Category]:
+    def parse_filter_context(self) -> LegistarListFilterContext:
         view_unassigned = bool(self.request.query.get('unassigned'))
         category = self.request.query.get('category')
         if not category:
             category = None
         if category is not None:
             category = Category(category)
+
+        agenda_status = self.request.query.get('agenda_status')
+        if not agenda_status:
+            agenda_status = None
+        if agenda_status is not None:
+            assert agenda_status in AgendaStatusItems
+
+        minutes_status = self.request.query.get('minutes_status')
+        if not minutes_status:
+            minutes_status = None
+        if minutes_status is not None:
+            assert minutes_status in MinutesStatusItems
+
         return {
             'view_unassigned': view_unassigned,
             'all_categories': list(sorted(self.get_all_categories())),
@@ -700,6 +727,10 @@ class LegistarItemsViewBase[
             'filter_by_date': False,
             'start_date': None,
             'end_date': None,
+            'agenda_status': agenda_status,
+            'minutes_status': minutes_status,
+            'agenda_status_items': AgendaStatusItems,
+            'minutes_status_items': MinutesStatusItems,
         }
 
     def get_items(self) -> tuple[dict[IdT, ItemT], Sequence[ItemT]]:
@@ -719,7 +750,7 @@ class LegistarItemsViewBase[
         item_dict = self._filter_by_category(item_dict)
         item_dict = self._filter_by_date(item_dict)
         item_dict = self._filter_unassigned_clips(item_dict)
-        return item_dict
+        return self._filter_by_status(item_dict)
 
     def get_all_categories(self) -> set[Category]:
         return set([item.feed_item.category for item in self.legistar_data])
@@ -745,6 +776,24 @@ class LegistarItemsViewBase[
             'filter_context': self.filter_context,
         }
         return context
+
+    def _filter_by_status(
+        self,
+        item_dict: dict[IdT, ItemT],
+    ) -> dict[IdT, ItemT]:
+        agenda_status = self.filter_context['agenda_status']
+        minutes_status = self.filter_context['minutes_status']
+
+        def is_item_included(item: ItemT) -> bool:
+            agenda_match = agenda_status is None or item.agenda_status == agenda_status
+            minutes_match = minutes_status is None or item.minutes_status == minutes_status
+            return agenda_match and minutes_match
+
+        if agenda_status is None and minutes_status is None:
+            return item_dict
+        return {
+            guid: item for guid, item in item_dict.items() if is_item_included(item)
+        }
 
     def _filter_by_category(
         self,

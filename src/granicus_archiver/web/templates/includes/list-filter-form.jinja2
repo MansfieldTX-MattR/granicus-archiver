@@ -24,7 +24,7 @@
 >
 {% endmacro %}
 
-{% macro list_filter_form(extraClass=None) %}
+{% macro list_filter_form(extraClass=None, caller_inside_row=True) %}
 {% set view_unassigned = filter_context['view_unassigned'] %}
 {% set current_category = filter_context['current_category'] %}
 {% set filter_by_date = filter_context['filter_by_date'] %}
@@ -32,7 +32,7 @@
 {% set end_date = filter_context['end_date']|date_format('%Y-%m-%d') if filter_context['end_date'] else '' %}
 {% set all_categories = filter_context['all_categories'] %}
 <nav class="{{ mergeClasses('navbar', 'bg-body-primary', extraClass) }}">
-  <form id="list_filter_form" class="d-flex" method="get">
+  <form id="list_filter_form" method="get">
     <div class="row g-3 align-items-end">
       <div class="col-auto">
         {% call filter_select('clip_status_select', name='unassigned', label='Clip Status', value=1 if view_unassigned else '', tooltip='Filter Items with or without clips') %}
@@ -83,7 +83,35 @@
           onclick="document.getElementById('list_filter_form').submit()"
         >Filter</button>
       </div>
+    {% if caller and caller_inside_row %}{{ caller() }}{% endif %}
     </div>
+  {% if caller and not caller_inside_row %}{{ caller() }}{% endif %}
   </form>
 </nav>
+{% endmacro %}
+
+
+{% macro legistar_list_filter_form(extraClass=None) %}
+{% call list_filter_form(extraClass, caller_inside_row=False) %}
+{% set agenda_status = filter_context['agenda_status'] %}
+{% set minutes_status = filter_context['minutes_status'] %}
+<div class="row g-3 mt-2 align-items-end">
+  <div class="col-auto">
+    {% call filter_select('agenda_status_select', name='agenda_status', label='Agenda Status', value=agenda_status or '', tooltip='Filter by Agenda Status') %}
+    <option value=""{% if not agenda_status %} selected{% endif %}>All</option>
+    {% for status_choice in filter_context['agenda_status_items'] %}
+      <option value="{{ status_choice }}"{% if status_choice == agenda_status %} selected{% endif %}>{{ status_choice }}</option>
+    {% endfor %}
+    {% endcall %}
+  </div>
+  <div class="col-auto">
+    {% call filter_select('minutes_status_select', name='minutes_status', label='Minutes Status', value=minutes_status or '', tooltip='Filter by Minutes Status') %}
+    <option value=""{% if not minutes_status %} selected{% endif %}>All</option>
+    {% for status_choice in filter_context['minutes_status_items'] %}
+      <option value="{{ status_choice }}"{% if status_choice == minutes_status %} selected{% endif %}>{{ status_choice }}</option>
+    {% endfor %}
+    {% endcall %}
+  </div>
+</div>
+{% endcall %}
 {% endmacro %}
