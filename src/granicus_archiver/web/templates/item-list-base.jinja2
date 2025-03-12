@@ -8,9 +8,6 @@
   <div id="itemListType" class="invisible" data-item-type="{{ item_view_name }}"></div>
   {% call Section(item_list_title or page_title) %}
     {% block list_filter_form_call %}{{ list_filter_form('mt-4') }}{% endblock %}
-    {% if paginator.paginating and paginator.per_page >= 50 %}
-    {{ Paginator() }}
-    {% endif %}
     <div class="row mt-3 mx-2">
       <div class="col align-self-start">
         <table class="item-table table table-striped table-bordered">
@@ -31,7 +28,7 @@
         </table>
       </div>
     </div>
-  {% if paginator.paginating %}{{ Paginator() }}{% endif %}
+  {{ Paginator() }}
   {% endcall %}
 </main>
 {% endblock %}
