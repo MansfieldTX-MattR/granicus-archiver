@@ -256,6 +256,21 @@ class TemplatedView(web.View, Generic[ContextT], AbstractView[ContextT]):
         context = await self.get_context_data()
         return await self.render_to_response(context)
 
+class ListFilterContext[CatT: (Location, Category)](TypedDict):
+    """Context data for list views with filters
+    """
+    view_unassigned: bool
+    """Whether to view unassigned items"""
+    all_categories: list[CatT]
+    """All possible categories"""
+    current_category: CatT|None
+    """The current category"""
+    filter_by_date: bool
+    """Whether to filter by date"""
+    start_date: datetime.date|None
+    """The start date for filtering"""
+    end_date: datetime.date|None
+    """The end date for filtering"""
 
 
 class ClipListContext(GlobalContext):
@@ -270,14 +285,10 @@ class ClipListContext(GlobalContext):
     """Mapping of clip ids to their associated legistar item guids. A value of
     ``None`` or ``NoClip`` indicates no associated legistar item.
     """
-    all_categories: list[Location]
-    """List of all :attr:`~.model.Clip.location` values in :attr:`clips`"""
-    current_category: Location|None
-    """The current category being viewed (or ``None`` for all categories)"""
-    view_unassigned: bool
-    """Whether to view only clips assigned to a legistar item"""
     paginator: Paginator[tuple[CLIP_ID, Clip]]
     """:class:`~.pagination.Paginator` instance for :attr:`clip_dict`"""
+    filter_context: ListFilterContext[Location]
+    """Filter context data"""
 
 
 @routes.view('/clips/list/', name='clip_list')
@@ -288,15 +299,9 @@ class ClipListView(TemplatedView[ClipListContext]):
 
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
+        self.filter_context = self.parse_filter_context()
         items = list(self.clips.clips.values())
-        view_unassigned = bool(self.request.query.get('unassigned'))
-        category = self.request.query.get('category')
-        if category is not None:
-            category = Location(category)
-        if view_unassigned:
-            items = self._filter_unassigned(items)
-        if category:
-            items = self._filter_by_category(items, category)
+        items = self.get_filtered_items(items)
         self.item_dict: dict[CLIP_ID, Clip] = {clip.id: clip for clip in items}
         self.items: list[Clip] = list(items)
         item_tuples = [(item.id, item) for item in self.items]
@@ -310,6 +315,44 @@ class ClipListView(TemplatedView[ClipListContext]):
     def legistar_data(self) -> LegistarData:
         return self.request.app[LegistarDataKey]
 
+    def parse_filter_context(self) -> ListFilterContext[Location]:
+        """Parse the filter context from the request's query parameters
+        """
+        view_unassigned = bool(self.request.query.get('unassigned'))
+        filter_by_date = self.request.query.get('filter_by_date') is not None
+        category = self.request.query.get('category')
+        if not category:
+            category = None
+        if category is not None:
+            category = Location(category)
+        start_date = self.request.query.get('start_date')
+        if not start_date:
+            start_date = None
+        if start_date is not None:
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date = self.request.query.get('end_date')
+        if not end_date:
+            end_date = None
+        if end_date is not None:
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+        all_categories = set([clip.location for clip in self.clips])
+        return {
+            'view_unassigned': view_unassigned,
+            'all_categories': list(sorted(all_categories)),
+            'current_category': category,
+            'filter_by_date': filter_by_date,
+            'start_date': start_date,
+            'end_date': end_date,
+        }
+
+    def get_filtered_items(self, clips: Sequence[Clip]) -> Sequence[Clip]:
+        """Get items filtered by the :attr:`filter_context`
+        """
+        clips = self._filter_by_date_range(clips)
+        clips = self._filter_by_category(clips)
+        clips = self._filter_unassigned(clips)
+        return clips
+
     def get_clip_guids(self) -> dict[CLIP_ID, GuidOrNoneStr]:
         legistar_data = self.legistar_data
         d: dict[CLIP_ID, GuidOrNoneStr] = {}
@@ -322,28 +365,39 @@ class ClipListView(TemplatedView[ClipListContext]):
     async def get_context_data(self) -> ClipListContext:
         """Get the context data for this view
         """
-        view_unassigned = bool(self.request.query.get('unassigned'))
-        category = self.request.query.get('category')
-        if category is not None:
-            category = Location(category)
-        all_categories = set([clip.location for clip in self.clips])
         context: ClipListContext = {
             'nav_links': self.request.app[NavLinksKey],
             'page_title': 'Clips',
             'clip_dict': self.item_dict,
             'clips': self.clips,
             'clip_guids': self.get_clip_guids(),
-            'all_categories': list(sorted(all_categories)),
-            'current_category': category,
-            'view_unassigned': view_unassigned,
             'paginator': self.paginator,
+            'filter_context': self.filter_context,
         }
         return context
 
-    def _filter_by_category(self, clips: Sequence[Clip], category: Location) -> Sequence[Clip]:
-        return [clip for clip in self.clips if clip.location == category]
+    def _filter_by_date_range(self, clips: Sequence[Clip]) -> Sequence[Clip]:
+        start_date, end_date = self.filter_context['start_date'], self.filter_context['end_date']
+        if not self.filter_context['filter_by_date']:
+            return clips
+        if start_date is None or end_date is None:
+            if self.filter_context['filter_by_date']:
+                self.filter_context['filter_by_date'] = False
+            return clips
+        return [
+            clip for clip in clips
+            if start_date <= clip.datetime.date() <= end_date
+        ]
+
+    def _filter_by_category(self, clips: Sequence[Clip]) -> Sequence[Clip]:
+        category = self.filter_context['current_category']
+        if category is None:
+            return clips
+        return [clip for clip in clips if clip.location == category]
 
     def _filter_unassigned(self, clips: Sequence[Clip]) -> Sequence[Clip]:
+        if not self.filter_context['view_unassigned']:
+            return clips
         return [
             clip for clip in clips if self.legistar_data.is_clip_id_available(clip.id)
         ]
@@ -592,20 +646,14 @@ class LegistarItemsContext[
     """Mapping of items by their id"""
     item_clip_ids: dict[IdT, ClipIdOrNoneStr]
     """Mapping of item ids to their associated clip ids"""
-    all_categories: list[Category]
-    """List of all :data:`categories <granicus_archiver.legistar.types.Category>`
-    in :attr:`items`
-    """
-    current_category: Category|None
-    """The current category being viewed (or ``None`` for all categories)"""
-    view_unassigned: bool
-    """Whether to view only items without associated clips"""
     item_view_name: str
     """The name of the view to display an individual item"""
     item_edit_view_name: str
     """The name of the view to edit an individual item"""
     paginator: Paginator[tuple[IdT, ItemT]]
     """:class:`~.pagination.Paginator` instance for :attr:`item_dict`"""
+    filter_context: ListFilterContext[Category]
+    """Filter context data"""
 
 
 class LegistarItemsViewBase[
@@ -618,6 +666,7 @@ class LegistarItemsViewBase[
 
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
+        self.filter_context = self.parse_filter_context()
         self.item_dict, self.items = self.get_items()
         item_tuples = [(self._id_for_item(item), item) for item in self.items]
         self.paginator = Paginator[tuple[IdT, ItemT]](self.request, item_tuples)
@@ -637,23 +686,40 @@ class LegistarItemsViewBase[
     @abstractmethod
     def _id_for_item(self, item: ItemT) -> IdT: ...
 
-    def get_items(self) -> tuple[dict[IdT, ItemT], Sequence[ItemT]]:
+    def parse_filter_context(self) -> ListFilterContext[Category]:
         view_unassigned = bool(self.request.query.get('unassigned'))
+        category = self.request.query.get('category')
+        if not category:
+            category = None
+        if category is not None:
+            category = Category(category)
+        return {
+            'view_unassigned': view_unassigned,
+            'all_categories': list(sorted(self.get_all_categories())),
+            'current_category': category,
+            'filter_by_date': False,
+            'start_date': None,
+            'end_date': None,
+        }
+
+    def get_items(self) -> tuple[dict[IdT, ItemT], Sequence[ItemT]]:
         legistar_data = self.legistar_data
         item_clip_ids: dict[IdT, ClipIdOrNoneStr] = {}
         for guid, item in legistar_data.items():
             clip_id = legistar_data.get_clip_id_for_guid(guid)
             item_clip_ids[guid] = clip_id_to_str(clip_id)
         item_dict = dict(legistar_data.items())
-        if 'category' in self.request.query:
-            cat = self.request.query.get('category')
-            if cat:
-                cat = Category(cat)
-                item_dict = self._filter_by_category(item_dict, cat)
-        if view_unassigned:
-            item_dict = self._filter_unassigned_clips(item_dict)
+        item_dict = self.get_filtered_items(item_dict)
         item_dict = self._sort_items(item_dict)
         return item_dict, list(item_dict.values())
+
+    def get_filtered_items(self, item_dict: dict[IdT, ItemT]) -> dict[IdT, ItemT]:
+        """Get items filtered by the :attr:`filter_context`
+        """
+        item_dict = self._filter_by_category(item_dict)
+        item_dict = self._filter_by_date(item_dict)
+        item_dict = self._filter_unassigned_clips(item_dict)
+        return item_dict
 
     def get_all_categories(self) -> set[Category]:
         return set([item.feed_item.category for item in self.legistar_data])
@@ -661,7 +727,6 @@ class LegistarItemsViewBase[
     async def get_context_data(self) -> LegistarItemsContext[IdT, ItemT]:
         """Get the context data for this view
         """
-        view_unassigned = bool(self.request.query.get('unassigned'))
         legistar_data = self.legistar_data
         item_clip_ids: dict[IdT, ClipIdOrNoneStr] = {}
         for guid, item in legistar_data.items():
@@ -674,41 +739,44 @@ class LegistarItemsViewBase[
             'items': self.items,
             'item_dict': self.item_dict,
             'item_clip_ids': item_clip_ids,
-            'all_categories': list(sorted(self.get_all_categories())),
-            'current_category': None,
-            'view_unassigned': view_unassigned,
             'item_view_name': self.item_view_name,
             'item_edit_view_name': self.item_edit_view_name,
             'paginator': self.paginator,
+            'filter_context': self.filter_context,
         }
-        if 'category' in self.request.query:
-            cat = self.request.query.get('category')
-            if cat:
-                cat = Category(cat)
-                context['current_category'] = cat
         return context
 
     def _filter_by_category(
         self,
         item_dict: dict[IdT, ItemT],
-        *categories: Category
     ) -> dict[IdT, ItemT]:
-        return self.legistar_data.filter_by_category(*categories, items=item_dict)
+        category = self.filter_context['current_category']
+        if category is None:
+            return item_dict
+        return self.legistar_data.filter_by_category(category, items=item_dict)
 
     def _filter_by_date(
         self,
         item_dict: dict[IdT, ItemT],
-        start_dt: datetime.datetime|None,
-        end_dt: datetime.datetime|None
     ) -> dict[IdT, ItemT]:
+        if not self.filter_context['filter_by_date']:
+            return item_dict
+        start_date, end_date = self.filter_context['start_date'], self.filter_context['end_date']
+        if start_date is None or end_date is None:
+            self.filter_context['filter_by_date'] = False
+            return item_dict
         return self.legistar_data.filter_by_dt_range(
-            start_dt=start_dt, end_dt=end_dt, items=item_dict
+            start_dt=datetime.datetime.combine(start_date, datetime.time.min),
+            end_dt=datetime.datetime.combine(end_date, datetime.time.max),
+            items=item_dict
         )
 
     def _filter_unassigned_clips(
         self,
         item_dict: dict[IdT, ItemT]
     ) -> dict[IdT, ItemT]:
+        if not self.filter_context['view_unassigned']:
+            return item_dict
         return {
             guid: item for guid, item in item_dict.items()
             if self.legistar_data.get_clip_id_for_guid(guid) is None

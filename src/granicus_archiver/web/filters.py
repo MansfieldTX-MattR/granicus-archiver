@@ -50,18 +50,19 @@ def datetime_format(ctx: Context, dt: datetime.datetime, fmt: str = '%m/%d/%Y %H
     return dt.strftime(fmt)
 
 @jinja2.pass_context
-def date_format(ctx: Context, dt: datetime.datetime, fmt: str = '%x') -> str:
-    """Format a datetime object as a date using :func:`datetime.datetime.strftime`
+def date_format(ctx: Context, dt: datetime.datetime|datetime.date, fmt: str = '%x') -> str:
+    """Format a date or datetime object as a date using :func:`datetime.datetime.strftime`
 
     The timezone of the datetime object will first be converted using
     :func:`local_tz`.
 
     Arguments:
-        dt: The datetime object to format
+        dt: The date or datetime object to format
         fmt: The format string to use
 
     """
-    dt = local_tz(ctx, dt)
+    if isinstance(dt, datetime.datetime):
+        dt = local_tz(ctx, dt)
     return dt.strftime(fmt)
 
 @jinja2.pass_context

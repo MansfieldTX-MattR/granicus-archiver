@@ -13,7 +13,24 @@
 </select>
 {% endmacro %}
 
+{% macro date_input_field(elem_id, name, label, value=None) %}
+<label for="{{ elem_id }}" class="form-label">{{ label }}</label>
+<input
+  id="{{ elem_id }}"
+  name="{{ name }}"
+  type="date"
+  class="form-control"
+  value="{{ value }}"
+>
+{% endmacro %}
+
 {% macro list_filter_form(extraClass=None) %}
+{% set view_unassigned = filter_context['view_unassigned'] %}
+{% set current_category = filter_context['current_category'] %}
+{% set filter_by_date = filter_context['filter_by_date'] %}
+{% set start_date = filter_context['start_date']|date_format('%Y-%m-%d') if filter_context['start_date'] else '' %}
+{% set end_date = filter_context['end_date']|date_format('%Y-%m-%d') if filter_context['end_date'] else '' %}
+{% set all_categories = filter_context['all_categories'] %}
 <nav class="{{ mergeClasses('navbar', 'bg-body-primary', extraClass) }}">
   <form id="list_filter_form" class="d-flex" method="get">
     <div class="row g-3 align-items-end">
@@ -31,6 +48,42 @@
           {% endfor %}
         {% endcall %}
       </div>
+      <div class="col-auto">
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            role="switch"
+            id="filter_by_date_input"
+            name="filter_by_date"
+            value="1" {% if filter_by_date %}checked{% endif %}
+            onchange="
+              const dateDiv = document.getElementById('date_filter_inputs')
+              dateDiv.classList.toggle('d-none');
+              if (!this.checked) {
+                dateDiv.querySelectorAll('input[type=date]').forEach((input) => input.value = '');
+                this.form.submit();
+              }
+            "
+          >
+          <label class="form-check-label" for="filter_by_date_input">Filter by Date</label>
+        </div>
+      </div>
+      <div class="col-auto{% if not filter_by_date %} d-none{% endif %}" id="date_filter_inputs">
+        <div class="row">
+          <div class="col-auto">
+            {{ date_input_field('start_date_input', name='start_date', label='Start Date', value=start_date) }}
+          </div>
+          <div class="col-auto">
+            {{ date_input_field('end_date_input', name='end_date', label='End Date', value=end_date) }}
+          </div>
+        </div>
+        <button
+          class="btn btn-primary"
+          onclick="document.getElementById('list_filter_form').submit()"
+        >Filter</button>
+      </div>
+    </div>
   </form>
 </nav>
 {% endmacro %}
