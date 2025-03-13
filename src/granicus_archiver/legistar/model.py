@@ -23,7 +23,7 @@ from .types import (
     LegistarFileKeys, AgendaStatus, MinutesStatus,
     AgendaStatusItems, MinutesStatusItems, ItemStatus,
     GUID, REAL_GUID, LegistarFileKey, AttachmentName, LegistarFileUID, Category,
-    NoClipT, NoClip, _GuidT, _ItemT,
+    NoClipT, NoClip, _GuidT, _ItemT, is_legistar_file_key,
 )
 from .exceptions import (
     ThisShouldBeA500ErrorButItsNot, HiddenItemError, NoMeetingTimeError,
@@ -87,7 +87,7 @@ def uid_to_file_key(uid: LegistarFileUID) -> LegistarFileKey:
     Raises:
         TypeError: If the *uid* is not a valid key
     """
-    if uid not in LegistarFileKeys:
+    if not is_legistar_file_key(uid):
         raise TypeError(f'uid "{uid}" is not a LegistarFileKey')
     return uid
 
@@ -1457,7 +1457,7 @@ class LegistarData(AbstractLegistarModel[GUID, DetailPageResult]):
             att = files.attachments.get(key)
             meta = None if att is None else att.metadata
             return self.get_attachment_path(guid, key), meta
-        assert key in LegistarFileKeys
+        assert is_legistar_file_key(key)
         file_obj = files[key]
         meta = None if file_obj is None else file_obj.metadata
         return self.get_file_path(guid, key), meta

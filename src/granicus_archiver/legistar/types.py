@@ -1,5 +1,10 @@
 from __future__ import annotations
 from typing import TypeVar, NewType, Literal, get_args, TYPE_CHECKING
+if TYPE_CHECKING:
+    try:
+        from typing import TypeIs
+    except ImportError:
+        from typing_extensions import TypeIs
 import enum
 
 if TYPE_CHECKING:
@@ -16,6 +21,9 @@ LegistarFileKey = Literal['agenda', 'minutes', 'agenda_packet', 'video']
 """Key name for legistar files"""
 
 LegistarFileKeys: tuple[LegistarFileKey, ...] = get_args(LegistarFileKey)
+
+def is_legistar_file_key(value: str) -> TypeIs[LegistarFileKey]:
+    return value in LegistarFileKeys
 
 AttachmentName = NewType('AttachmentName', str)
 """Type variable to associate keys in :attr:`.model.DetailPageLinks.attachments`

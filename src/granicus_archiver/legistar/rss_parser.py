@@ -510,12 +510,19 @@ class Feed(Serializable):
             DatetimeError: If a match could not be found for clip's the datetime
 
         """
+        def _is_category(value: str) -> TypeIs[Category]:
+            return (
+                value in self.items_by_category or
+                value in self.category_maps.values()
+            )
+
         cat = clip.location
         if cat in self.category_maps:
             cat = self.category_maps[cat]
         if cat not in self.items_by_category:
             raise CategoryError(clip.id, f'Category "{cat}" not found: {clip.name=}, {clip.datetime=}')
             # raise ValueError('Category not found')
+        assert _is_category(cat)
         items = self.items_by_category[cat]
         items_by_dt = {item.meeting_date:item for item in items.values()}
         clip_dt = clip.datetime
