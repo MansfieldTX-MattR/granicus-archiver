@@ -59,7 +59,7 @@ class FilePageResponse(TypedDict, Generic[T]):
     """A single result during pagination in :class:`FileListResponse`
     """
     files: Iterable[T]
-    """Iterable of either :class:`FileMeta` or :class:`FileMetaFull` objects
+    """Iterable of either :class:`DriveFileMeta` or :class:`DriveFileMetaFull` objects
     """
 
 

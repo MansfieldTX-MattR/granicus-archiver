@@ -423,7 +423,7 @@ class ClipClient(ClientBase):
                 break
 
     async def upload_all(self, clips: ClipCollection) -> None:
-        """Upload assets for the given clips (up to by :attr:`max_clips`)
+        """Upload assets for the given clips (up to by :attr:`~ClientBase.max_clips`)
         """
         upload_check_sch = self.schedulers['upload_checks']
         upload_check_limit = upload_check_sch.limit
@@ -456,7 +456,7 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
     max_clips: int
     """The maximum number of items to upload"""
     legistar_data: _ModelT
-    """A :class:~.legistar.model.AbstractLegistarModel` instance"""
+    """A :class:`~.legistar.model.AbstractLegistarModel` instance"""
     item_scheduler: aiojobs.Scheduler
     check_scheduler: aiojobs.Scheduler
     upload_scheduler: aiojobs.Scheduler
@@ -505,7 +505,8 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
         return await super().__aexit__(exc_type, exc_val, exc_tb)
 
     def get_file_upload_path(self, guid: _GuidT, uid: LegistarFileUID) -> Path:
-        """Get the uploaded filename for a legistar asset (relative to :attr:`upload_dir`)
+        """Get the uploaded filename for a legistar asset
+        (relative to :attr:`~ClientBase.upload_dir`)
         """
         filename, _ = self.legistar_data.get_path_for_uid(guid, uid)
         assert not filename.is_absolute()

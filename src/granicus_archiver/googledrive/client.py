@@ -978,6 +978,7 @@ class ClipGoogleClient(GoogleClient):
         return changed
 
 _LegModelT = TypeVar('_LegModelT', bound=AbstractLegistarModel)
+"""TypeVar for a subclass of :class:`~.legistar.model.AbstractLegistarModel`"""
 
 class AbstractLegistarGoogleClient(GoogleClient, Generic[_GuidT, _ItemT, _LegModelT], ABC):
     max_clips: int

@@ -57,4 +57,10 @@ NoClip = _DoesNotExistEnum.DoesNotExist
 """Used to signify an item that should have no :class:`~.model.Clip`"""
 
 _GuidT = TypeVar('_GuidT', GUID, REAL_GUID)
+"""Type parameter for :obj:`GUID` and :obj:`REAL_GUID`
+:meta public:
+"""
 _ItemT = TypeVar('_ItemT', bound='DetailPageResult')
+"""Type parameter for :class:`~.model.DetailPageResult`
+:meta public:
+"""

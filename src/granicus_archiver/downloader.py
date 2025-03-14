@@ -82,7 +82,7 @@ class DownloadResult(TypedDict):
     filename: Path
     """The :attr:`~DownloadRequest.filename` of the request"""
     meta: FileMeta
-    """Metadata from the response headers as a :class:`~.model.FileMeta` instance"""
+    """Metadata from the response headers as a :class:`~.types.FileMeta` instance"""
 
 
 class FileDownload:
