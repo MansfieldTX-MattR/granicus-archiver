@@ -430,7 +430,7 @@ class ClientBase(ABC, Generic[_GuidT, _ItemT, _ModelT]):
                     temp_filename.unlink()
                     temp_filename = strip_output
                     strip_output = None
-            except Exception as exc:
+            except Exception:
                 if strip_output is not None and strip_output.exists():
                     strip_output.unlink()
                 if temp_filename.exists():

@@ -10,7 +10,10 @@ from yarl import URL
 from ..clips.model import CLIP_ID
 from ..legistar.types import GUID, REAL_GUID, LegistarFileUID
 from ..legistar.rss_parser import is_guid, is_real_guid
-from .types import *
+from .types import (
+    StaticRootName, StaticUrlRootsKey, TimezoneKey, ClipsKey, LegistarDataKey,
+    RGuidLegistarDataKey,
+)
 from .config import APP_CONF_KEY
 from .s3client import S3ClientKey
 

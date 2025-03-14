@@ -18,7 +18,11 @@ from ..clips.model import ClipCollection
 from ..legistar.model import LegistarData
 from ..legistar.guid_model import RGuidLegistarData
 
-from .types import *
+from .types import (
+    ConfigKey, ClipsKey, LegistarDataKey, RGuidLegistarDataKey,
+    TimezoneKey, StaticRootsKey, StaticRoots, StaticUrlRootsKey, StaticUrlRoots,
+    NavLinksKey, DataFiles, DataFileLockKey,
+)
 from .config import AppConfig, APP_CONF_KEY
 from .s3client import S3Client, S3ClientKey
 if TYPE_CHECKING:

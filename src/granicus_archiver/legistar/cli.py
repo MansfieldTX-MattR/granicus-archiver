@@ -25,7 +25,7 @@ def cli(obj: BaseContext):
     root_dir_rel = obj.config.legistar.out_dir
     if root_dir_rel.resolve() != root_dir_abs:
         click.confirm(
-            f'Current working directory does not match your config. Continue?',
+            'Current working directory does not match your config. Continue?',
             abort=True,
         )
 
@@ -78,7 +78,7 @@ def check_legistar(obj: BaseContext, recheck_hashes: bool):
 def check_legistar_rguid(obj: BaseContext, recheck_hashes: bool):
     """Check downloaded files using the stored metadata
     """
-    leg_client_obj = asyncio.run(legistar_guid_client.amain(
+    asyncio.run(legistar_guid_client.amain(
         config=obj.config,
         max_clips=0,
         check_only=True,

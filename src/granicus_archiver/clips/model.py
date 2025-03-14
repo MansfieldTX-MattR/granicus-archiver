@@ -21,7 +21,7 @@ from yaml import (
 from yarl import URL
 
 from ..utils import (
-    SHA1Hash, seconds_to_time_str, get_file_hash, HashMismatchError,
+    seconds_to_time_str, get_file_hash, HashMismatchError,
 )
 from ..types import Serializable, FileMeta, Headers
 
@@ -1016,8 +1016,8 @@ class ClipCollection(Serializable):
         for int_key in sorted(keys):
             key = CLIP_ID(str(int_key))
             clip = self.clips[key]
-            l = result.setdefault(clip.datetime, [])
-            l.append(clip.id)
+            clip_list = result.setdefault(clip.datetime, [])
+            clip_list.append(clip.id)
         return result
 
     @classmethod
@@ -1048,8 +1048,8 @@ class ClipCollection(Serializable):
         if clip.id in self.clips:
             raise KeyError(f'Clip with id "{clip.id}" exists')
         self.clips[clip.id] = clip
-        l = self.clips_by_dt.setdefault(clip.datetime, [])
-        l.append(clip.id)
+        clip_list = self.clips_by_dt.setdefault(clip.datetime, [])
+        clip_list.append(clip.id)
         return clip
 
     def __getitem__(self, key: CLIP_ID) -> Clip:

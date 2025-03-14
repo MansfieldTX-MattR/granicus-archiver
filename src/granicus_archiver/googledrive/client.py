@@ -1,10 +1,9 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, Generic, Self, Coroutine, TypedDict, Literal, Any, AsyncGenerator,
+    TypeVar, Generic, Self, Coroutine, TypedDict, Any, AsyncGenerator,
     overload, cast, TYPE_CHECKING
 )
 from abc import ABC, abstractmethod
-import mimetypes
 from pathlib import Path
 import asyncio
 import json
@@ -15,7 +14,10 @@ from loguru import logger
 import aiojobs
 import aiofile
 
-from .types import *
+from .types import (
+    FileId, DriveFileMeta, DriveFileMetaFull, FileUploadResponse, FileListResponse,
+    DriveResource, FolderCache,
+)
 from .cache import FileCache, MetaCacheKey, MetaCount
 from .pathtree import PathNode
 from . import config
@@ -576,7 +578,7 @@ class GoogleClient:
         :meth:`create_folder_from_path` method relies on a :class:`~asyncio.Lock`
         for concurrency.
         """
-        logger.info(f'prebuilding paths...')
+        logger.info('prebuilding paths...')
         count = 0
         async with self.cache_lock:
             root = PathNode.create_from_paths(*paths, folder_cache=self.folder_cache)
@@ -854,7 +856,7 @@ class ClipGoogleClient(GoogleClient):
         if len(self.upload_clip_waiters):
             logger.info(f'waiting for waiters ({len(self.upload_clip_waiters)=})')
             await self.upload_clip_waiters
-        logger.success(f'all waiters finished')
+        logger.success('all waiters finished')
         await self.upload_data_file()
 
     @logger.catch(reraise=True)
@@ -1456,7 +1458,7 @@ async def get_all_clip_file_meta(clips: ClipCollection, root_conf: Config) -> No
         results = await waiters
         changed = any(results)
     if changed:
-        logger.info(f'Meta changed, saving cache file')
+        logger.info('Meta changed, saving cache file')
         client.save_cache()
     else:
         logger.info('No changes detected')
@@ -1476,7 +1478,7 @@ async def check_clip_file_meta(
             hash_logfile=hash_logfile,
         )
     if changed:
-        logger.info(f'Meta changed, saving cache file')
+        logger.info('Meta changed, saving cache file')
         client.save_cache()
     else:
         logger.info('No changes detected')
@@ -1511,7 +1513,7 @@ async def check_legistar_meta(root_conf: Config, check_hashes: bool) -> None:
         changed = await client.check_meta(enable_hashes=check_hashes)
 
     if changed:
-        logger.info(f'Meta changed, saving cache file')
+        logger.info('Meta changed, saving cache file')
         client.save_cache()
     else:
         logger.info('No changes detected')
@@ -1533,7 +1535,7 @@ async def check_legistar_rguid_meta(root_conf: Config, check_hashes: bool) -> No
         changed = await client.check_meta(enable_hashes=check_hashes)
 
     if changed:
-        logger.info(f'Meta changed, saving cache file')
+        logger.info('Meta changed, saving cache file')
         client.save_cache()
     else:
         logger.info('No changes detected')

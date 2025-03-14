@@ -87,14 +87,14 @@ class Element:
     def _render_attrs(self) -> str:
         if self.attrs is None:
             return ''
-        l: list[str] = []
+        attr_list: list[str] = []
         for key, val in self.attrs.items():
             if val is not None:
                 s = f'{key}="{val}"'
             else:
                 s = key
-            l.append(s)
-        return ' '.join(l)
+            attr_list.append(s)
+        return ' '.join(attr_list)
 
     def render_as_list(self, indent: int = 0) -> list[str]:
         attrs = self._render_attrs()

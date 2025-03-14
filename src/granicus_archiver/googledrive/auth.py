@@ -1,10 +1,8 @@
 from __future__ import annotations
-import json
 import webbrowser
 import asyncio
 from aiohttp import web
 from aiogoogle.client import Aiogoogle
-from aiogoogle.auth.creds import UserCreds, ClientCreds
 from aiogoogle.auth.utils import create_secret
 
 from . import config

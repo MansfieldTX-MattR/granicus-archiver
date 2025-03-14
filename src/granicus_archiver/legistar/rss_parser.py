@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Self, Iterator, Iterable, Any, Literal, ClassVar, TYPE_CHECKING
+from typing import Self, Iterator, Iterable, Any, ClassVar, TYPE_CHECKING
 if TYPE_CHECKING:
     try:
         from typing import TypeIs
@@ -11,12 +11,11 @@ from dataclasses import dataclass
 import datetime
 from zoneinfo import ZoneInfo
 
-from loguru import logger
 from yarl import URL
 from pyquery.pyquery import PyQuery
 
 from ..types import Serializable
-from ..clips.model import Clip, CLIP_ID, Location
+from ..clips.model import Clip, Location
 from .types import GUID, REAL_GUID, Category
 from .exceptions import (
     LegistarThinksRSSCanPaginateError, CategoryError, DatetimeError

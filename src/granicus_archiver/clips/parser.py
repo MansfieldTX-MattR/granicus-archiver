@@ -1,9 +1,8 @@
-from typing import Literal, Iterator, overload, TYPE_CHECKING
+from typing import Iterator
 from pathlib import Path
 
 import datetime
 from yarl import URL
-from loguru import logger
 # from pyquery import PyQuery as pq
 
 from .model import CLIP_ID, ParseClipData, ParseClipLinks, ClipCollection

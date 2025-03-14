@@ -24,7 +24,7 @@ def cli(obj: BaseContext):
     if root_dir_rel.resolve() != root_dir_abs:
         click.echo(f'{root_dir_abs=}')
         click.confirm(
-            f'Current working directory does not match your config. Continue?',
+            'Current working directory does not match your config. Continue?',
             abort=True,
         )
 
@@ -117,7 +117,7 @@ def download_clips(
         with tempfile.TemporaryDirectory() as td:
             td_p = Path(td).resolve()
             assert td_p.parent == temp_dir.resolve()
-    clips = asyncio.run(client.amain(
+    asyncio.run(client.amain(
         data_url=data_url,
         data_file=obj.config.data_file,
         timestamp_file=obj.config.timestamp_file,

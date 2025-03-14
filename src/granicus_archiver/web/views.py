@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import (
     TypeVar, Generic, Literal, ClassVar, TypedDict,
-    Iterable, Sequence, Any, cast,
+    Iterable, Sequence, cast,
 )
 
 from abc import ABC, abstractmethod
@@ -28,7 +28,10 @@ from ..legistar.types import (
     Category, GUID, REAL_GUID, NoClip, NoClipT, LegistarFileUID,
     AgendaStatus, MinutesStatus, AgendaStatusItems, MinutesStatusItems,
 )
-from .types import *
+from .types import (
+    ConfigKey, ClipsKey, LegistarDataKey, RGuidLegistarDataKey,
+    NavLinksKey, DataFileLockKey, SortOrder, NavLink, StaticRootName,
+)
 from .config import APP_CONF_KEY
 from .s3client import S3ClientKey
 from .pagination import Paginator
@@ -97,7 +100,6 @@ def with_data_file_lock(func):
                 return await func(*args, **kwargs)
             finally:
                 logger.debug(f'released data file lock for {func}')
-        return r
     return wrapper
 
 
@@ -599,7 +601,6 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
     async def post(self) -> web.Response:
         next_url = self.request.app.router['clip_item_change'].url_for(clip_id=self.clip.id)
         context = await self.get_context_data()
-        form_initial = self.get_form_initial()
         form_data = context['form_data']
         guid = guid_from_str(form_data['guid'])
         guid_changed = id_equal(guid, self.legistar_guid)
@@ -632,7 +633,7 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
                 item = self.legistar_data_rguid[real_guid]
                 logger.debug(f'setting clip match: {item.real_guid=}')
                 # self.legistar_data_rguid.add_clip_match_override(item.real_guid, self.clip.id)
-        conf_file = self.get_config()
+        # conf_file = self.get_config()
         # self.legistar_data.save(conf_file.legistar.data_file)
         raise web.HTTPFound(next_url)
 
@@ -839,8 +840,8 @@ class LegistarItemsViewBase[
         by_dt: dict[datetime.datetime, list[ItemT]] = {}
         for item in item_dict.values():
             dt = item.feed_item.meeting_date
-            l = by_dt.setdefault(dt, [])
-            l.append(item)
+            item_list = by_dt.setdefault(dt, [])
+            item_list.append(item)
         sorted_items: list[ItemT] = []
         for dt in sorted(by_dt.keys()):
             sorted_items.extend(by_dt[dt])
@@ -1166,7 +1167,7 @@ class LItemChangeViewBase[
     def _get_next_url(self) -> URL:
         raise NotImplementedError
 
-    def get_clip_options(self):
+    def get_clip_options(self) -> Iterable[Clip]:
         legistar_data = self.legistar_data
         category_maps = self.get_config().legistar.category_maps
         category_maps_rev = {v:k for k,v in category_maps.items()}
@@ -1227,7 +1228,6 @@ class LItemChangeViewBase[
     async def post(self) -> web.Response:
         context = await self.get_context_data()
         item = context['item']
-        form_initial = self.get_form_initial()
         form_data = context['form_data']
         next_url = form_data['next_url']
         clip_id = clip_id_from_str(form_data['clip_id'])

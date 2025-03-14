@@ -134,8 +134,8 @@ class BaseConfig(Serializable):
         val = cls._get_env_var(key, str)
         if val is None:
             return None
-        l = json.loads(val)
-        return [val_type(v) for v in l]
+        val_list = json.loads(val)
+        return [val_type(v) for v in val_list]
 
     @classmethod
     def _get_env_var_dict[Kt: (str), Vt: (str, Path, URL)](

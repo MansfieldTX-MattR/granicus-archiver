@@ -1,4 +1,4 @@
-from typing import TypeVar, TypedDict, Literal, Coroutine, Any, Self
+from typing import TypedDict, Literal, Coroutine, Any, Self
 import asyncio
 from pathlib import Path
 
@@ -236,11 +236,12 @@ class GranicusClient:
                 src_file.unlink()
                 clip.files.ensure_path(key)
                 clip.files.set_metadata(key, meta)
-            except:
+            except Exception:
                 if dst_file.exists():
                     dst_file.unlink()
                 if key in clip.files.metadata:
                     del clip.files.metadata[key]
+                raise
 
         logger.info(f'downloading clip "{clip.unique_name}"')
         with tempfile.TemporaryDirectory() as temp_dir:

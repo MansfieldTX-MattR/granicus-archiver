@@ -445,7 +445,7 @@ class ClipClient(ClientBase):
             logger.info(f'waiting for waiters ({len(self.upload_clip_waiters)=})')
             await self.upload_clip_waiters
         await self.upload_data_file()
-        logger.success(f'all waiters finished')
+        logger.success('all waiters finished')
 
 
 
@@ -639,7 +639,7 @@ class LegistarClientBase(ClientBase, Generic[_GuidT, _ItemT, _ModelT], ABC):
             logger.info(f'waiting for waiters ({len(self.item_waiters)=})')
             await self.item_waiters
         await self.upload_data_file()
-        logger.success(f'all waiters finished')
+        logger.success('all waiters finished')
 
 
 class LegistarClient(LegistarClientBase[GUID, DetailPageResult, LegistarData]):

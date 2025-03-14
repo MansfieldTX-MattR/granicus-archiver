@@ -5,7 +5,7 @@ from pathlib import Path
 from aiohttp import web
 from yarl import URL
 
-from .types import *
+from .types import NavLink
 
 __all__ = ('AppConfig', 'APP_CONF_KEY')
 

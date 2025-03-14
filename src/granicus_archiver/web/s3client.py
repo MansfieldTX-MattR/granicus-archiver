@@ -9,9 +9,9 @@ from aiohttp import web
 
 from ..aws.client import ClientBase
 from ..legistar.guid_model import RGuidLegistarData
-from ..utils import SHA1Hash, get_file_hash
+from ..utils import SHA1Hash
 from .config import APP_CONF_KEY
-from .types import *
+from .types import ConfigKey, DataFileType, DataFiles
 
 
 class DataFileMetadata(TypedDict):

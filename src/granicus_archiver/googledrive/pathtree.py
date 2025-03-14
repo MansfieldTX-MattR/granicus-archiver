@@ -125,7 +125,7 @@ class PathNode:
         real_paths = [Path(p) for p in paths]
         roots = set([p.parts[0] for p in real_paths])
         if len(roots) != 1:
-            raise ValueError(f'No common root path found')
+            raise ValueError('No common root path found')
         root_part = PathPart(roots.pop())
         root = PathNode(part=root_part, folder_cache=folder_cache)
         for path in real_paths:
