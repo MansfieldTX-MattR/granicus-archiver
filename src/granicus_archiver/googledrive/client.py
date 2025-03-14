@@ -216,7 +216,7 @@ class GoogleClient:
         return cast(_Rt, response)
 
     @overload
-    async def list_files(
+    def list_files(
         self,
         q: str,
         spaces: str = 'drive',
@@ -224,7 +224,7 @@ class GoogleClient:
         full_res: bool = True
     ) -> AsyncGenerator[DriveFileMetaFull]: ...
     @overload
-    async def list_files(
+    def list_files(
         self,
         q: str,
         spaces: str = 'drive',
