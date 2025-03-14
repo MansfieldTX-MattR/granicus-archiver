@@ -433,10 +433,13 @@ class GoogleClient:
 
     async def get_file_meta(
         self,
-        filename: Path
+        filename: Path|FileId
     ) -> DriveFileMetaFull|None:
         """Get metadata for the given file (if it exists)
         """
+        if not isinstance(filename, Path):
+            req = self.drive_v3.files.get(fileId=filename, fields='*')
+            return await self.as_user(req, resp_type=DriveFileMetaFull)
         folder = filename.parent
         folder_find = await self.find_folder(folder)
         if folder_find is None:
