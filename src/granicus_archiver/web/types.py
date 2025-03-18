@@ -73,7 +73,7 @@ class NavLink(NamedTuple):
         return cls(
             name=data['name'],
             title=data['title'],
-            url=URL(data['url']),
+            url=URL(data['url']) if '://' in data['url'] else data['url'],
             view_kwargs=data['view_kwargs'],
         )
 
