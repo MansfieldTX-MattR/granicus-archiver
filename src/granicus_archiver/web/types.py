@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, TypedDict, NamedTuple, Sequence, Any
+from typing import Literal, TypedDict, NamedTuple, Sequence, Any, Self
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import asyncio
@@ -59,6 +59,23 @@ class NavLink(NamedTuple):
         if isinstance(self.url, URL):
             return self.url
         return app.router[self.url].url_for(**(self.view_kwargs or {}))
+
+    def serialize(self) -> dict[str, Any]:
+        return {
+            'name': self.name,
+            'title': self.title,
+            'url': str(self.url),
+            'view_kwargs': self.view_kwargs,
+        }
+
+    @classmethod
+    def deserialize(cls, data: dict[str, Any]) -> Self:
+        return cls(
+            name=data['name'],
+            title=data['title'],
+            url=URL(data['url']),
+            view_kwargs=data['view_kwargs'],
+        )
 
 
 NavLinksKey = web.AppKey('NavLinks', Sequence[NavLink])

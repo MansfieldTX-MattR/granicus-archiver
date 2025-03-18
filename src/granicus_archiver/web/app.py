@@ -249,6 +249,13 @@ def init_func(argv):
 
 
 @click.group(name='web')
+@click.option(
+    '-c', '--config-file',
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    help='Config file to use. If provided (and the file exists), '\
+         'any other options are ignored. If provided and the file does not '\
+         'exist, the file will be created with the specified options.',
+)
 @click.option('-h', '--hostname', default='localhost', show_default=True)
 @click.option('-p', '--port', default=8080, show_default=True)
 @click.option(
@@ -264,6 +271,7 @@ def init_func(argv):
 @click.pass_context
 def cli(
     ctx: click.Context,
+    config_file: Path|None,
     hostname: str,
     port: int,
     sockfile: Path|None,
@@ -276,11 +284,16 @@ def cli(
     _static_url = URL(static_url)
     if not _static_url.host:
         _static_url = URL(f'http://{hostname}:{port}').join(_static_url)
-    conf = AppConfig(
-        hostname=hostname, port=port, sockfile=sockfile, serve_static=serve_static,
-        read_only=read_only, static_url=_static_url,
-        use_s3=use_s3, s3_data_dir=s3_data_dir
-    )
+    if config_file is not None and config_file.exists():
+        conf = AppConfig.load(config_file)
+    else:
+        conf = AppConfig(
+            hostname=hostname, port=port, sockfile=sockfile, serve_static=serve_static,
+            read_only=read_only, static_url=_static_url,
+            use_s3=use_s3, s3_data_dir=s3_data_dir
+        )
+        if config_file is not None:
+            conf.save(config_file)
     assert ctx.parent is not None
     assert isinstance(ctx.parent.obj.config, Config)
     ctx.obj = WebCliContext(parent=ctx.parent.obj, app_conf=conf)
