@@ -70,18 +70,20 @@
         </div>
       </div>
       <div class="col-auto{% if not filter_by_date %} d-none{% endif %}" id="date_filter_inputs">
-        <div class="row">
+        <div class="row g-2 ms-3 align-items-end">
           <div class="col-auto">
             {{ date_input_field('start_date_input', name='start_date', label='Start Date', value=start_date) }}
           </div>
           <div class="col-auto">
             {{ date_input_field('end_date_input', name='end_date', label='End Date', value=end_date) }}
           </div>
+          <div class="col-auto">
+            <button
+              class="btn btn-primary"
+              onclick="document.getElementById('list_filter_form').submit()"
+            >Filter</button>
+          </div>
         </div>
-        <button
-          class="btn btn-primary"
-          onclick="document.getElementById('list_filter_form').submit()"
-        >Filter</button>
       </div>
     {% if caller and caller_inside_row %}{{ caller() }}{% endif %}
     </div>
