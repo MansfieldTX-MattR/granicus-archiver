@@ -103,6 +103,29 @@ def with_data_file_lock(func):
     return wrapper
 
 
+def is_truthy(value: str|bool|None) -> bool:
+    """Check if the value is truthy
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    value = value.lower()
+    return value in ('true', '1', 'yes', 'on')
+
+
+def parse_date(value: str|None) -> datetime.date|None:
+    """Parse a date from a string
+    """
+    if value is None:
+        return None
+    try:
+        return datetime.datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        logger.debug(f'Invalid date format: {value}')
+        return None
+
+
 def clip_id_to_str(clip_id: CLIP_ID|Clip|None|NoClipT) -> ClipIdOrNoneStr:
     if clip_id is None:
         return 'None'
@@ -725,9 +748,9 @@ class LegistarItemsViewBase[
             'view_unassigned': view_unassigned,
             'all_categories': list(sorted(self.get_all_categories())),
             'current_category': category,
-            'filter_by_date': False,
-            'start_date': None,
-            'end_date': None,
+            'filter_by_date': is_truthy(self.request.query.get('filter_by_date')),
+            'start_date': parse_date(self.request.query.get('start_date')),
+            'end_date': parse_date(self.request.query.get('end_date')),
             'agenda_status': agenda_status,
             'minutes_status': minutes_status,
             'agenda_status_items': AgendaStatusItems,
