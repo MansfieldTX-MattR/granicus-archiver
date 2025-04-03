@@ -1,8 +1,31 @@
 {%- from "includes/macros.jinja2" import Link with context -%}
-{%- from "includes/navbar-macros.jinja2" import navBar, headerNav, navLink with context -%}
+{%- from "includes/navbar-macros.jinja2" import navBar, navLink, navItem, navDropdownButton with context -%}
+
+{% macro themeSelectButton(theme_value, icon_class) -%}
+<li>
+  <button class="dropdown-item theme-select-button" type="button" data-theme-value="{{ theme_value }}">
+    <i class="bi {{ icon_class }}"></i> {{ theme_value|capitalize }}
+  </button>
+</li>
+{%- endmacro %}
+
 
 {% call navBar() %}
-{% for nav_link in nav_links %}
+<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+  {% for nav_link in nav_links %}
     {{ navLink(nav_link.get_url(app), nav_link.title) }}
-{% endfor %}
+  {% endfor %}
+</ul>
+<ul class="navbar-nav me-2">
+  {% call navItem(elemId='dark_mode_dropdown', extraClass='dropdown') %}
+    {% call navDropdownButton(elemId='dark_mode_dropdown_button') %}
+      <i class="bi bi-moon-fill"></i>
+    {% endcall %}
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dark_mode_dropdown">
+      {{ themeSelectButton('dark', 'bi-moon-fill') }}
+      {{ themeSelectButton('light', 'bi-sun-fill') }}
+      {{ themeSelectButton('auto', 'bi-circle-half') }}
+    </ul>
+  {% endcall %}
+</ul>
 {% endcall %}

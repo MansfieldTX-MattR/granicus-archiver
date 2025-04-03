@@ -16,9 +16,7 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="{{ toggleId }}">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        {{ caller() }}
-      </ul>
+      {{ caller() }}
     </div>
   </div>
 </nav>
@@ -40,8 +38,8 @@
 {%- endmacro %}
 
 
-{% macro navItem(extraClass=None) -%}
-  <li class="{{ mergeClasses('nav-item', extraClass) }}">
+{% macro navItem(elemId=None, extraClass=None) -%}
+  <li class="{{ mergeClasses('nav-item', extraClass) }}"{% if elemId is not none %} id="{{ elemId }}"{% endif %}>
     {{ caller() }}
   </li>
 {%- endmacro %}
@@ -53,15 +51,28 @@
   {%- endcall %}
 {% endmacro %}
 
-
-{% macro navDropdown(title) -%}
-{% call navItem("dropdown") %}
-<a class="nav-link dropdown-toggle" href="#" role="button" data-coreui-toggle="dropdown" aria-expanded="false">
-  {{ title }}
-</a>
-<ul class="dropdown-menu">
+{% macro navDropdownButton(elemId, extraClass=None) -%}
+<a
+  class="{{ mergeClasses('nav-link dropdown-toggle', extraClass) }}"
+  {% if elemId is not none %}id="{{ elemId }}"{% endif %}
+  href="#"
+  role="button"
+  data-coreui-toggle="dropdown"
+  aria-expanded="false"
+>
   {{ caller() }}
-</ul>
+</a>
+{%- endmacro %}
+
+{% macro navDropdown(title, elemId=None, extraClass=None) -%}
+{% set outerCaller=caller %}
+{% call navItem(extraClass=mergeClasses('dropdown', extraClass), elemId=elemId) %}
+  {% call navDropdownButton() %}
+    {{ title }}
+  {% endcall %}
+  <ul class="dropdown-menu">
+    {{ outerCaller() }}
+  </ul>
 {% endcall %}
 {%- endmacro %}
 

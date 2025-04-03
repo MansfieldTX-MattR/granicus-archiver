@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-coreui-theme="dark" data-bs-theme="dark">
 <head>
   {% block head -%}
   {% block head_meta -%}
@@ -13,11 +13,12 @@
   {%- endblock head_css %}
   {%- endblock head %}
 </head>
-<body data-coreui-theme="dark">
+<body>
   {% block body -%}
   {% block header %}{% include "includes/navbar.jinja2" %}{% endblock %}
   {% block main %}{% endblock %}
   {% block js_foot -%}
+  <script src="{{ static_path('assets', 'theme.js') }}"></script>
   <script src="https://cdn.jsdelivr.net/npm/@coreui/coreui@5.2.0/dist/js/coreui.bundle.min.js" integrity="sha384-JdRP5GRWP6APhoVS1OM/pOKMWe7q9q8hpl+J2nhCfVJKoS+yzGtELC5REIYKrymn" crossorigin="anonymous"></script>
   <script src="{{ static_path('assets', 'utils.js') }}"></script>
   <script src="{{ static_path('assets', 'videoTracks.js') }}"></script>
