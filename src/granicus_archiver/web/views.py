@@ -183,12 +183,40 @@ def id_equal(a: _ID_Type|None|NoClipT, b: _ID_Type|None|NoClipT) -> bool:
     return a == b
 
 
+def is_clip_hidden(request: web.Request, clip_or_id: Clip|CLIP_ID|None|NoClipT) -> bool:
+    """Check if a clip is hidden based on the app config
+    """
+    if clip_or_id is None or clip_or_id is NoClip:
+        return False
+    app_conf = request.app[APP_CONF_KEY]
+    if not isinstance(clip_or_id, Clip):
+        clips = request.app[ClipsKey]
+        try:
+            clip = clips[clip_or_id]
+        except KeyError:
+            return False
+    else:
+        clip = clip_or_id
+    return clip.location in app_conf.hidden_clip_categories
+
+
+def check_clip_hidden(
+    request: web.Request, clip_or_id: Clip|CLIP_ID
+) -> None:
+    """Check if a clip is hidden and raise a 404 if it is
+    """
+    if is_clip_hidden(request, clip_or_id):
+        raise web.HTTPNotFound()
+
+
+
 @routes.get('/clips/webvtt/{clip_id}/', name='clip_webvtt')
 async def clip_webvtt(request: web.Request) -> web.Response|web.StreamResponse:
     """View to display a webvtt file for a clip
     """
     app_conf = request.app[APP_CONF_KEY]
     clip_id = CLIP_ID(request.match_info['clip_id'])
+    check_clip_hidden(request, clip_id)
     clips = request.app[ClipsKey]
     clip = clips[clip_id]
     if app_conf.use_s3:
@@ -379,6 +407,7 @@ class ClipListView(TemplatedView[ClipListContext]):
         clips = self._filter_by_date_range(clips)
         clips = self._filter_by_category(clips)
         clips = self._filter_unassigned(clips)
+        clips = self._filter_hidden(clips)
         return clips
 
     def get_clip_guids(self) -> dict[CLIP_ID, GuidOrNoneStr]:
@@ -430,6 +459,11 @@ class ClipListView(TemplatedView[ClipListContext]):
             clip for clip in clips if self.legistar_data.is_clip_id_available(clip.id)
         ]
 
+    def _filter_hidden(self, clips: Sequence[Clip]) -> Sequence[Clip]:
+        return [
+            clip for clip in clips if not is_clip_hidden(self.request, clip)
+        ]
+
 
 class ClipViewContext(GlobalContext):
     """Template context for :class:`ClipViewBase`
@@ -460,6 +494,7 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
         clip_id = CLIP_ID(self.request.match_info['clip_id'])
+        check_clip_hidden(request, clip_id)
         self.clip = self.clips[clip_id]
         self.legistar_item = self.legistar_data.find_match_for_clip_id(clip_id)
         self.legistar_rguid_item = self.legistar_data_rguid.find_match_for_clip_id(clip_id)
@@ -786,6 +821,8 @@ class LegistarItemsViewBase[
         item_clip_ids: dict[IdT, ClipIdOrNoneStr] = {}
         for guid, item in legistar_data.items():
             clip_id = legistar_data.get_clip_id_for_guid(guid)
+            if is_clip_hidden(self.request, clip_id):
+                clip_id = None
             item_clip_ids[guid] = clip_id_to_str(clip_id)
 
         context: LegistarItemsContext[IdT, ItemT] = {
@@ -995,6 +1032,8 @@ class LItemViewBase[
         super().__init__(request)
         self.guid = self.get_guid()
         self.clip_id = self.legistar_data.get_clip_id_for_guid(self.guid)
+        if is_clip_hidden(request, self.clip_id):
+            self.clip_id = None
 
     @property
     @abstractmethod
@@ -1027,6 +1066,8 @@ class LItemViewBase[
     @property
     def clip(self) -> Clip|None:
         if self.clip_id is None or self.clip_id is NoClip:
+            return None
+        if is_clip_hidden(self.request, self.clip_id):
             return None
         return self.clips[self.clip_id]
 

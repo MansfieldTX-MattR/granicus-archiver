@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Sequence, Self, Any
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from os import PathLike
 
 from aiohttp import web
@@ -13,6 +13,7 @@ from yaml import (
     CDumper as YamlDumper,
 )
 
+from ..clips.model import Location
 from .types import NavLink
 from ..config import BaseConfig
 
@@ -55,6 +56,9 @@ class AppConfig(BaseConfig):
     """Navigation links for the app"""
     site_name: str = 'Granicus Archive'
     """Name of the site"""
+
+    hidden_clip_categories: Sequence[Location] = field(default_factory=list)
+    """List of clip categories to hide in the UI"""
 
     @classmethod
     def load(cls, filename: PathLike) -> Self:
@@ -99,6 +103,7 @@ class AppConfig(BaseConfig):
             'use_s3': self.use_s3,
             's3_data_dir': self.s3_data_dir,
             'nav_links': [nl.serialize() for nl in self.nav_links],
+            'hidden_clip_categories': self.hidden_clip_categories,
             'site_name': self.site_name,
         }
 
@@ -114,6 +119,9 @@ class AppConfig(BaseConfig):
             use_s3=data['use_s3'],
             s3_data_dir=data['s3_data_dir'],
             nav_links=[NavLink.deserialize(nl) for nl in data['nav_links']],
+            hidden_clip_categories=[
+                Location(c) for c in data.get('hidden_clip_categories', [])
+            ],
             site_name=data['site_name'],
         )
 
