@@ -1069,7 +1069,11 @@ class LItemViewBase[
             return None
         if is_clip_hidden(self.request, self.clip_id):
             return None
-        return self.clips[self.clip_id]
+        try:
+            return self.clips[self.clip_id]
+        except KeyError:
+            logger.warning(f'Clip with id {self.clip_id} not found in clips collection')
+            return None
 
     @property
     def item(self) -> ItemT:
