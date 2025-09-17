@@ -3,6 +3,7 @@ from typing import Any, TYPE_CHECKING
 from pathlib import Path
 import asyncio
 
+from yarl import URL
 import click
 from click_extra import extra_group as click_group
 
@@ -44,6 +45,25 @@ def cli(obj: BaseContext):
         path_type=Path,
     ),
 )
+@click.option(
+    '--endpoint-url',
+    type=str,
+    default=None,
+    help='Custom S3 endpoint URL (for S3-compatible services)',
+)
+@click.option(
+    '--region-name',
+    type=str,
+    default=None,
+    help='AWS region name',
+)
+@click.option(
+    '--credentials-profile',
+    type=str,
+    default=None,
+    show_default=True,
+    help='AWS credentials profile name (from ~/.aws/credentials)',
+)
 @click.pass_obj
 def config(
     obj: BaseContext,
@@ -51,6 +71,9 @@ def config(
     clips_prefix: Path|None,
     legistar_prefix: Path|None,
     legistar_rguid_prefix: Path|None,
+    endpoint_url: str|None,
+    region_name: str|None,
+    credentials_profile: str|None,
 ):
     """Configure AWS settings
     """
@@ -61,7 +84,13 @@ def config(
         'legistar_rguid_prefix': legistar_rguid_prefix,
     }
     kw = {k:Path(v) for k,v in kw.items() if v is not None}
-    kw['bucket_name'] = bucket_name
+    kw.update({
+        'bucket_name': bucket_name,
+        'credentials_profile': credentials_profile,
+        's3_endpoint_url': URL(endpoint_url) if endpoint_url is not None else None,
+        'region_name': region_name,
+    })
+    kw = {k:v for k,v in kw.items() if v is not None}
     changed = aws_config.update(**kw)
     if aws_config.bucket_name is None or not len(aws_config.bucket_name):
         bucket_name = click.prompt('Please enter the bucket name', type=str)

@@ -256,19 +256,30 @@ class AWSConfig(BaseConfig):
     """Prefix for legistar items"""
     legistar_rguid_prefix: Path
     """Prefix for rguid legistar items"""
+    region_name: str|None = None
+    """AWS region name.  If not set, the default region will be used"""
+    s3_endpoint_url: URL|None = None
+    """AWS S3 endpoint URL.  If not set, the default endpoint will be used"""
+    credentials_profile: str = 'default'
+    """The AWS credentials profile to use (from ``~/.aws/credentials``)"""
 
     group_key: ClassVar[GroupKey] = 'aws'
 
     def update(self, **kwargs) -> bool:
         changed = False
-        keys = ['bucket_name', 'clips_prefix', 'legistar_prefix', 'legistar_rguid_prefix']
+        not_required_keys = [
+            'region_name', 's3_endpoint_url', 'credentials_profile',
+        ]
+        path_keys = ['clips_prefix', 'legistar_prefix', 'legistar_rguid_prefix']
+        required_keys = ['bucket_name'] + path_keys
+        keys = required_keys + not_required_keys
         for key in keys:
             if key not in kwargs:
                 continue
             val = kwargs[key]
             if val == getattr(self, key):
                 continue
-            if key != 'bucket_name':
+            if key in path_keys:
                 assert isinstance(val, Path)
                 assert not val.is_absolute()
             setattr(self, key, val)
@@ -282,6 +293,9 @@ class AWSConfig(BaseConfig):
             clips_prefix=Path('clips'),
             legistar_prefix=Path('legistar'),
             legistar_rguid_prefix=Path('legistar-rguid'),
+            region_name=None,
+            s3_endpoint_url=None,
+            credentials_profile='default',
         )
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
@@ -293,6 +307,9 @@ class AWSConfig(BaseConfig):
             clips_prefix=str(self.clips_prefix),
             legistar_prefix=str(self.legistar_prefix),
             legistar_rguid_prefix=str(self.legistar_rguid_prefix),
+            region_name=self.region_name,
+            s3_endpoint_url=str(self.s3_endpoint_url) if self.s3_endpoint_url else None,
+            credentials_profile=self.credentials_profile,
         )
 
     @classmethod
@@ -302,15 +319,24 @@ class AWSConfig(BaseConfig):
             clips_prefix=Path(data['clips_prefix']),
             legistar_prefix=Path(data['legistar_prefix']),
             legistar_rguid_prefix=Path(data['legistar_rguid_prefix']),
+            region_name=data.get('region_name'),
+            s3_endpoint_url=URL(data['s3_endpoint_url']) if data.get('s3_endpoint_url') else None,
+            credentials_profile=data.get('credentials_profile', 'default'),
         )
 
     @classmethod
     def load_from_env(cls) -> Self:
+        credentials_profile = cls._get_env_var('credentials_profile', str)
+        if credentials_profile is None or not len(credentials_profile):
+            credentials_profile = 'default'
         kw = dict(
             bucket_name=cls._get_env_var('bucket_name', str),
             clips_prefix=cls._get_env_var('clips_prefix', Path),
             legistar_prefix=cls._get_env_var('legistar_prefix', Path),
             legistar_rguid_prefix=cls._get_env_var('legistar_rguid_prefix', Path),
+            region_name=cls._get_env_var('region_name', str),
+            s3_endpoint_url=cls._get_env_var('s3_endpoint_url', URL),
+            credentials_profile=credentials_profile,
         )
         kw = {k:v for k,v in kw.items() if v is not None}
         return cls.build_defaults(**kw)

@@ -61,6 +61,12 @@ def _key_to_str(key: Key) -> str:
     return key
 
 
+class S3ClientKwargs(TypedDict, total=False):
+    region_name: str|None
+    endpoint_url: str|None
+
+
+
 class ClientBase:
     """Base class for AWS clients
     """
@@ -74,14 +80,27 @@ class ClientBase:
     """The S3 bucket"""
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.session = aioboto3.Session()
+        self.session = aioboto3.Session(
+            profile_name=self.config.aws.credentials_profile,
+            region_name=self.config.aws.region_name,
+        )
         self._is_open = False
+
+    def _get_client_kwargs(self) -> S3ClientKwargs:
+        endpoint_url = None
+        if self.config.aws.s3_endpoint_url is not None:
+            endpoint_url = str(self.config.aws.s3_endpoint_url)
+        return S3ClientKwargs(
+            region_name=self.config.aws.region_name,
+            endpoint_url=endpoint_url,
+        )
 
     async def __aenter__(self) -> Self:
         self._is_open = True
-        ctx = self.session.resource('s3')
+        client_kw = self._get_client_kwargs()
+        ctx = self.session.resource('s3', **client_kw)
         self.s3_resource = cast(S3ServiceResource, await ctx.__aenter__())
-        ctx = self.session.client('s3')
+        ctx = self.session.client('s3', **client_kw)
         self.s3_client = cast(S3Client, await ctx.__aenter__()) # type: ignore
         self.bucket = await self.s3_resource.Bucket(self.config.aws.bucket_name)
         return self
@@ -92,10 +111,21 @@ class ClientBase:
             await self.s3_client.__aexit__(exc_type, exc_val, exc_tb)
         self._is_open = False
 
+    @property
+    def is_digitalocean(self) -> bool:
+        """Whether the S3 endpoint is DigitalOcean Spaces
+        """
+        if self.config.aws.s3_endpoint_url is None:
+            return False
+        return 'digitaloceanspaces.com' in str(self.config.aws.s3_endpoint_url)
+
     def url_for_key(self, key: Key, scheme: str|None = None) -> URL:
         """Get a URL for an S3 key within :attr:`bucket`
         """
-        url = URL(f'https://s3.amazonaws.com/{self.config.aws.bucket_name}/{key}')
+        if self.is_digitalocean:
+            url = URL(f'https://{self.config.aws.bucket_name}.{self.config.aws.s3_endpoint_url}/{key}')
+        else:
+            url = URL(f'https://s3.amazonaws.com/{self.config.aws.bucket_name}/{key}')
         if scheme is not None:
             url = url.with_scheme(scheme)
         return url
