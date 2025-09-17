@@ -28,6 +28,7 @@ dependencies = [
     "pypdf",
     "appdirs",
     "python-dotenv",
+    "click-extra>=4.15.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -87,6 +88,7 @@ docs = [
     "sphinx-click",
     "sphinx-design>=0.6.1",
     "types-aiobotocore[essential]>=2.19.0",
+    "click-extra[sphinx]>=4.15.0",
 ]
 dev = [
     "ipython>=8.32.0",
