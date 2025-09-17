@@ -11,6 +11,8 @@ from yarl import URL
 import aiohttp_jinja2
 import jinja2
 import click
+from click_extra import extra_group as click_group
+from ..click_extra_params import extra_params
 
 from .. import set_local_timezone
 from ..config import Config
@@ -248,7 +250,10 @@ def init_func(argv):
     return build_app(app_conf)
 
 
-@click.group(name='web')
+@click_group(
+    name='web',
+    params=extra_params,
+)
 @click.option(
     '-c', '--config-file',
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
@@ -367,4 +372,4 @@ def serve(obj: WebCliContext, launch_browser: bool):
 
 
 if __name__ == '__main__':
-    cli()
+    cli()   # type: ignore[call-arg]

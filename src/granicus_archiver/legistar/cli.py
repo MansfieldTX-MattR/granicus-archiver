@@ -4,6 +4,7 @@ import os
 import asyncio
 from pathlib import Path
 import click
+from click_extra import extra_group as click_group
 from yarl import URL
 
 from . import client as legistar_client
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 
 
-@click.group(name='legistar')
+@click_group(name='legistar')
 @click.pass_obj
 def cli(obj: BaseContext):
     """Legistar sub-commands
@@ -30,7 +31,7 @@ def cli(obj: BaseContext):
         )
 
 
-@cli.command
+@cli.command()
 @click.option('--name', type=str, prompt=True)
 @click.option('--url', type=str, prompt=True)
 @click.pass_obj
@@ -46,7 +47,7 @@ def add_feed_url(obj: BaseContext, name: str, url: str):
         obj.config.save(obj.config_file)
 
 
-@cli.command
+@cli.command()
 @click.pass_obj
 def list_feed_urls(obj: BaseContext):
     """Show RSS feed urls in the current configuration
@@ -273,7 +274,7 @@ def ensure_local_legistar_hashes_rguid(obj: BaseContext, check_existing: bool, m
         obj.config, check_existing=check_existing, max_clips=max_clips,
     )
 
-@cli.command
+@cli.command()
 @click.option('--max-items', type=int, default=100)
 @click.pass_obj
 def remove_pdf_links(obj: BaseContext, max_items: int):

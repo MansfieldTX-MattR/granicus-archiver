@@ -1,9 +1,10 @@
 import importlib
 import click
+from click_extra import ExtraGroup
 
 
 # From https://click.palletsprojects.com/en/stable/complex/#defining-the-lazy-group
-class LazyGroup(click.Group):
+class LazyGroup(ExtraGroup):
     """Command group subclass to lazily load subcommands
     """
     lazy_subcommands: dict[str, str]

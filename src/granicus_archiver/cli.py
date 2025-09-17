@@ -4,6 +4,8 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import click
+from click_extra import extra_group as click_group
+from .click_extra_params import extra_params
 from dotenv import load_dotenv
 
 from .config import Config, GroupKey as ConfigGroupKey
@@ -19,8 +21,9 @@ class BaseContext:
     config_file: Path
 
 
-@click.group(
+@click_group(
     cls=LazyGroup,
+    params=extra_params,
     lazy_subcommands={
         'clips': 'granicus_archiver.clips.cli.cli',
         'legistar': 'granicus_archiver.legistar.cli.cli',
@@ -106,6 +109,8 @@ def cli(
     config_env_file: Path|None,
     config_read_only: bool,
 ):
+    """Granicus Archiver CLI
+    """
     Config._read_only = config_read_only
     if load_config_env:
         if config_env_file is not None:
@@ -155,7 +160,7 @@ def drive(obj: BaseContext):
     """
     pass
 
-@cli.command
+@cli.command()
 @click.option(
     '--group',
     type=click.Choice(choices=['root', 'aws', 'google', 'legistar', 'all']),
@@ -215,7 +220,7 @@ def save_config(obj: BaseContext, out_file: Path|None):
         Config._read_only = is_read_only
 
 
-@drive.command
+@drive.command()
 @click.pass_obj
 def authorize(obj: BaseContext):
     """Launch a browser window to authorize uploads to Drive
@@ -228,4 +233,4 @@ cli._lazy_load_all()
 
 
 if __name__ == '__main__':
-    cli()
+    cli() # type: ignore[call-arg]

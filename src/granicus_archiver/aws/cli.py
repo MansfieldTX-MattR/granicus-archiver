@@ -4,6 +4,7 @@ from pathlib import Path
 import asyncio
 
 import click
+from click_extra import extra_group as click_group
 
 if TYPE_CHECKING:
     from ..cli import BaseContext
@@ -12,7 +13,7 @@ from ..clips.model import ClipCollection
 from . import client
 
 
-@click.group(name='aws')
+@click_group(name='aws')
 @click.pass_obj
 def cli(obj: BaseContext):
     """AWS sub-commands

@@ -4,6 +4,7 @@ import os
 import asyncio
 from pathlib import Path
 import click
+from click_extra import extra_group as click_group
 from yarl import URL
 
 from .model import ClipCollection, AgendaTimestampCollection, ClipsIndex
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from ..cli import BaseContext
 
 
-@click.group(name='clips')
+@click_group(name='clips')
 @click.pass_obj
 def cli(obj: BaseContext):
     """Granicus clips sub-commands
@@ -29,7 +30,7 @@ def cli(obj: BaseContext):
         )
 
 
-@cli.command
+@cli.command()
 @click.pass_obj
 def build_vtt(obj: BaseContext):
     """Build vtt files with chapters from agenda timestamp data
@@ -138,7 +139,7 @@ def ensure_local_clip_hashes(obj: BaseContext, check_existing: bool, max_clips: 
     )
 
 
-@cli.command
+@cli.command()
 @click.argument(
     'html-filename',
     type=click.Path(dir_okay=False, file_okay=True, path_type=Path)
@@ -152,7 +153,7 @@ def build_html(obj: BaseContext, html_filename: Path):
     html = html_builder.build_html(clips, html_dir=html_filename.parent)
     html_filename.write_text(html)
 
-@cli.command
+@cli.command()
 @click.argument(
     'html-filename',
     type=click.Path(dir_okay=False, file_okay=True, path_type=Path)
@@ -245,7 +246,7 @@ def check_clips_uploads(obj: BaseContext, check_hashes: bool, hash_logfile: Path
     ))
 
 
-@cli.command
+@cli.command()
 @click.option(
     '--index-root',
     type=click.Path(dir_okay=True, file_okay=True, exists=True, path_type=Path),
