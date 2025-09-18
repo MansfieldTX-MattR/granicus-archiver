@@ -10,6 +10,7 @@ from click_extra import extra_group as click_group
 if TYPE_CHECKING:
     from ..cli import BaseContext
 
+from ..config import AWSConfig
 from ..clips.model import ClipCollection
 from . import client
 
@@ -64,6 +65,14 @@ def cli(obj: BaseContext):
     show_default=True,
     help='AWS credentials profile name (from ~/.aws/credentials)',
 )
+@click.option(
+    '--object-url-format',
+    type=str,
+    default=None,
+    help='Format string for generating object URLs.  The string must contain {bucket_name} and {key}' \
+            f' fields.  If not set, the default format for the service will be used. ' \
+            f'(Default: {AWSConfig.default_object_url_fmt})',
+)
 @click.pass_obj
 def config(
     obj: BaseContext,
@@ -74,6 +83,7 @@ def config(
     endpoint_url: str|None,
     region_name: str|None,
     credentials_profile: str|None,
+    object_url_format: str|None,
 ):
     """Configure AWS settings
     """
@@ -89,6 +99,7 @@ def config(
         'credentials_profile': credentials_profile,
         's3_endpoint_url': URL(endpoint_url) if endpoint_url is not None else None,
         'region_name': region_name,
+        'object_url_format': object_url_format,
     })
     kw = {k:v for k,v in kw.items() if v is not None}
     changed = aws_config.update(**kw)

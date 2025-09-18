@@ -25,6 +25,7 @@ from .types import Serializable
 if TYPE_CHECKING:
     from .clips.model import Location
     from .legistar.types import Category
+    from .aws.client import Key
 else:
     Location = str
     Category = str
@@ -248,6 +249,9 @@ class GoogleConfig(BaseConfig):
 class AWSConfig(BaseConfig):
     """AWS Config
     """
+    default_object_url_fmt: ClassVar[str] = 'https://s3.amazonaws.com/{bucket_name}/{key}'
+    """Default :attr:`object_url_format`"""
+
     bucket_name: str
     """The bucket to use for the archive"""
     clips_prefix: Path
@@ -262,8 +266,24 @@ class AWSConfig(BaseConfig):
     """AWS S3 endpoint URL.  If not set, the default endpoint will be used"""
     credentials_profile: str = 'default'
     """The AWS credentials profile to use (from ``~/.aws/credentials``)"""
+    object_url_format: str = default_object_url_fmt
+    """Format string for generating object URLs.
+
+    Required fields are
+
+    - :attr:`bucket_name`
+    - ``key`` (the S3 object key name)
+    """
 
     group_key: ClassVar[GroupKey] = 'aws'
+
+    @classmethod
+    def _validate_object_url_format(cls, fmt: str) -> bool:
+        try:
+            fmt.format(bucket_name='test-bucket', key='test/key')
+        except KeyError as e:
+            raise ValueError(f'Invalid object_url_format, missing key: {e}') from e
+        return True
 
     def update(self, **kwargs) -> bool:
         changed = False
@@ -284,7 +304,30 @@ class AWSConfig(BaseConfig):
                 assert not val.is_absolute()
             setattr(self, key, val)
             changed = True
+        if 'object_url_format' in kwargs:
+            val = kwargs['object_url_format']
+            if val != self.object_url_format:
+                self._validate_object_url_format(val)
+                self.object_url_format = val
+                changed = True
         return changed
+
+    def get_object_url(self, key: Key, scheme: str|None = None) -> URL:
+        """Get a URL for an S3 key within :attr:`bucket_name`
+        """
+        fmt_kwargs = dict(
+            bucket_name=self.bucket_name,
+            key=key,
+        )
+        if self.region_name is not None:
+            fmt_kwargs['region_name'] = self.region_name
+        if self.s3_endpoint_url is not None:
+            fmt_kwargs['s3_endpoint_url'] = str(self.s3_endpoint_url)
+        url_str = self.object_url_format.format(**fmt_kwargs)
+        url = URL(url_str)
+        if scheme is not None:
+            url = url.with_scheme(scheme)
+        return url
 
     @classmethod
     def build_defaults(cls, **kwargs) -> Self:
@@ -296,6 +339,7 @@ class AWSConfig(BaseConfig):
             region_name=None,
             s3_endpoint_url=None,
             credentials_profile='default',
+            object_url_format=cls.default_object_url_fmt,
         )
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
@@ -310,6 +354,7 @@ class AWSConfig(BaseConfig):
             region_name=self.region_name,
             s3_endpoint_url=str(self.s3_endpoint_url) if self.s3_endpoint_url else None,
             credentials_profile=self.credentials_profile,
+            object_url_format=self.object_url_format,
         )
 
     @classmethod
@@ -322,6 +367,7 @@ class AWSConfig(BaseConfig):
             region_name=data.get('region_name'),
             s3_endpoint_url=URL(data['s3_endpoint_url']) if data.get('s3_endpoint_url') else None,
             credentials_profile=data.get('credentials_profile', 'default'),
+            object_url_format=data.get('object_url_format', cls.default_object_url_fmt),
         )
 
     @classmethod
@@ -337,6 +383,7 @@ class AWSConfig(BaseConfig):
             region_name=cls._get_env_var('region_name', str),
             s3_endpoint_url=cls._get_env_var('s3_endpoint_url', URL),
             credentials_profile=credentials_profile,
+            object_url_format=cls._get_env_var('object_url_format', str),
         )
         kw = {k:v for k,v in kw.items() if v is not None}
         return cls.build_defaults(**kw)

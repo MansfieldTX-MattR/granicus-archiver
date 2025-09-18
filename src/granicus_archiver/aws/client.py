@@ -111,24 +111,10 @@ class ClientBase:
             await self.s3_client.__aexit__(exc_type, exc_val, exc_tb)
         self._is_open = False
 
-    @property
-    def is_digitalocean(self) -> bool:
-        """Whether the S3 endpoint is DigitalOcean Spaces
-        """
-        if self.config.aws.s3_endpoint_url is None:
-            return False
-        return 'digitaloceanspaces.com' in str(self.config.aws.s3_endpoint_url)
-
     def url_for_key(self, key: Key, scheme: str|None = None) -> URL:
         """Get a URL for an S3 key within :attr:`bucket`
         """
-        if self.is_digitalocean:
-            url = URL(f'https://{self.config.aws.bucket_name}.{self.config.aws.s3_endpoint_url}/{key}')
-        else:
-            url = URL(f'https://s3.amazonaws.com/{self.config.aws.bucket_name}/{key}')
-        if scheme is not None:
-            url = url.with_scheme(scheme)
-        return url
+        return self.config.aws.get_object_url(key, scheme=scheme)
 
     async def get_object(self, key: Key) -> Object:
         """Get an S3 object within :attr:`bucket` by key
