@@ -209,6 +209,12 @@ def check_clip_hidden(
         raise web.HTTPNotFound()
 
 
+@routes.get('/healthcheck/', name='healthcheck')
+async def healthcheck(request: web.Request) -> web.Response:
+    """Health check endpoint
+    """
+    return web.Response(text='OK')
+
 
 @routes.get('/clips/webvtt/{clip_id}/', name='clip_webvtt')
 async def clip_webvtt(request: web.Request) -> web.Response|web.StreamResponse:
