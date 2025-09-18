@@ -2,11 +2,12 @@ from __future__ import annotations
 from typing import (
     ClassVar, Literal, Iterator, Any, Self, get_type_hints, TYPE_CHECKING,
 )
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from pathlib import Path
 import os
 from os import PathLike
 import json
+import dataclasses
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -55,6 +56,7 @@ def get_app_cache(*parts: Path|str) -> Path:
     return Path(APP_DIRS.user_cache_dir, *parts)
 
 
+@dataclass
 class BaseConfig(Serializable):
     group_key: ClassVar[GroupKey]
     """Unique key for :class:`BaseConfig` subclasses"""
