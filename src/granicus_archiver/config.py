@@ -268,6 +268,10 @@ class AWSConfig(BaseConfig):
     """AWS S3 endpoint URL.  If not set, the default endpoint will be used"""
     credentials_profile: str = 'default'
     """The AWS credentials profile to use (from ``~/.aws/credentials``)"""
+    access_key_id: str|None = None
+    """AWS Access Key ID.  If not set, the default credentials provider chain will be used"""
+    secret_access_key: str|None = None
+    """AWS Secret Access Key.  If not set, the default credentials provider chain will be used"""
     object_url_format: str = default_object_url_fmt
     """Format string for generating object URLs.
 
@@ -291,6 +295,7 @@ class AWSConfig(BaseConfig):
         changed = False
         not_required_keys = [
             'region_name', 's3_endpoint_url', 'credentials_profile',
+            'access_key_id', 'secret_access_key',
         ]
         path_keys = ['clips_prefix', 'legistar_prefix', 'legistar_rguid_prefix']
         required_keys = ['bucket_name'] + path_keys
@@ -341,6 +346,8 @@ class AWSConfig(BaseConfig):
             region_name=None,
             s3_endpoint_url=None,
             credentials_profile='default',
+            access_key_id=None,
+            secret_access_key=None,
             object_url_format=cls.default_object_url_fmt,
         )
         for key, val in default_kw.items():
@@ -356,6 +363,8 @@ class AWSConfig(BaseConfig):
             region_name=self.region_name,
             s3_endpoint_url=str(self.s3_endpoint_url) if self.s3_endpoint_url else None,
             credentials_profile=self.credentials_profile,
+            access_key_id=self.access_key_id,
+            secret_access_key=self.secret_access_key,
             object_url_format=self.object_url_format,
         )
 
@@ -368,6 +377,8 @@ class AWSConfig(BaseConfig):
             legistar_rguid_prefix=Path(data['legistar_rguid_prefix']),
             region_name=data.get('region_name'),
             s3_endpoint_url=URL(data['s3_endpoint_url']) if data.get('s3_endpoint_url') else None,
+            access_key_id=data.get('access_key_id'),
+            secret_access_key=data.get('secret_access_key'),
             credentials_profile=data.get('credentials_profile', 'default'),
             object_url_format=data.get('object_url_format', cls.default_object_url_fmt),
         )
@@ -385,6 +396,8 @@ class AWSConfig(BaseConfig):
             region_name=cls._get_env_var('region_name', str),
             s3_endpoint_url=cls._get_env_var('s3_endpoint_url', URL),
             credentials_profile=credentials_profile,
+            access_key_id=cls._get_env_var('access_key_id', str),
+            secret_access_key=cls._get_env_var('secret_access_key', str),
             object_url_format=cls._get_env_var('object_url_format', str),
         )
         kw = {k:v for k,v in kw.items() if v is not None}

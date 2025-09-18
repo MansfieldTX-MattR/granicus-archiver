@@ -80,9 +80,14 @@ class ClientBase:
     """The S3 bucket"""
     def __init__(self, config: Config) -> None:
         self.config = config
+        profile_name = self.config.aws.credentials_profile
+        if self.config.aws.access_key_id is not None and self.config.aws.secret_access_key is not None:
+            profile_name = None
         self.session = aioboto3.Session(
-            profile_name=self.config.aws.credentials_profile,
+            profile_name=profile_name,
             region_name=self.config.aws.region_name,
+            aws_access_key_id=self.config.aws.access_key_id,
+            aws_secret_access_key=self.config.aws.secret_access_key,
         )
         self._is_open = False
 
