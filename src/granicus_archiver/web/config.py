@@ -49,9 +49,8 @@ class AppConfig(BaseConfig):
     """Root directory to store local data files from s3"""
     nav_links: Sequence[NavLink] = (
         NavLink(name='home', title='Home', url='home'),
+        NavLink(name='legistar', title='Legistar', url='rguid_legistar_items'),
         NavLink(name='clips', title='Clips', url='clip_list'),
-        NavLink(name='legistar', title='Legistar', url='legistar_items'),
-        NavLink(name='legistar_rguid', title='Legistar (Real Guid)', url='rguid_legistar_items'),
     )
     """Navigation links for the app"""
     site_name: str = 'Granicus Archive'
