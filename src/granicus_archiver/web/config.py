@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Sequence, Self, Any
+from typing import Sequence, ClassVar, Self, Any
 from pathlib import Path
 from dataclasses import dataclass, field
 from os import PathLike
@@ -59,6 +59,7 @@ class AppConfig(BaseConfig):
     hidden_clip_categories: Sequence[Location] = field(default_factory=list)
     """List of clip categories to hide in the UI"""
 
+    group_key: ClassVar[str] = 'web'
     @classmethod
     def load(cls, filename: PathLike) -> Self:
         """Load the configuration from a file
@@ -126,7 +127,20 @@ class AppConfig(BaseConfig):
 
     @classmethod
     def load_from_env(cls) -> Self:
-        raise NotImplementedError
+        kw = dict(
+            hostname=cls._get_env_var('hostname', str),
+            port=cls._get_env_var('port', int),
+            sockfile=cls._get_env_var('sockfile', Path),
+            serve_static=cls._get_env_var('serve_static', bool),
+            read_only=cls._get_env_var('read_only', bool),
+            static_url=cls._get_env_var('static_url', URL),
+            use_s3=cls._get_env_var('use_s3', bool),
+            s3_data_dir=cls._get_env_var('s3_data_dir', Path),
+            hidden_clip_categories=cls._get_env_var_list('hidden_clip_categories', str),
+            site_name=cls._get_env_var('site_name', str),
+        )
+        kw = {k: v for k, v in kw.items() if v is not None}
+        return cls.build_defaults(**kw)
 
 
 APP_CONF_KEY = web.AppKey('AppConfig', AppConfig)

@@ -331,8 +331,13 @@ def cli(
     _static_url = URL(static_url)
     if not _static_url.host:
         _static_url = URL(f'http://{hostname}:{port}').join(_static_url)
+    assert ctx.parent is not None
+    parent_opts = ctx.parent.params
+    load_config_env = parent_opts['load_config_env']
     if config_file is not None and config_file.exists():
         conf = AppConfig.load(config_file)
+    elif load_config_env:
+        conf = AppConfig.load_from_env()
     else:
         conf = AppConfig(
             hostname=hostname, port=port, sockfile=sockfile, serve_static=serve_static,
@@ -341,7 +346,6 @@ def cli(
         )
         if config_file is not None:
             conf.save(config_file)
-    assert ctx.parent is not None
     assert isinstance(ctx.parent.obj.config, Config)
     ctx.obj = WebCliContext(parent=ctx.parent.obj, app_conf=conf)
 
