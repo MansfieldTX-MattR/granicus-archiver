@@ -58,6 +58,8 @@ class AccessLogger(AiohttpAccessLogger):
 
     def log(self, request: web.Request, response: web.StreamResponse, time: float) -> None:
         try:
+            if request.path.startswith('/healthcheck') and response.status == 200:
+                return
             fmt_info = self._format_line(request, response, time)
             values = list()
             extra = dict()
