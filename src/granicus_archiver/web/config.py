@@ -95,7 +95,7 @@ class AppConfig(BaseConfig):
         return {
             'hostname': self.hostname,
             'port': self.port,
-            'sockfile': self.sockfile,
+            'sockfile': str(self.sockfile) if self.sockfile is not None else None,
             'serve_static': self.serve_static,
             'read_only': self.read_only,
             'static_url': str(self.static_url),
@@ -111,7 +111,7 @@ class AppConfig(BaseConfig):
         return cls(
             hostname=data['hostname'],
             port=data['port'],
-            sockfile=data['sockfile'],
+            sockfile=Path(data['sockfile']) if data['sockfile'] is not None else None,
             serve_static=data['serve_static'],
             read_only=data['read_only'],
             static_url=URL(data['static_url']),
