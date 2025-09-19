@@ -1,4 +1,7 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from logging import Logger
 from typing import Self, TYPE_CHECKING
 from pathlib import Path
 import asyncio
@@ -7,6 +10,7 @@ from dataclasses import dataclass
 
 from loguru import logger
 from aiohttp import web
+from aiohttp.web_log import AccessLogger as AiohttpAccessLogger
 from yarl import URL
 import aiohttp_jinja2
 import jinja2
@@ -36,6 +40,42 @@ HERE = Path(__file__).resolve().parent
 STATIC_ROOT = HERE / 'static'
 
 routes = web.RouteTableDef()
+
+
+logger.level('ACCESS', no=25, color='<green><bold>')
+_access_logger = logger
+
+
+class AccessLogger(AiohttpAccessLogger):
+    LOG_FORMAT = '%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"'
+    def __init__(self, logger: Logger, log_format: str = LOG_FORMAT) -> None:
+        log_format = AccessLogger.LOG_FORMAT
+        super().__init__(logger, log_format)
+
+    @property
+    def enabled(self) -> bool:
+        return True
+
+    def log(self, request: web.Request, response: web.StreamResponse, time: float) -> None:
+        try:
+            fmt_info = self._format_line(request, response, time)
+            values = list()
+            extra = dict()
+            for key, value in fmt_info:
+                values.append(value)
+
+                if key.__class__ is str:
+                    extra[key] = value
+                else:
+                    k1, k2 = key  # type: ignore[misc]
+                    dct = extra.get(k1, {})  # type: ignore[var-annotated,has-type]
+                    dct[k2] = value  # type: ignore[index,has-type]
+                    extra[k1] = dct  # type: ignore[has-type,assignment]
+            msg = self._log_format % tuple(values)
+            _access_logger.log('ACCESS', msg, extra=extra)
+        except Exception:
+            logger.exception("Error in logging")
+
 
 
 @dataclass
@@ -363,10 +403,10 @@ def serve(obj: WebCliContext, launch_browser: bool):
 
     if app_conf.sockfile is not None:
         click.echo(f'Serving on {app_conf.sockfile}')
-        web.run_app(app, path=str(app_conf.sockfile))
+        web.run_app(app, path=str(app_conf.sockfile), access_log_class=AccessLogger)
     else:
         click.echo(f'Serving on http://{app_conf.hostname}:{app_conf.port}')
-        web.run_app(app, host=app_conf.hostname, port=app_conf.port)
+        web.run_app(app, host=app_conf.hostname, port=app_conf.port, access_log_class=AccessLogger)
 
 
 
