@@ -121,7 +121,7 @@ class BaseConfig(Serializable):
         return '\n'.join(lines)
 
     @classmethod
-    def _get_env_var[Vt: (str, Path, URL)](
+    def _get_env_var[Vt: (str, int, bool, Path, URL)](
         cls, key: str, val_type: type[Vt]
     ) -> Vt|None:
         env_key = cls._get_env_key(key)
@@ -131,7 +131,7 @@ class BaseConfig(Serializable):
         return val_type(val)
 
     @classmethod
-    def _get_env_var_list[Vt: (str, Path, URL)](
+    def _get_env_var_list[Vt: (str, int, bool, Path, URL)](
         cls, key: str, val_type: type[Vt]
     ) -> list[Vt]|None:
         val = cls._get_env_var(key, str)
@@ -141,7 +141,7 @@ class BaseConfig(Serializable):
         return [val_type(v) for v in val_list]
 
     @classmethod
-    def _get_env_var_dict[Kt: (str), Vt: (str, Path, URL)](
+    def _get_env_var_dict[Kt: (str), Vt: (str, int, bool, Path, URL)](
         cls, key: str, key_type: type[Kt], val_type: type[Vt]
     ) -> dict[Kt, Vt]|None:
         val = cls._get_env_var(key, str)
