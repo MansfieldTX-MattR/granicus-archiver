@@ -398,6 +398,8 @@ class ClipListView(TemplatedView[ClipListContext]):
         if end_date is not None:
             end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
         all_categories = set([clip.location for clip in self.clips])
+        hidden_categories = self.request.app[APP_CONF_KEY].hidden_clip_categories
+        all_categories -= set(hidden_categories)
         return {
             'view_unassigned': view_unassigned,
             'all_categories': list(sorted(all_categories)),
