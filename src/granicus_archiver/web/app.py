@@ -8,6 +8,7 @@ import asyncio
 import webbrowser
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
 from loguru import logger
 from aiohttp import web
 from aiohttp.web_log import AccessLogger as AiohttpAccessLogger
@@ -334,10 +335,14 @@ def cli(
     assert ctx.parent is not None
     parent_opts = ctx.parent.params
     load_config_env = parent_opts['load_config_env']
-    if config_file is not None and config_file.exists():
-        conf = AppConfig.load(config_file)
-    elif load_config_env:
+    config_env_file = parent_opts['config_env_file']
+    if load_config_env:
+        if config_env_file is not None:
+            click.echo(f'Loading environment variables from {config_env_file}')
+            load_dotenv(dotenv_path=config_env_file)
         conf = AppConfig.load_from_env()
+    elif config_file is not None and config_file.exists():
+        conf = AppConfig.load(config_file)
     else:
         conf = AppConfig(
             hostname=hostname, port=port, sockfile=sockfile, serve_static=serve_static,
