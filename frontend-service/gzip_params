@@ -1,0 +1,6 @@
+gzip on;
+gzip_types
+    application/javascript
+    image/svg+xml
+    text/css;
+gzip_min_length 100;

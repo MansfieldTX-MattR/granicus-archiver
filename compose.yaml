@@ -33,6 +33,7 @@ services:
         RUN mkdir -p /mnt/data
 
         COPY proxy_params /etc/nginx/
+        COPY gzip_params /etc/nginx/
         COPY templates/default.conf.template /etc/nginx/templates/default.conf.template
 
     environment:
