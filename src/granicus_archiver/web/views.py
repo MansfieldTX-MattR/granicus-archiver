@@ -995,6 +995,10 @@ class _ItemContext[
     """The associated :class:`~.model.Clip` or ``None``"""
     change_view_name: str
     """The name of the view to edit the item"""
+    media_embed_type: Literal['video', 'audio']
+    """The type of media embed to use"""
+    media_embed_query_param: str
+    """The query parameter to use for media embed type selection"""
 
 
 class _ItemChangeContext[
@@ -1034,6 +1038,8 @@ class LItemViewBase[
     """
     template_name = 'legistar/item.jinja2'
     legistar_type: Literal['legistar', 'legistar_rguid']
+    media_embed_type: Literal['video', 'audio'] = 'video'
+    media_embed_query_param = 'media_embed_type'
     guid: IdT
     clip_id: CLIP_ID|None|NoClipT
     def __init__(self, request: web.Request) -> None:
@@ -1042,6 +1048,9 @@ class LItemViewBase[
         self.clip_id = self.legistar_data.get_clip_id_for_guid(self.guid)
         if is_clip_hidden(request, self.clip_id):
             self.clip_id = None
+        media_embed_type = request.query.get('media_embed_type', 'video')
+        assert media_embed_type in ('video', 'audio')
+        self.media_embed_type = media_embed_type
 
     @property
     @abstractmethod
@@ -1106,6 +1115,8 @@ class LItemViewBase[
             'file_static_key': self.file_static_key,
             'clip': self.clip,
             'change_view_name': self.get_change_view_name(),
+            'media_embed_type': self.media_embed_type,
+            'media_embed_query_param': self.media_embed_query_param,
         }
 
 

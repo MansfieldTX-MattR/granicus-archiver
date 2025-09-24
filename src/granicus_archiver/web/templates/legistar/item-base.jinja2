@@ -44,7 +44,17 @@
         {% endblock section_inner %}
       </div>
       <div class="col">
-        {% include "includes/video-embed.jinja2" %}
+        <div class="d-flex flex-column">
+          <ul class="nav nav-tabs">
+            <li class="nav-item">
+              {{ Link(url_query({media_embed_query_param:'video'}), 'Video', extraClass="nav-link", auto_active=False, force_active=media_embed_type == 'video') }}
+            </li>
+            <li class="nav-item">
+              {{ Link(url_query({media_embed_query_param:'audio'}), 'Audio', extraClass="nav-link", auto_active=False, force_active=media_embed_type == 'audio') }}
+            </li>
+          </ul>
+          {% include "includes/video-embed.jinja2" %}
+        </div>
       </div>
     </div>
   {% endblock section %}

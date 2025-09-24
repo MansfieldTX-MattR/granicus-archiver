@@ -1,23 +1,28 @@
 <div class="d-flex flex-column" style="max-height: 75vh;">
-  <div class="ratio ratio-16x9">
-    {% if clip %}
-    {% set vid_file=clip.files.video %}{% set chapters_file=clip.files.chapters %}
-    <video id="videoPlayer" controls data-has-chapters="{{ 'true' if chapters_file else 'false'}}">
-      {% if vid_file -%}
+  <div class="{% if media_embed_type == 'video' %}ratio ratio-16x9{% else %}my-4{% endif %}">
+    {% if clip -%}
+    {%- set media_file=clip.files.video if media_embed_type == 'video' else clip.files.audio -%}
+    {%- set chapters_file=clip.files.chapters -%}
+    {%- set mime_type='video/mp4' if media_embed_type == 'video' else 'audio/mp3' -%}
+    {%- set media_tag_attrs -%}
+      id="videoPlayer" class="w-100" controls preload="metadata" data-has-chapters="{{ 'true' if chapters_file is not none else 'false'}}"
+    {%- endset -%}
+    <{{ media_embed_type }} {{ media_tag_attrs }}> {# renders <video> or <audio> tag with attributes #}
+      {% if media_file -%}
         {% if request.app['use_s3'] %}
-          <source src="{{ clip_url(clip.id, 'video') }}" type="video/mp4" />
+          <source src="{{ clip_url(clip.id, media_embed_type) }}" type="{{ mime_type }}" />
         {% else %}
-          <source src="{{ static_path('granicus', vid_file) }}" type="video/mp4" />
+          <source src="{{ static_path('granicus', media_file) }}" type="{{ mime_type }}" />
         {% endif %}
       {%- endif %}
       {% if chapters_file -%}
         {% if request.app['use_s3'] %}
           <track id="videoTextTrack" src="{{ clip_url(clip.id, 'chapters') }}" default kind="chapters" srcLang="en" />
         {% else %}
-          <track id="videoTextTrack" src="{{ static_path('granicus', chapters_file)}}" default kind="chapters" srcLang="en" />
+          <track id="videoTextTrack" src="{{ static_path('granicus', chapters_file) }}" default kind="chapters" srcLang="en" />
         {% endif %}
       {%- endif %}
-    </video>
+    </{{ media_embed_type}}> {# closes <video> or <audio> tag #}
     {% endif %}
   </div>
   <div id="videoChaptersList" class="list-group overflow-auto"></div>

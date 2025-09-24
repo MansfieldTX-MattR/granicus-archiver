@@ -146,7 +146,7 @@ def static_path(ctx: Context, static_name: StaticRootName, filename: Path|str) -
 def clip_url(
     ctx: Context,
     clip_id: CLIP_ID,
-    file_type: Literal['video', 'chapters'],
+    file_type: Literal['video', 'audio', 'chapters'],
 ) -> URL:
     """Get the s3 URL for a clip file
 
