@@ -43,15 +43,22 @@ class Paginator[ItemT]:
         per_page: int = 10,
         page_query_param: str = 'page',
         per_page_query_param: str = 'per_page',
+        disable_pagination: bool = False,
     ) -> None:
         self.request = request
         self.items = items
-        if total_items is None:
+        self.disable_pagination = disable_pagination
+        if disable_pagination:
+            per_page = len(items)
+            current_index = 0
             total_items = len(items)
-        if current_index is None:
-            current_index = int(request.query.get(page_query_param, 0))
-        if request.query.get(per_page_query_param):
-            per_page = int(request.query[per_page_query_param])
+        else:
+            if total_items is None:
+                total_items = len(items)
+            if current_index is None:
+                current_index = int(request.query.get(page_query_param, 0))
+            if request.query.get(per_page_query_param):
+                per_page = int(request.query[per_page_query_param])
         self.current_index = current_index
         self.total_items = total_items
         self.per_page = per_page

@@ -16,6 +16,7 @@ page-item{% if is_active %} active{% endif %}{% if is_disabled %} disabled{% end
 
 
 {% macro Paginator(label="", extraClass=None) %}
+{%- if paginator.paginating -%}
 {%- set page = paginator.current_page -%}
 <nav class="row align-items-end mx-3 my-4" aria-label="{{ label }}">
   <div class="col-auto">
@@ -67,4 +68,5 @@ page-item{% if is_active %} active{% endif %}{% if is_disabled %} disabled{% end
     </div>
   </div>
 </nav>
+{%- endif -%}
 {% endmacro %}

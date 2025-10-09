@@ -39,7 +39,34 @@
 
 {% set column_names = ['Title', 'Location', 'Category', 'Date', 'Clip', 'Agenda', 'Minutes'] %}
 
-{% block list_filter_form_call %}{{ legistar_list_filter_form('mt-4') }}{% endblock %}
+{% block list_filter_form_call %}
+{{ legistar_list_filter_form('mt-4') }}
+<nav class="navbar navbar-expand-lg bg-body-tertiary">
+  <form id="list_search_form" class="container-fluid d-flex" role="search" method="post">
+      <input
+        type="search"
+        id="list_search_input"
+        class="form-control me-2"
+        name="search"
+        placeholder="Search..."
+        value="{{ search_form.search or '' }}"
+      >
+      <button type="submit" class="btn btn-primary me-2">Search</button>
+      <a href="{{ request.path }}" class="btn btn-secondary" id="clear_search">Clear</a>
+  </form>
+</nav>
+{% if search_form.search %}
+  {% if items|length == 0 %}
+  <div class="alert alert-warning" role="alert">
+    No results found for "<strong>{{ search_form.search }}</strong>"
+  </div>
+  {% else %}
+  <div class="alert alert-info" role="alert">
+    Showing results for "<strong>{{ search_form.search }}</strong>"
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
 
 {% block table_row_item %}
 <tr class="table-item">

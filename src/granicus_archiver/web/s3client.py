@@ -59,11 +59,28 @@ class S3Client(ClientBase):
             k: data_dirs[k] / data_files_local[k].name
             for k in data_files_local
         }
+        self.search_dir_local = s3_data_dir / '_search-index'
+        self.search_dir_remote = config.aws.legistar_prefix / '_search-index'
+        self.search_dir_local.mkdir(parents=True, exist_ok=True)
         self.data_dirs = data_dirs
         self.data_files_local = data_files_local
         self.data_files_remote = data_files_remote
         self.metadata_file = s3_data_dir / 's3metadata.json'
         self.data_file_metadata = self.load_data_file_metadata()
+
+    async def get_search_index_dir(self) -> None:
+        """Download the search index directory
+
+        Existing files will be overwritten.
+        """
+        index_dir = self.search_dir_remote
+        objs = [obj async for obj in self.iter_objects(index_dir) if not obj.key.endswith('/')]
+        for obj in objs:
+            local_file = self.search_dir_local / obj.key.rsplit('/', 1)[-1]
+            logger.debug(f'Found search index file "{obj.key}"')
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            await self.download_object(obj.key, local_file)
+            logger.info(f'Downloaded search index file "{obj.key}" to "{local_file}"')
 
     async def get_data_files(self) -> bool:
         """Download data files if they have changed remotely

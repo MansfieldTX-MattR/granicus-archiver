@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import (
-    TypeVar, Generic, Literal, ClassVar, TypedDict,
-    Iterable, Sequence, cast,
+    TypeVar, Generic, Literal, ClassVar, TypedDict, TypeIs,
+    Iterable, Sequence, cast, get_args,
 )
 
 from abc import ABC, abstractmethod
@@ -24,6 +24,10 @@ from ..legistar.model import (
 )
 from ..legistar.rss_parser import is_guid, is_real_guid
 from ..legistar.guid_model import RGuidLegistarData, RGuidDetailResult
+from ..legistar.search_indexing import (
+    search_contents as legistar_search_contents,
+    SearchResult as LegistarSearchResult,
+)
 from ..legistar.types import (
     Category, GUID, REAL_GUID, NoClip, NoClipT, LegistarFileUID,
     AgendaStatus, MinutesStatus, AgendaStatusItems, MinutesStatusItems,
@@ -716,6 +720,27 @@ class LegistarListFilterContext(ListFilterContext[Category]):
     """All possible minutes status items"""
 
 
+type SearchResultCount = Literal[5, 10, 25, 50, 100]
+"""Type to restrict search result count options to certain values"""
+SearchResultCountOptions = get_args(SearchResultCount)
+
+
+def is_valid_search_result_count(value: int) -> TypeIs[SearchResultCount]:
+    return value in SearchResultCountOptions
+
+
+class LegistarSearchForm(TypedDict):
+    """Form data for searching legistar items
+    """
+    search: str
+    """The search term"""
+    max_results: SearchResultCount
+    """The maximum number of search results to return"""
+    max_results_options: Sequence[SearchResultCount]
+    """All possible options for :attr:`max_results`"""
+
+
+
 class LegistarItemsContext[
     IdT: (GUID, REAL_GUID), ItemT: (DetailPageResult, RGuidDetailResult)
 ](GlobalContext):
@@ -735,6 +760,8 @@ class LegistarItemsContext[
     """:class:`~.pagination.Paginator` instance for :attr:`item_dict`"""
     filter_context: LegistarListFilterContext
     """Filter context data"""
+    search_form: LegistarSearchForm|None
+    """The search form data, if applicable"""
 
 
 class LegistarItemsViewBase[
@@ -744,13 +771,20 @@ class LegistarItemsViewBase[
     """Base class for views that display a list of legistar items
     """
     template_name = 'legistar/items.jinja2'
+    paginator: Paginator[tuple[IdT, ItemT]]
+    search_form_data: LegistarSearchForm
+    search_results: list[LegistarSearchResult]|None = None
 
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
         self.filter_context = self.parse_filter_context()
         self.item_dict, self.items = self.get_items()
+        self.paginator = self.build_paginator()
+
+    def build_paginator(self) -> Paginator[tuple[IdT, ItemT]]:
         item_tuples = [(self._id_for_item(item), item) for item in self.items]
-        self.paginator = Paginator[tuple[IdT, ItemT]](self.request, item_tuples)
+        disabled = self.search_results is not None
+        return Paginator[tuple[IdT, ItemT]](self.request, item_tuples, disable_pagination=disabled)
 
     @property
     @abstractmethod
@@ -766,6 +800,79 @@ class LegistarItemsViewBase[
 
     @abstractmethod
     def _id_for_item(self, item: ItemT) -> IdT: ...
+
+    def get_search_form_initial(self) -> LegistarSearchForm:
+        return {
+            'search': self.request.query.get('search', ''),
+            'max_results': 25,
+            'max_results_options': SearchResultCountOptions,
+        }
+
+    async def get_form_data(self) -> LegistarSearchForm:
+        data: LegistarSearchForm
+        if self.request.method == 'POST':
+            raw = await self.request.post()
+            _search = raw.get('search', '')
+            assert isinstance(_search, str)
+            try:
+                m = raw.get('max_results', 25)
+                if isinstance(m, str):
+                    _max_results = int(m)
+                elif isinstance(m, int):
+                    _max_results = m
+                else:
+                    raise TypeError(f'invalid type: {type(m)}')
+            except (ValueError, TypeError):
+                _max_results = 25
+            if not is_valid_search_result_count(_max_results):
+                _max_results = 25
+            data = {
+                'search': _search,
+                'max_results': _max_results,
+                'max_results_options': SearchResultCountOptions,
+            }
+        else:
+            data = self.get_search_form_initial()
+            try:
+                _max_results = int(self.request.query.get('max_results', 25))
+            except (ValueError, TypeError):
+                _max_results = 25
+            if is_valid_search_result_count(_max_results):
+                data['max_results'] = _max_results
+        return data
+
+    async def get_search_results(self) -> list[LegistarSearchResult]|None:
+        form_data = self.search_form_data
+        if not form_data['search']:
+            return None
+        conf = self.get_config()
+        web_conf = self.request.app[APP_CONF_KEY]
+        if web_conf.use_s3:
+            s3_client = self.request.app[S3ClientKey]
+            index_dir = s3_client.search_dir_local
+        else:
+            index_dir = conf.legistar.search_index_dir
+        max_results = form_data['max_results']
+        results = legistar_search_contents(
+            form_data['search'],
+            index=index_dir,
+            limit=max_results,
+        )
+        return results
+
+    async def post(self) -> web.Response:
+        self.search_form_data = await self.get_form_data()
+        self.search_results = await self.get_search_results()
+        self.item_dict, self.items = self.get_items()
+        self.paginator = self.build_paginator()
+        return await self.get()
+
+    async def get(self) -> web.Response:
+        self.search_form_data = await self.get_form_data()
+        self.search_results = await self.get_search_results()
+        self.item_dict, self.items = self.get_items()
+        self.paginator = self.build_paginator()
+        return await super().get()
 
     def parse_filter_context(self) -> LegistarListFilterContext:
         view_unassigned = bool(self.request.query.get('unassigned'))
@@ -843,6 +950,7 @@ class LegistarItemsViewBase[
             'item_edit_view_name': self.item_edit_view_name,
             'paginator': self.paginator,
             'filter_context': self.filter_context,
+            'search_form': self.search_form_data,
         }
         return context
 
@@ -958,6 +1066,19 @@ class RGuidLegistarItemsView(LegistarItemsViewBase[REAL_GUID, RGuidDetailResult]
     @property
     def item_edit_view_name(self) -> str:
         return 'rguid_legistar_item_change'
+
+    def get_items(self) -> tuple[dict[REAL_GUID, RGuidDetailResult], Sequence[RGuidDetailResult]]:
+        if self.search_results is None:
+            return super().get_items()
+        logger.debug(f'getting items from search results: {len(self.search_results)} found')
+        item_dict: dict[REAL_GUID, RGuidDetailResult] = {}
+        item_clip_ids: dict[REAL_GUID, ClipIdOrNoneStr] = {}
+        for result in self.search_results:
+            rguid = result.file_id.rguid
+            item_dict[rguid] = self.legistar_data[rguid]
+            clip_id = self.legistar_data.get_clip_id_for_guid(rguid)
+            item_clip_ids[rguid] = clip_id_to_str(clip_id)
+        return item_dict, list(item_dict.values())
 
 
 

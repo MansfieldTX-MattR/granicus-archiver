@@ -131,6 +131,7 @@ class AppDataContext:
             self.s3_client = S3Client(self.app)
             await self.s3_client.__aenter__()
             self.app[S3ClientKey] = self.s3_client
+            await self.s3_client.get_search_index_dir()
             self.update_task = asyncio.create_task(self.update_loop())
         return self
 
