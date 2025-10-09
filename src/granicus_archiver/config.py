@@ -418,6 +418,8 @@ class LegistarConfig(BaseConfig):
     data_file: Path
     """Filename to store parsed data.  Defaults to "<out-dir>/data.json"
     """
+    search_index_dir: Path
+    """Directory to store the search index (relative to the current working directory)"""
     feed_urls: dict[str, URL] = field(default_factory=dict)
     """Mapping of calendar RSS feed urls with user-defined names as keys
     """
@@ -488,6 +490,12 @@ class LegistarConfig(BaseConfig):
             if s != set(cur_val):
                 self.feed_overflows_allowed = list(s)
                 changed = True
+        search_index_dir = kwargs.get('search_index_dir')
+        if search_index_dir is not None and search_index_dir != self.search_index_dir:
+            assert isinstance(search_index_dir, Path)
+            assert not search_index_dir.is_absolute()
+            self.search_index_dir = search_index_dir
+            changed = True
         return changed
 
     @classmethod
@@ -501,6 +509,7 @@ class LegistarConfig(BaseConfig):
             feed_urls={},
             feed_overflows_allowed=[],
             category_maps={},
+            search_index_dir=out_dir / '_search-index',
         )
         for key, val in default_kw.items():
             kwargs.setdefault(key, val)
@@ -513,6 +522,7 @@ class LegistarConfig(BaseConfig):
             feed_urls={k:str(v) for k,v in self.feed_urls.items()},
             feed_overflows_allowed=self.feed_overflows_allowed,
             category_maps=self.category_maps,
+            search_index_dir=str(self.search_index_dir),
         ))
         return d
 
@@ -525,6 +535,7 @@ class LegistarConfig(BaseConfig):
             feed_urls={k:URL(v) for k,v in data['feed_urls'].items()},
             feed_overflows_allowed=data.get('feed_overflows_allowed', []),
             category_maps=data['category_maps'],
+            search_index_dir=Path(data['search_index_dir']),
         )
 
     @classmethod
@@ -536,6 +547,7 @@ class LegistarConfig(BaseConfig):
             feed_urls=cls._get_env_var_dict('feed_urls', str, URL),
             feed_overflows_allowed=cls._get_env_var_list('feed_overflows_allowed', str),
             category_maps=cls._get_env_var_dict('category_maps', str, str),
+            search_index_dir=cls._get_env_var('search_index_dir', Path),
         )
         kw = {k:v for k,v in kw.items() if v is not None}
         return cls.build_defaults(**kw)

@@ -11,6 +11,7 @@ from . import client as legistar_client
 from . import guid_client as legistar_guid_client
 from .client import ClientBase
 from .model import LegistarData
+from .search_indexing import index_legistar_items
 from ..googledrive import client as googleclient
 if TYPE_CHECKING:
     from ..cli import BaseContext
@@ -45,6 +46,20 @@ def add_feed_url(obj: BaseContext, name: str, url: str):
     changed = conf.update(feed_urls={name: URL(url)})
     if changed:
         obj.config.save(obj.config_file)
+
+
+@cli.command()
+@click.option('--max-items', type=int, default=None, required=False)
+@click.pass_obj
+def build_search_index(obj: BaseContext, max_items: int|None):
+    """Build or update the Tantivy search index for Legistar items
+    """
+    click.echo(f'Indexing up to {max_items} items...')
+    index_legistar_items(
+        config=obj.config,
+        max_docs=max_items,
+    )
+    click.echo('Indexing complete')
 
 
 @cli.command()

@@ -9,5 +9,6 @@
     model
     guid_model
     rss_parser
+    search_indexing
     types
     exceptions
