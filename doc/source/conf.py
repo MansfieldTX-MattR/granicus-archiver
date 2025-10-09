@@ -53,6 +53,6 @@ intersphinx_mapping = {
     'yarl':('https://yarl.aio-libs.org/en/latest', None),
     'pyquery':('https://pyquery.readthedocs.io/en/latest', None),
     'aiogoogle':('https://aiogoogle.readthedocs.io/en/latest', None),
-    'whoosh':('https://sygil-dev.github.io/whoosh-reloaded/en/latest', None),
+    'whoosh':('https://sygil-dev.github.io/whoosh-reloaded', None),
     'pypdf':('https://pypdf.readthedocs.io/en/latest', None),
 }
