@@ -31,65 +31,63 @@
 {% set start_date = filter_context['start_date']|date_format('%Y-%m-%d') if filter_context['start_date'] else '' %}
 {% set end_date = filter_context['end_date']|date_format('%Y-%m-%d') if filter_context['end_date'] else '' %}
 {% set all_categories = filter_context['all_categories'] %}
-<nav class="{{ mergeClasses('navbar', 'bg-body-primary', extraClass) }}">
-  <form id="list_filter_form" method="get">
-    <div class="row g-3 align-items-end">
-      <div class="col-auto">
-        {% call filter_select('clip_status_select', name='unassigned', label='Clip Status', value=1 if view_unassigned else '', tooltip='Filter Items with or without clips') %}
-          <option value=""{% if not view_unassigned %} selected{% endif %}>All</option>
-          <option value="1"{% if view_unassigned %} selected{% endif %}>Unassigned</option>
-        {% endcall %}
-      </div>
-      <div class="col-auto">
-        {% call filter_select('category_select', name='category', label='Category', value=current_category, tooltip='Filter by Category') %}
-          <option value=""{% if not current_category %} selected{% endif %}>All</option>
-          {% for category in all_categories %}
-          <option value="{{ category }}"{% if category == current_category %} selected{% endif %}>{{ category }}</option>
-          {% endfor %}
-        {% endcall %}
-      </div>
-      <div class="col-auto">
-        <div class="form-check form-switch">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            role="switch"
-            id="filter_by_date_input"
-            name="filter_by_date"
-            value="1" {% if filter_by_date %}checked{% endif %}
-            onchange="
-              const dateDiv = document.getElementById('date_filter_inputs')
-              dateDiv.classList.toggle('d-none');
-              if (!this.checked) {
-                dateDiv.querySelectorAll('input[type=date]').forEach((input) => input.value = '');
-                this.form.submit();
-              }
-            "
-          >
-          <label class="form-check-label" for="filter_by_date_input">Filter by Date</label>
-        </div>
-      </div>
-      <div class="col-auto{% if not filter_by_date %} d-none{% endif %}" id="date_filter_inputs">
-        <div class="row g-2 ms-3 align-items-end">
-          <div class="col-auto">
-            {{ date_input_field('start_date_input', name='start_date', label='Start Date', value=start_date) }}
-          </div>
-          <div class="col-auto">
-            {{ date_input_field('end_date_input', name='end_date', label='End Date', value=end_date) }}
-          </div>
-          <div class="col-auto">
-            <button
-              class="btn btn-primary"
-              onclick="document.getElementById('list_filter_form').submit()"
-            >Filter</button>
-          </div>
-        </div>
-      </div>
-    {% if caller and caller_inside_row %}{{ caller() }}{% endif %}
+<form id="list_filter_form" method="get">
+  <div class="row g-3 align-items-end">
+    <div class="col-auto">
+      {% call filter_select('clip_status_select', name='unassigned', label='Clip Status', value=1 if view_unassigned else '', tooltip='Filter Items with or without clips') %}
+        <option value=""{% if not view_unassigned %} selected{% endif %}>All</option>
+        <option value="1"{% if view_unassigned %} selected{% endif %}>Unassigned</option>
+      {% endcall %}
     </div>
-  {% if caller and not caller_inside_row %}{{ caller() }}{% endif %}
-  </form>
-</nav>
+    <div class="col-auto">
+      {% call filter_select('category_select', name='category', label='Category', value=current_category, tooltip='Filter by Category') %}
+        <option value=""{% if not current_category %} selected{% endif %}>All</option>
+        {% for category in all_categories %}
+        <option value="{{ category }}"{% if category == current_category %} selected{% endif %}>{{ category }}</option>
+        {% endfor %}
+      {% endcall %}
+    </div>
+    <div class="col-auto">
+      <div class="form-check form-switch">
+        <input
+          class="form-check-input"
+          type="checkbox"
+          role="switch"
+          id="filter_by_date_input"
+          name="filter_by_date"
+          value="1" {% if filter_by_date %}checked{% endif %}
+          onchange="
+            const dateDiv = document.getElementById('date_filter_inputs')
+            dateDiv.classList.toggle('d-none');
+            if (!this.checked) {
+              dateDiv.querySelectorAll('input[type=date]').forEach((input) => input.value = '');
+              this.form.submit();
+            }
+          "
+        >
+        <label class="form-check-label" for="filter_by_date_input">Filter by Date</label>
+      </div>
+    </div>
+    <div class="col-auto{% if not filter_by_date %} d-none{% endif %}" id="date_filter_inputs">
+      <div class="row g-2 ms-3 align-items-end">
+        <div class="col-auto">
+          {{ date_input_field('start_date_input', name='start_date', label='Start Date', value=start_date) }}
+        </div>
+        <div class="col-auto">
+          {{ date_input_field('end_date_input', name='end_date', label='End Date', value=end_date) }}
+        </div>
+        <div class="col-auto">
+          <button
+            class="btn btn-primary"
+            onclick="document.getElementById('list_filter_form').submit()"
+          >Filter</button>
+        </div>
+      </div>
+    </div>
+  {% if caller and caller_inside_row %}{{ caller() }}{% endif %}
+  </div>
+{% if caller and not caller_inside_row %}{{ caller() }}{% endif %}
+</form>
 {% endmacro %}
 
 

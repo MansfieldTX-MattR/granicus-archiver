@@ -7,8 +7,25 @@
 <main>
   <div id="itemListType" class="invisible" data-item-type="{{ item_view_name }}"></div>
   {% call Section(item_list_title or page_title) %}
-    {% block list_filter_form_call %}{{ list_filter_form('mt-4') }}{% endblock %}
-    <div class="row mt-3 mx-2">
+    <nav class="navbar navbar-expand-lg bg-body-primary mt-4">
+      <div class="container-fluid">
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-coreui-toggle="collapse"
+          data-coreui-target="#listFilterForm"
+          aria-controls="listFilterForm"
+          aria-expanded="false"
+          aria-label="Toggle navigation"
+        >
+          <i class="bi bi-funnel"></i> Show Filters
+        </button>
+        <div class="collapse navbar-collapse mt-3 border border-dark-subtle rounded px-2 py-4" id="listFilterForm">
+          {% block list_filter_form_call %}{{ list_filter_form('mt-4') }}{% endblock %}
+        </div>
+      </div>
+    </nav>
+    <div class="row mt-4 mx-2">
       <div class="col align-self-start">
         <table class="item-table table table-striped table-bordered">
           {% block table_main %}
