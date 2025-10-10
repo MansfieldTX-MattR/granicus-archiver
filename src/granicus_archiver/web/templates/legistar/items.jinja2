@@ -43,17 +43,36 @@
 <div class="container-fluid d-flex flex-column align-items-stretch">
   {{ legistar_list_filter_form('mt-4') }}
   <div class="row g-3 mt-4">
-    <form id="list_search_form" class="container-fluid d-flex" role="search" method="post">
+    <form id="list_search_form" class="container-fluid row align-items-center" role="search" method="post">
+      <div class="col-auto flex-grow-1">
         <input
           type="search"
           id="list_search_input"
-          class="form-control me-2"
+          class="form-control"
           name="search"
           placeholder="Search..."
           value="{{ search_form.search or '' }}"
         >
+      </div>
+      <div class="col-auto">
+        <select
+          class="form-select"
+          name="max_results"
+          id="max_results_select"
+          data-coreui-toggle="tooltip"
+          data-coreui-title="Maximum Search Results"
+        >
+          {% for option in search_form.max_results_options %}
+          <option value="{{ option }}" {% if option == search_form.max_results %}selected{% endif %}>
+            {{ option }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
         <button type="submit" class="btn btn-primary me-2">Search</button>
         <a href="{{ request.path }}" class="btn btn-secondary" id="clear_search">Clear</a>
+      </div>
     </form>
   </div>
   {% if search_form.search %}

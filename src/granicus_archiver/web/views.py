@@ -722,7 +722,7 @@ class LegistarListFilterContext(ListFilterContext[Category]):
 
 type SearchResultCount = Literal[5, 10, 25, 50, 100]
 """Type to restrict search result count options to certain values"""
-SearchResultCountOptions = get_args(SearchResultCount)
+SearchResultCountOptions: tuple[SearchResultCount, ...] = (5, 10, 25, 50, 100)
 
 
 def is_valid_search_result_count(value: int) -> TypeIs[SearchResultCount]:
