@@ -1,9 +1,11 @@
 {% from "includes/macros.jinja2" import Link, mergeClasses with context %}
 
-{% macro navBar(toggleId='navbarSupportedContent') -%}
-<nav class="navbar navbar-expand-lg bg-body-tertiary">
+{% macro navBar(toggleId='navbarSupportedContent', bg='bg-body-tertiary', show_brand=True, extraClass=None, toggler_content=None, toggle_class=None) -%}
+<nav class="{{ mergeClasses('navbar', 'navbar-expand-lg', bg, extraClass) }}">
   <div class="container-fluid">
+    {% if show_brand %}
     <a class="navbar-brand px-4 border-end border-end-primary-subtle" href="#">{{ app.site_name }}</a>
+    {% endif %}
     <button
       class="navbar-toggler"
       type="button"
@@ -13,9 +15,13 @@
       aria-expanded="false"
       aria-label="Toggle navigation"
     >
+      {% if toggler_content %}
+        {{ toggler_content }}
+      {% else %}
       <span class="navbar-toggler-icon"></span>
+      {% endif %}
     </button>
-    <div class="collapse navbar-collapse" id="{{ toggleId }}">
+    <div class="{{ mergeClasses('collapse', 'navbar-collapse', toggle_class) }}" id="{{ toggleId }}">
       {{ caller() }}
     </div>
   </div>
