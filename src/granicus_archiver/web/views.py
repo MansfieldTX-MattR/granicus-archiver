@@ -490,6 +490,7 @@ class ClipViewContext(GlobalContext):
     """The associated real-guid legistar item, or ``None`` if no match is found"""
     legistar_rguid_item_id: REAL_GUID|NoClipT|None
     """Item id for :attr:`legistar_rguid_item`"""
+    media_embed_type: Literal['video', 'audio']
 
 
 
@@ -502,6 +503,8 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
     template_name = 'clips/clip.jinja2'
     legistar_item: DetailPageResult|NoClipT|None
     legistar_rguid_item: RGuidDetailResult|NoClipT|None
+    media_embed_type: Literal['video', 'audio'] = 'video'
+    media_embed_query_param : ClassVar[str] = 'media_embed_type'
 
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
@@ -510,6 +513,9 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
         self.clip = self.clips[clip_id]
         self.legistar_item = self.legistar_data.find_match_for_clip_id(clip_id)
         self.legistar_rguid_item = self.legistar_data_rguid.find_match_for_clip_id(clip_id)
+        media_embed_type = request.query.get('media_embed_type', 'video')
+        assert media_embed_type in ('video', 'audio')
+        self.media_embed_type = media_embed_type
 
     @property
     def clips(self) -> ClipCollection:
@@ -546,6 +552,7 @@ class ClipViewBase(TemplatedView[ClipViewContextT]):
             'legistar_guid': self.legistar_guid,
             'legistar_rguid_item': self.legistar_rguid_item,
             'legistar_rguid_item_id': self.legistar_rguid_item_id,
+            'media_embed_type': self.media_embed_type,
         }
 
 
@@ -664,6 +671,7 @@ class ClipEditView(ClipViewBase[ClipEditViewContext]):
             'form_data': await self.get_form_data(),
             'item_options': self.get_item_options(),
             'rguid_item_options': self.get_rguid_item_options(),
+            'media_embed_type': self.media_embed_type,
         }
 
     @with_data_file_lock
