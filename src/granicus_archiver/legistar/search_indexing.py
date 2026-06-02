@@ -87,7 +87,7 @@ def build_schema() -> Schema:
         category=TEXT(stored=True),
         page_num=NUMERIC(stored=True, sortable=True),
         title=TEXT(stored=False, field_boost=2.5),
-        content=TEXT(stored=False),
+        content=TEXT(stored=True),
         datetime=DATETIME(stored=False, sortable=True),
     )
 
