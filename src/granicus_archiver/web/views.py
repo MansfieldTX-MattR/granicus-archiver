@@ -770,6 +770,10 @@ class LegistarItemsContext[
     """Filter context data"""
     search_form: LegistarSearchForm|None
     """The search form data, if applicable"""
+    search_item_scores: dict[IdT, float]|None
+    """Mapping of item ids to their search scores, if applicable"""
+    search_item_results: dict[IdT, LegistarSearchResult]|None
+    """Mapping of item ids to their search results, if applicable"""
 
 
 class LegistarItemsViewBase[
@@ -782,6 +786,8 @@ class LegistarItemsViewBase[
     paginator: Paginator[tuple[IdT, ItemT]]
     search_form_data: LegistarSearchForm
     search_results: list[LegistarSearchResult]|None = None
+    search_item_scores: dict[IdT, float]|None = None
+    search_item_results: dict[IdT, LegistarSearchResult]|None = None
 
     def __init__(self, request: web.Request) -> None:
         super().__init__(request)
@@ -959,6 +965,8 @@ class LegistarItemsViewBase[
             'paginator': self.paginator,
             'filter_context': self.filter_context,
             'search_form': self.search_form_data,
+            'search_item_scores': self.search_item_scores,
+            'search_item_results': self.search_item_results,
         }
         return context
 
@@ -1081,11 +1089,15 @@ class RGuidLegistarItemsView(LegistarItemsViewBase[REAL_GUID, RGuidDetailResult]
         logger.debug(f'getting items from search results: {len(self.search_results)} found')
         item_dict: dict[REAL_GUID, RGuidDetailResult] = {}
         item_clip_ids: dict[REAL_GUID, ClipIdOrNoneStr] = {}
+        self.search_item_scores = {}
+        self.search_item_results = {}
         for result in self.search_results:
             rguid = result.file_id.rguid
             item_dict[rguid] = self.legistar_data[rguid]
             clip_id = self.legistar_data.get_clip_id_for_guid(rguid)
             item_clip_ids[rguid] = clip_id_to_str(clip_id)
+            self.search_item_scores[rguid] = result.score
+            self.search_item_results[rguid] = result
         return item_dict, list(item_dict.values())
 
 
