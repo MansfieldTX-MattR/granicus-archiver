@@ -142,7 +142,7 @@ def search_contents(
         A list of :class:`SearchResult` objects
     """
     with get_searcher(index) as searcher:
-        qp = QueryParser("content", searcher.schema)
+        qp = MultifieldParser(['title', 'content'], searcher.schema)
         qp.add_plugin(DateParserPlugin())
         query = qp.parse(query_str)
         results = searcher.search(query, limit=limit, scored=True, terms=True)
