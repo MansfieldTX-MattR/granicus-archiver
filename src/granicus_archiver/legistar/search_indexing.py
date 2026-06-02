@@ -382,5 +382,9 @@ def index_legistar_items(
     if commits_pending > 0:
         writer.commit()
     # writer.wait_merging_threads()
-    logger.success(f'Indexed {count} items into {index_dir.relative_to(Path.cwd())}')
+    try:
+        rel_index_dir = index_dir.relative_to(Path.cwd())
+    except ValueError:
+        rel_index_dir = index_dir
+    logger.success(f'Indexed {count} items into {rel_index_dir}')
     logger.info(f'Total files known: {len(all_file_ids)}, items remaining: {len(all_file_ids - file_ids_added)}')
