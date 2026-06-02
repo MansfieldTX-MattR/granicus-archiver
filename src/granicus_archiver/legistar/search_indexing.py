@@ -14,6 +14,7 @@ from whoosh.writing import IndexWriter
 from whoosh.fields import Schema, TEXT, ID, DATETIME, NUMERIC
 from whoosh.qparser import QueryParser, MultifieldParser
 from whoosh.searching import Searcher
+from whoosh.highlight import ContextFragmenter
 from whoosh.qparser.dateparse import DateParserPlugin
 
 from .types import (
@@ -47,6 +48,10 @@ class SearchResult(NamedTuple):
     """List of schema terms that matched the query"""
     score: float
     """Relevance score of the search result"""
+    fields: dict|None = None
+    """Optional dictionary of additional fields from the index result"""
+    highlights: list[str]|str|None = None
+    """Optional highlighted text snippets from the search result"""
 
 
 
@@ -146,8 +151,9 @@ def search_contents(
         qp.add_plugin(DateParserPlugin())
         query = qp.parse(query_str)
         results = searcher.search(query, limit=limit, scored=True, terms=True)
+        results.fragmenter = ContextFragmenter()
         has_matched_terms = results.has_matched_terms()
-        result_list = []
+        result_list: list[SearchResult] = []
         for result in results:
             file_id = FileId.from_str(result['file_id'])
             if has_matched_terms:
@@ -162,6 +168,8 @@ def search_contents(
                 page_num=result['page_num'],
                 matched_terms=matched_terms,
                 score=score,
+                fields=result.fields(),
+                highlights=result.highlights('content'),
             ))
         result_list.sort(key=lambda r: r.score, reverse=True)
         return result_list
