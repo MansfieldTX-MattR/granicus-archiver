@@ -116,4 +116,15 @@
     {{ agenda_status(item.minutes_status) }}
   </td>
 </tr>
+{% if search_item_results and item_id in search_item_results %}
+<tr>
+  <td colspan="{{ column_names|length }}"class="search-result-context pt-1">
+    {% if search_item_results[item_id].highlights %}
+    <p class="ms-5 mb-3 fst-italic text-body-secondary">{{ search_item_results[item_id].highlights|safe }}</p>
+    {% else %}
+    <em>No content highlights available</em>
+    {% endif %}
+  </td>
+</tr>
+{% endif %}
 {% endblock %}
