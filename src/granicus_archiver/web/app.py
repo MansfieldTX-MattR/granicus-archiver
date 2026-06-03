@@ -100,9 +100,12 @@ async def home(request: web.Request) -> views.GlobalContext:
             if nl.name == index_nav_link_name:
                 index_nav_item = nl
                 break
+        logger.debug(f'Index nav link name: {index_nav_link_name}, found nav item: {index_nav_item}')
         if index_nav_item is not None:
             index_nav_url = index_nav_item.get_url(request.app)
+            logger.debug(f'Redirecting to index nav link URL: {index_nav_url}')
             raise web.HTTPFound(index_nav_url)
+        logger.warning(f'Index nav link name "{index_nav_link_name}" not found in nav links. Rendering home page instead.')
     return {
         'page_title': request.app[APP_CONF_KEY].site_name,
         'nav_links': request.app[NavLinksKey],
