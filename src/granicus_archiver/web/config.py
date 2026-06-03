@@ -59,6 +59,10 @@ class AppConfig(BaseConfig):
         NavLink(name='clips', title='Clips', url='clip_list'),
     )
     """Navigation links for the app"""
+
+    index_nav_link_name: str = 'home'
+    """Name of the nav link in :attr:`nav_links` to use for the index page (home page)"""
+
     site_name: str = 'Granicus Archive'
     """Name of the site"""
 

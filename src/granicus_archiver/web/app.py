@@ -28,7 +28,7 @@ from ..legistar.guid_model import RGuidLegistarData
 from .types import (
     ConfigKey, ClipsKey, LegistarDataKey, RGuidLegistarDataKey,
     TimezoneKey, StaticRootsKey, StaticRoots, StaticUrlRootsKey, StaticUrlRoots,
-    NavLinksKey, DataFiles, DataFileLockKey,
+    NavLinksKey, DataFiles, DataFileLockKey, NavLink,
 )
 from .config import AppConfig, APP_CONF_KEY
 from .s3client import S3Client, S3ClientKey
@@ -90,6 +90,19 @@ class WebCliContext:
 @routes.get('/', name='home')
 @aiohttp_jinja2.template('home.jinja2')
 async def home(request: web.Request) -> views.GlobalContext:
+    index_nav_link_name = request.app[APP_CONF_KEY].index_nav_link_name
+    nav_links = request.app[NavLinksKey]
+    if index_nav_link_name != 'home':
+        # Find the nav link with the name specified by index_nav_link_name
+        # and redirect to it
+        index_nav_item: NavLink|None = None
+        for nl in nav_links:
+            if nl.name == index_nav_link_name:
+                index_nav_item = nl
+                break
+        if index_nav_item is not None:
+            index_nav_url = index_nav_item.get_url(request.app)
+            raise web.HTTPFound(index_nav_url)
     return {
         'page_title': request.app[APP_CONF_KEY].site_name,
         'nav_links': request.app[NavLinksKey],
