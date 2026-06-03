@@ -116,6 +116,7 @@ class AppConfig(BaseConfig):
             'use_s3': self.use_s3,
             's3_data_dir': self.s3_data_dir,
             'nav_links': [nl.serialize() for nl in self.nav_links],
+            'index_nav_link_name': self.index_nav_link_name,
             'hidden_clip_categories': self.hidden_clip_categories,
             'hidden_clip_list_filters': self.hidden_clip_list_filters,
             'site_name': self.site_name,
@@ -133,6 +134,7 @@ class AppConfig(BaseConfig):
             use_s3=data['use_s3'],
             s3_data_dir=data['s3_data_dir'],
             nav_links=[NavLink.deserialize(nl) for nl in data['nav_links']],
+            index_nav_link_name=data.get('index_nav_link_name', 'home'),
             hidden_clip_categories=[
                 Location(c) for c in data.get('hidden_clip_categories', [])
             ],
@@ -145,6 +147,9 @@ class AppConfig(BaseConfig):
         hidden_clip_list_filters = cls._get_env_var_list('hidden_clip_list_filters', str)
         if hidden_clip_list_filters is None:
             hidden_clip_list_filters = []
+        index_nav_link_name = cls._get_env_var('index_nav_link_name', str)
+        if not index_nav_link_name:
+            index_nav_link_name = 'home'
         kw = dict(
             hostname=cls._get_env_var('hostname', str),
             port=cls._get_env_var('port', int),
@@ -154,6 +159,7 @@ class AppConfig(BaseConfig):
             static_url=cls._get_env_var('static_url', URL),
             use_s3=cls._get_env_var('use_s3', bool),
             s3_data_dir=cls._get_env_var('s3_data_dir', Path),
+            index_nav_link_name=index_nav_link_name,
             hidden_clip_categories=cls._get_env_var_list('hidden_clip_categories', str),
             hidden_clip_list_filters=hidden_clip_list_filters,
             site_name=cls._get_env_var('site_name', str),
