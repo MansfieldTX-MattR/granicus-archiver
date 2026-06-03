@@ -36,7 +36,7 @@ from .types import (
     ConfigKey, ClipsKey, LegistarDataKey, RGuidLegistarDataKey,
     NavLinksKey, DataFileLockKey, SortOrder, NavLink, StaticRootName,
 )
-from .config import APP_CONF_KEY
+from .config import APP_CONF_KEY, ListFilterField
 from .s3client import S3ClientKey
 from .pagination import Paginator
 
@@ -337,6 +337,8 @@ class ListFilterContext[CatT: (Location, Category)](TypedDict):
     """The start date for filtering"""
     end_date: datetime.date|None
     """The end date for filtering"""
+    hidden_clip_list_filters: Sequence[ListFilterField]
+    """List of list filter fields to hide in the UI"""
 
 
 class ClipListContext(GlobalContext):
@@ -411,6 +413,7 @@ class ClipListView(TemplatedView[ClipListContext]):
             'filter_by_date': filter_by_date,
             'start_date': start_date,
             'end_date': end_date,
+            'hidden_clip_list_filters': self.request.app[APP_CONF_KEY].hidden_clip_list_filters,
         }
 
     def get_filtered_items(self, clips: Sequence[Clip]) -> Sequence[Clip]:
@@ -919,6 +922,7 @@ class LegistarItemsViewBase[
             'minutes_status': minutes_status,
             'agenda_status_items': AgendaStatusItems,
             'minutes_status_items': MinutesStatusItems,
+            'hidden_clip_list_filters': self.request.app[APP_CONF_KEY].hidden_clip_list_filters,
         }
 
     def get_items(self) -> tuple[dict[IdT, ItemT], Sequence[ItemT]]:
