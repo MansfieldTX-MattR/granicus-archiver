@@ -42,7 +42,7 @@
 {% block list_filter_form_call %}
 <div class="container-fluid d-flex flex-column align-items-stretch">
   {{ legistar_list_filter_form('mt-4') }}
-  <form id="list_search_form" class="container-fluid row align-items-center mt-4 px-0" role="search" method="post">
+  <form id="list_search_form" class="container-fluid row align-items-center mt-4 px-0" role="search" method="post" action="{{ request.url }}">
     <div class="col-auto flex-grow-1">
       <input
         type="search"
@@ -73,6 +73,24 @@
       <a href="{{ request.path }}" class="btn btn-secondary" id="clear_search">Clear</a>
     </div>
   </form>
+  <script>
+    document.getElementById('list_filter_form').addEventListener('change', function(event) {
+      const searchForm = document.getElementById('list_search_form');
+      const formData = new FormData(this);
+
+      // Preserve search form payload and place the filter form data in query parameters
+      const params = new URLSearchParams();
+      for (const [key, value] of formData.entries()) {
+        if (value) {
+          params.append(key, value);
+        }
+      }
+      const queryString = params.toString();
+      const url = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+      searchForm.action = url;
+      searchForm.submit();
+    });
+  </script>
   {% if search_form.search %}
   <div class="row g-3 mt-2">
     {% if items|length == 0 %}

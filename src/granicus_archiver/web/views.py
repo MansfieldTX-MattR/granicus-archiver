@@ -1102,6 +1102,7 @@ class RGuidLegistarItemsView(LegistarItemsViewBase[REAL_GUID, RGuidDetailResult]
             item_clip_ids[rguid] = clip_id_to_str(clip_id)
             self.search_item_scores[rguid] = result.score
             self.search_item_results[rguid] = result
+        item_dict = self.get_filtered_items(item_dict)
         return item_dict, list(item_dict.values())
 
 
