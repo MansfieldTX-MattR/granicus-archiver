@@ -42,7 +42,7 @@
 {% block list_filter_form_call %}
 <div class="container-fluid d-flex flex-column align-items-stretch">
   {{ legistar_list_filter_form('mt-4') }}
-  <form id="list_search_form" class="container-fluid row align-items-center mt-4 px-0" role="search" method="post" action="{{ request.url }}">
+  <form id="list_search_form" class="container-fluid row align-items-center mt-4 px-0" role="search" method="post" action="{{ request.url.path_qs }}">
     <div class="col-auto flex-grow-1">
       <input
         type="search"
