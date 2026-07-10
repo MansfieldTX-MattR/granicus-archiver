@@ -331,6 +331,7 @@ class AWSConfig(BaseConfig):
         if self.s3_endpoint_url is not None:
             fmt_kwargs['s3_endpoint_url'] = str(self.s3_endpoint_url)
         url_str = self.object_url_format.format(**fmt_kwargs)
+        url_str = url_str.replace('#', '%23')  # escape # in url
         url = URL(url_str)
         if scheme is not None:
             url = url.with_scheme(scheme)
