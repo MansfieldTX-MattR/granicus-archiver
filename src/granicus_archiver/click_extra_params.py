@@ -1,3 +1,10 @@
+"""
+Legacy click extra parameters for granicus_archiver
+
+.. warning::
+    This module contains legacy click_extra api usage and should not be used.
+
+"""
 from __future__ import annotations
 from typing import Sequence, Literal, get_args
 import sys
@@ -5,7 +12,6 @@ from gettext import gettext as _
 
 from loguru import logger
 import click_extra
-from click_extra.commands import default_extra_params
 from click_extra.config import ConfigOption
 from click_extra.logging import VerboseOption, VerbosityOption
 from click_extra.version import ExtraVersionOption
@@ -59,18 +65,18 @@ class LogLevelOption(click_extra.Option):
         set_log_level(value)
 
 
-def extra_params():
-    extra_params = default_extra_params()
-    filtered_cls = (ConfigOption, VerboseOption)
-    def iter_parms():
-        for param in extra_params:
-            if isinstance(param, filtered_cls):
-                continue
-            if isinstance(param, VerbosityOption):
-                param = LogLevelOption()
-            elif isinstance(param, ExtraVersionOption):
-                param = ExtraVersionOption(
-                    package_name='granicus_archiver',
-                )
-            yield param
-    return list(iter_parms())
+# def extra_params():
+#     extra_params = default_extra_params()
+#     filtered_cls = (ConfigOption, VerboseOption)
+#     def iter_parms():
+#         for param in extra_params:
+#             if isinstance(param, filtered_cls):
+#                 continue
+#             if isinstance(param, VerbosityOption):
+#                 param = LogLevelOption()
+#             elif isinstance(param, ExtraVersionOption):
+#                 param = ExtraVersionOption(
+#                     package_name='granicus_archiver',
+#                 )
+#             yield param
+#     return list(iter_parms())

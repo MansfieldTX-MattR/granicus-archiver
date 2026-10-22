@@ -4,7 +4,7 @@ import os
 import asyncio
 from pathlib import Path
 import click
-from click_extra import extra_group as click_group
+from click_extra import group as click_group
 from yarl import URL
 
 from . import client as legistar_client
