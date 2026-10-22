@@ -28,7 +28,7 @@ dependencies = [
     "pypdf",
     "appdirs",
     "python-dotenv",
-    "click-extra>=4.15.0",
+    "click-extra==4.15.0",
     "whoosh-reloaded>=2.7.5",
 ]
 classifiers = [
