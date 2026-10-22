@@ -16,7 +16,8 @@ from yarl import URL
 import aiohttp_jinja2
 import jinja2
 import click
-from click_extra import group as click_group
+from click_extra import extra_group as click_group
+from ..click_extra_params import extra_params
 
 from .. import set_local_timezone
 from ..config import Config
@@ -308,6 +309,7 @@ def init_func(argv):
 
 @click_group(
     name='web',
+    params=extra_params,
 )
 @click.option(
     '-c', '--config-file',

@@ -5,7 +5,7 @@ import asyncio
 
 from yarl import URL
 import click
-from click_extra import group as click_group
+from click_extra import extra_group as click_group
 
 if TYPE_CHECKING:
     from ..cli import BaseContext

@@ -4,7 +4,8 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import click
-from click_extra import group as click_group
+from click_extra import extra_group as click_group
+from .click_extra_params import extra_params
 from dotenv import load_dotenv
 
 from .config import Config, GroupKey as ConfigGroupKey
@@ -22,6 +23,7 @@ class BaseContext:
 
 @click_group(
     cls=LazyGroup,
+    params=extra_params,
     lazy_subcommands={
         'clips': 'granicus_archiver.clips.cli.cli',
         'legistar': 'granicus_archiver.legistar.cli.cli',

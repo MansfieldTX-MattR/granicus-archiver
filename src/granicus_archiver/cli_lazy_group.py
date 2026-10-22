@@ -1,6 +1,6 @@
 import importlib
 import click
-from click_extra import Group as ExtraGroup
+from click_extra import ExtraGroup
 
 
 # From https://click.palletsprojects.com/en/stable/complex/#defining-the-lazy-group
@@ -47,7 +47,7 @@ class LazyGroup(ExtraGroup):
         # get the Command object from that module
         cmd_object = getattr(mod, cmd_object_name)
         # check the result to make debugging easier
-        if not isinstance(cmd_object, click.Command):
+        if not isinstance(cmd_object, click.BaseCommand):
             raise ValueError(
                 f"Lazy loading of {import_path} failed by returning "
                 "a non-command object"
